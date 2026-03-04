@@ -5,6 +5,7 @@ import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import type { User } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/client"
+import { accessLogger } from "@/lib/access-logger"
 
 interface AuthContextType {
   user: User | null
@@ -40,8 +41,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const {
           data: { session },
         } = await supabase.auth.getSession()
-        console.log("AuthContext - Initial session:", session)
-        console.log("AuthContext - Initial user:", session?.user)
         setUser(session?.user ?? null)
         setRole(session?.user?.user_metadata?.role ?? null)
         setLoading(false)
@@ -56,8 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
-      console.log("AuthContext - Auth state change:", event, session)
+    } = supabase.auth.onAuthStateChange(async (_event: any, session: any) => {
       setUser(session?.user ?? null)
       setRole(session?.user?.user_metadata?.role ?? null)
       setLoading(false)
@@ -95,10 +93,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error('Error activating pending memberships during sign in:', membershipError)
         }
 
+        accessLogger.login()
+
         // ログイン成功時はミドルウェアがリダイレクトを処理
         window.location.href = "/people"
       }
-      
+
+      if (error) {
+        accessLogger.loginFailed(email)
+      }
+
       return { error }
     } catch (error) {
       console.error("ログインエラー:", error)
@@ -167,14 +171,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    console.log("AuthContext - ログアウト開始")
     try {
+      await accessLogger.logout()
       const { error } = await supabase.auth.signOut()
       if (error) {
         console.error("ログアウトエラー:", error)
       } else {
-        console.log("AuthContext - ログアウト成功")
-        // ログアウト成功後、ログインページにリダイレクト
         if (typeof window !== 'undefined') {
           window.location.href = "/login"
         }
@@ -190,21 +192,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    console.log("AuthContext - ユーザー情報リフレッシュ開始")
     try {
       const {
         data: { user: refreshedUser },
         error
       } = await supabase.auth.getUser()
-      
+
       if (error) {
         console.error("ユーザー情報取得エラー:", error)
         return
       }
-      
-      console.log("AuthContext - リフレッシュされたユーザー:", refreshedUser)
-      console.log("AuthContext - リフレッシュされたuser_metadata:", refreshedUser?.user_metadata)
-      
+
       setUser(refreshedUser)
       setRole(refreshedUser?.user_metadata?.role ?? null)
     } catch (error) {

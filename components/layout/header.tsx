@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Search, Bell, Settings, User, LogOut, RefreshCw, Cable, Users } from "lucide-react"
+import { Search, Bell, Settings, User, LogOut, RefreshCw, Cable, Users, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -21,22 +21,8 @@ export function Header() {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
 
-  // デバッグ用
-  console.log("Header - user:", user)
-  console.log("Header - role:", role)
-  console.log("Header - currentUser.role:", currentUser.role)
-  console.log("Header - role === 'admin':", role === "admin")
-  console.log("Header - currentUser.role === 'admin':", currentUser.role === "admin")
-  console.log("Header - 条件全体:", (role === "admin" || currentUser.role === "admin"))
-
   const handleSignOut = async () => {
-    console.log("ログアウトボタンがクリックされました")
     await signOut()
-    // AuthContextでリダイレクト処理を行うため、ここでは何もしない
-  }
-
-  const handleUserIconClick = () => {
-    console.log("ユーザーアイコンがクリックされました")
   }
 
   return (
@@ -80,6 +66,11 @@ export function Header() {
               <DropdownMenuItem onClick={() => router.push('/admin/connectors/dashboard')}>
                 <Cable className="mr-2 h-4 w-4" />
                 コネクター管理
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => router.push('/admin/access-logs')}>
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                アクセスログ
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

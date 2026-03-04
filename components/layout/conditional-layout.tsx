@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
 import { usePathname } from "next/navigation"
+import { usePageViewLogger } from "@/hooks/use-page-view-logger"
 
 interface ConditionalLayoutProps {
   children: React.ReactNode
@@ -12,6 +13,7 @@ interface ConditionalLayoutProps {
 export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   const { user, loading } = useAuth()
   const pathname = usePathname()
+  usePageViewLogger()
 
   // 認証が不要なページ（ログイン、サインアップ）
   const publicPages = ["/login", "/signup"]
