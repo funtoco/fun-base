@@ -105,6 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { error }
     } catch (error) {
+      // signInWithPassword が throw した場合も login_failed を記録する
+      accessLogger.loginFailed(email)
       console.error("ログインエラー:", error)
       return { error }
     }

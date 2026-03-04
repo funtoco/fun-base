@@ -24,6 +24,13 @@ function getSessionClient(req: NextRequest) {
   )
 }
 
+/** Parse an integer query param safely. Returns `fallback` on NaN / missing. */
+function parseIntParam(value: string | null, fallback: number): number {
+  if (value === null) return fallback
+  const parsed = parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 // POST /api/access-logs — record a single access event
 export async function POST(req: NextRequest) {
   try {
@@ -44,18 +51,25 @@ export async function POST(req: NextRequest) {
     const supabase = getSessionClient(req)
     const { data: { user } } = await supabase.auth.getUser()
 
-    // Resolve active tenant_id for the user
+    // Resolve tenant_id for the user.
+    // If the user belongs to multiple active tenants, set to null to avoid
+    // misattribution. A warning is logged so ops can investigate.
     let tenantId: string | null = null
     if (user?.id) {
       const adminClient = createAdminClient()
-      const { data: ut } = await adminClient
+      const { data: tenants } = await adminClient
         .from('user_tenants')
         .select('tenant_id')
         .eq('user_id', user.id)
         .eq('status', 'active')
-        .limit(1)
-        .single()
-      tenantId = ut?.tenant_id ?? null
+
+      if (tenants && tenants.length === 1) {
+        tenantId = tenants[0].tenant_id
+      } else if (tenants && tenants.length > 1) {
+        console.warn(
+          `[access-logs] user ${user.id} belongs to ${tenants.length} active tenants; tenant_id set to null to avoid misattribution`
+        )
+      }
     }
 
     // Write log using service role client (bypasses RLS)
@@ -111,22 +125,27 @@ export async function GET(req: NextRequest) {
 
     const tenantIds = adminTenants.map((r) => r.tenant_id)
 
-    // Parse query params
+    // Parse & validate query params
     const { searchParams } = req.nextUrl
     const eventType = searchParams.get('event_type')
-    const limit = Math.min(Number(searchParams.get('limit') ?? 50), 500)
-    const offset = Number(searchParams.get('offset') ?? 0)
+    const email = searchParams.get('email')
     const dateFrom = searchParams.get('date_from')
     const dateTo = searchParams.get('date_to')
+
+    const rawLimit = parseIntParam(searchParams.get('limit'), 50)
+    const limit = Math.min(Math.max(rawLimit, 1), 500) // clamp [1, 500]
+    const offset = Math.max(parseIntParam(searchParams.get('offset'), 0), 0) // clamp >= 0
 
     let query = adminClient
       .from('access_logs')
       .select('*', { count: 'exact' })
-      .in('tenant_id', tenantIds)
+      // Show tenant logs OR login_failed events with null tenant_id (unauthenticated failures)
+      .or(`tenant_id.in.(${tenantIds.join(',')}),and(event_type.eq.login_failed,tenant_id.is.null)`)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
     if (eventType) query = query.eq('event_type', eventType)
+    if (email) query = query.ilike('email', `%${email}%`)
     if (dateFrom) query = query.gte('created_at', dateFrom)
     if (dateTo) query = query.lte('created_at', dateTo)
 

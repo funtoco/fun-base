@@ -94,6 +94,8 @@ export default function AccessLogsPage() {
         offset: String(page * PAGE_SIZE),
       })
       if (eventType !== "all") params.set("event_type", eventType)
+      // email filter is sent to the server so pagination & total count are correct
+      if (emailFilter.trim()) params.set("email", emailFilter.trim())
 
       const res = await fetch(`/api/access-logs?${params}`)
       if (!res.ok) {
@@ -109,25 +111,22 @@ export default function AccessLogsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, eventType])
+  }, [page, eventType, emailFilter])
 
   useEffect(() => {
     if (!authLoading && user) fetchLogs()
   }, [authLoading, user, fetchLogs])
 
-  useEffect(() => { setPage(0) }, [eventType])
-
-  const filteredLogs = emailFilter
-    ? logs.filter((l) => l.email?.toLowerCase().includes(emailFilter.toLowerCase()))
-    : logs
+  // reset to page 0 when filters change
+  useEffect(() => { setPage(0) }, [eventType, emailFilter])
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   const summaryCounts = {
-    login: filteredLogs.filter((l) => l.event_type === "login").length,
-    logout: filteredLogs.filter((l) => l.event_type === "logout").length,
-    login_failed: filteredLogs.filter((l) => l.event_type === "login_failed").length,
-    page_view: filteredLogs.filter((l) => l.event_type === "page_view").length,
+    login: logs.filter((l) => l.event_type === "login").length,
+    logout: logs.filter((l) => l.event_type === "logout").length,
+    login_failed: logs.filter((l) => l.event_type === "login_failed").length,
+    page_view: logs.filter((l) => l.event_type === "page_view").length,
   }
 
   if (authLoading) {
@@ -254,14 +253,14 @@ export default function AccessLogsPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {!loading && filteredLogs.length === 0 && (
+              {!loading && logs.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
                     ログがありません
                   </TableCell>
                 </TableRow>
               )}
-              {!loading && filteredLogs.map((log) => {
+              {!loading && logs.map((log) => {
                 const cfg = EVENT_CONFIG[log.event_type]
                 const Icon = cfg.icon
                 return (

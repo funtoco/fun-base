@@ -22,7 +22,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname === '/visas') return 'ビザ進捗管理'
   if (pathname === '/dashboard') return 'ダッシュボード'
   if (pathname === '/admin/tenants') return 'テナント管理'
-  if (pathname === '/admin/connectors') return 'コネクタ管理'
+  if (pathname.startsWith('/admin/connectors')) return 'コネクタ管理'
   if (pathname === '/admin/access-logs') return 'アクセスログ'
   if (pathname.match(/^\/people\/[^/]+\/edit$/)) return '人材編集'
   if (pathname.match(/^\/people\/[^/]+$/)) return '人材詳細'
@@ -56,16 +56,23 @@ function beaconLog(payload: AccessLogPayload): void {
  * Use for logout — must complete BEFORE supabase.auth.signOut() is called,
  * otherwise the session cookie is already invalidated by the time the server
  * receives the request and user_id / tenant_id resolve to null.
+ *
+ * Has a 5s timeout via AbortController so logout is never blocked indefinitely.
  */
 async function fetchLog(payload: AccessLogPayload): Promise<void> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 5000)
   try {
     await fetch('/api/access-logs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     })
   } catch {
     // Silently ignore — logging failures must never affect the user experience
+  } finally {
+    clearTimeout(timer)
   }
 }
 

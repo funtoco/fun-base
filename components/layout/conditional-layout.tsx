@@ -13,11 +13,13 @@ interface ConditionalLayoutProps {
 export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   const { user, loading } = useAuth()
   const pathname = usePathname()
-  usePageViewLogger()
 
   // 認証が不要なページ（ログイン、サインアップ）
   const publicPages = ["/login", "/signup"]
   const isPublicPage = publicPages.includes(pathname) || pathname.startsWith("/auth")
+
+  // auth が完了していてログイン済みの非公開ページのみ記録する
+  usePageViewLogger({ enabled: !loading && !!user && !isPublicPage })
 
   if (loading) {
     return (
