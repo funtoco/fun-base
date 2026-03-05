@@ -136,6 +136,21 @@ export async function GET(req: NextRequest) {
 
     const tenantIds = adminTenants.map((r) => r.tenant_id)
 
+    // Get all user_ids that belong to the admin's tenants (to catch null-tenant logs
+    // from multi-tenant users whose tenant_id was unresolvable at write time)
+    const { data: tenantMembers, error: tenantMembersError } = await adminClient
+      .from('user_tenants')
+      .select('user_id')
+      .in('tenant_id', tenantIds)
+      .eq('status', 'active')
+
+    if (tenantMembersError) {
+      console.error('[access-logs] tenant members lookup error:', tenantMembersError)
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    }
+
+    const memberUserIds = [...new Set((tenantMembers ?? []).map((r) => r.user_id))]
+
     // Parse & validate query params
     const { searchParams } = req.nextUrl
     const eventType = searchParams.get('event_type')
@@ -147,11 +162,18 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(Math.max(rawLimit, 1), 500) // clamp [1, 500]
     const offset = Math.max(parseIntParam(searchParams.get('offset'), 0), 0) // clamp >= 0
 
+    // Show logs that either:
+    // 1. Have a matching tenant_id (normal case)
+    // 2. Have null tenant_id but user_id belongs to the tenant (multi-tenant user edge case)
+    // 3. Have null tenant_id and are login_failed (unauthenticated failures)
+    const orFilter = memberUserIds.length > 0
+      ? `tenant_id.in.(${tenantIds.join(',')}),and(tenant_id.is.null,user_id.in.(${memberUserIds.join(',')})),and(event_type.eq.login_failed,tenant_id.is.null)`
+      : `tenant_id.in.(${tenantIds.join(',')}),and(event_type.eq.login_failed,tenant_id.is.null)`
+
     let query = adminClient
       .from('access_logs')
       .select('*', { count: 'exact' })
-      // Show tenant logs OR login_failed events with null tenant_id (unauthenticated failures)
-      .or(`tenant_id.in.(${tenantIds.join(',')}),and(event_type.eq.login_failed,tenant_id.is.null)`)
+      .or(orFilter)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
