@@ -138,11 +138,16 @@ export async function GET(req: NextRequest) {
 
     // Get all user_ids that belong to the admin's tenants (to catch null-tenant logs
     // from multi-tenant users whose tenant_id was unresolvable at write time)
-    const { data: tenantMembers } = await adminClient
+    const { data: tenantMembers, error: tenantMembersError } = await adminClient
       .from('user_tenants')
       .select('user_id')
       .in('tenant_id', tenantIds)
       .eq('status', 'active')
+
+    if (tenantMembersError) {
+      console.error('[access-logs] tenant members lookup error:', tenantMembersError)
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    }
 
     const memberUserIds = [...new Set((tenantMembers ?? []).map((r) => r.user_id))]
 
