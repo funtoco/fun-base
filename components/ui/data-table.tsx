@@ -150,7 +150,7 @@ export function DataTable<T extends Record<string, any>>({
   const exportToCsv = (encoding: "utf8" | "sjis" = "utf8") => {
     const exportColumns = csvColumns ?? columns
     const headers = exportColumns.map((col) => col.label).join(",")
-    const exportData = csvColumns ? data : sortedData
+    const exportData = sortedData
     const rows = exportData.map((row) =>
       exportColumns
         .map((col) => {
