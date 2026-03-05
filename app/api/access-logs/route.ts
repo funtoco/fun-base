@@ -51,6 +51,12 @@ export async function POST(req: NextRequest) {
     const supabase = getSessionClient(req)
     const { data: { user } } = await supabase.auth.getUser()
 
+    // Only login_failed is allowed without authentication.
+    // login / logout / page_view must come from an active session.
+    if (!user && event_type !== 'login_failed') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
     // Resolve tenant_id for the user.
     // If the user belongs to multiple active tenants, set to null to avoid
     // misattribution. A warning is logged so ops can investigate.
