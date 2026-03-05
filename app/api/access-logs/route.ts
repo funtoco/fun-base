@@ -118,12 +118,17 @@ export async function GET(req: NextRequest) {
     const adminClient = createAdminClient()
 
     // Verify caller is admin/owner of at least one tenant
-    const { data: adminTenants } = await adminClient
+    const { data: adminTenants, error: adminTenantsError } = await adminClient
       .from('user_tenants')
       .select('tenant_id')
       .eq('user_id', user.id)
       .in('role', ['owner', 'admin'])
       .eq('status', 'active')
+
+    if (adminTenantsError) {
+      console.error('[access-logs] admin tenant lookup error:', adminTenantsError)
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    }
 
     if (!adminTenants || adminTenants.length === 0) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
