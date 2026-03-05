@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
 import { usePathname } from "next/navigation"
+import { usePageViewLogger } from "@/hooks/use-page-view-logger"
 
 interface ConditionalLayoutProps {
   children: React.ReactNode
@@ -16,6 +17,9 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   // 認証が不要なページ（ログイン、サインアップ）
   const publicPages = ["/login", "/signup"]
   const isPublicPage = publicPages.includes(pathname) || pathname.startsWith("/auth")
+
+  // auth が完了していてログイン済みの非公開ページのみ記録する
+  usePageViewLogger({ enabled: !loading && !!user && !isPublicPage })
 
   if (loading) {
     return (
