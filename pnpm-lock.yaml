@@ -125,6 +125,9 @@ importers:
       embla-carousel-react:
         specifier: 8.5.1
         version: 8.5.1(react@18.0.0)
+      encoding-japanese:
+        specifier: ^2.2.0
+        version: 2.2.0
       geist:
         specifier: latest
         version: 1.5.1(next@14.2.35(react-dom@18.0.0(react@18.0.0))(react@18.0.0))
@@ -2082,6 +2085,10 @@ packages:
 
   embla-carousel@8.5.1:
     resolution: {integrity: sha512-JUb5+FOHobSiWQ2EJNaueCNT/cQU9L6XWBbWmorWPQT9bkbk+fhsuLr8wWrzXKagO3oWszBO7MSx+GfaRk4E6A==}
+
+  encoding-japanese@2.2.0:
+    resolution: {integrity: sha512-EuJWwlHPZ1LbADuKTClvHtwbaFn4rOD+dRAbWysqEOXRc2Uui0hJInNJrsdH0c+OhJA4nrCBdSkW4DD5YxAo6A==}
+    engines: {node: '>=8.10.0'}
 
   enhanced-resolve@5.18.3:
     resolution: {integrity: sha512-d4lC8xfavMeBjzGr2vECC3fsGXziXZQyJxD868h2M/mBI3PwAuODxAkLkq5HYuvrPYcUtiLzsTo8U3PgX3Ocww==}
@@ -4143,7 +4150,7 @@ snapshots:
       '@sveltejs/vite-plugin-svelte-inspector': 5.0.1(@sveltejs/vite-plugin-svelte@6.2.0(svelte@5.46.1)(vite@7.1.5(@types/node@22.0.0)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.5)))(svelte@5.46.1)(vite@7.1.5(@types/node@22.0.0)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.5))
       debug: 4.4.1
       deepmerge: 4.3.1
-      magic-string: 0.30.19
+      magic-string: 0.30.21
       svelte: 5.46.1
       vite: 7.1.5(@types/node@22.0.0)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.5)
       vitefu: 1.1.1(vite@7.1.5(@types/node@22.0.0)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.5))
@@ -4504,6 +4511,8 @@ snapshots:
       embla-carousel: 8.5.1
 
   embla-carousel@8.5.1: {}
+
+  encoding-japanese@2.2.0: {}
 
   enhanced-resolve@5.18.3:
     dependencies:

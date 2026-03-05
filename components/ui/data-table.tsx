@@ -9,8 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Search, FilterIcon, Download, ChevronUp, ChevronDown, X, ChevronDown as ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import Encoding from "encoding-japanese"
 
 export interface Column<T> {
   key: keyof T | string
@@ -23,6 +25,7 @@ export interface Column<T> {
 interface DataTableProps<T> {
   data: T[]
   columns: Column<T>[]
+  csvColumns?: Column<T>[]
   filters?: Filter[]
   searchKeys?: (keyof T)[]
   onRowClick?: (row: T) => void
@@ -43,6 +46,7 @@ interface Filter {
 export function DataTable<T extends Record<string, any>>({
   data,
   columns,
+  csvColumns,
   filters = [],
   searchKeys = [],
   onRowClick,
@@ -143,10 +147,12 @@ export function DataTable<T extends Record<string, any>>({
     setSearchTerm("")
   }
 
-  const exportToCsv = () => {
-    const headers = columns.map((col) => col.label).join(",")
-    const rows = sortedData.map((row) =>
-      columns
+  const exportToCsv = (encoding: "utf8" | "sjis" = "utf8") => {
+    const exportColumns = csvColumns ?? columns
+    const headers = exportColumns.map((col) => col.label).join(",")
+    const exportData = csvColumns ? data : sortedData
+    const rows = exportData.map((row) =>
+      exportColumns
         .map((col) => {
           const value = typeof col.key === "string" ? row[col.key] : ""
           return `"${value?.toString().replace(/"/g, '""') || ""}"`
@@ -155,7 +161,18 @@ export function DataTable<T extends Record<string, any>>({
     )
 
     const csv = [headers, ...rows].join("\n")
-    const blob = new Blob([csv], { type: "text/csv" })
+
+    let blob: Blob
+    if (encoding === "sjis") {
+      const unicodeArray = Encoding.stringToCode(csv)
+      const sjisArray = Encoding.convert(unicodeArray, { to: "SJIS", from: "UNICODE" })
+      blob = new Blob([new Uint8Array(sjisArray)], { type: "text/csv;charset=shift_jis;" })
+    } else {
+      // UTF-8 BOM を付与して Excel での文字化けを防止
+      const bom = "\uFEFF"
+      blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" })
+    }
+
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
@@ -240,10 +257,21 @@ export function DataTable<T extends Record<string, any>>({
         </div>
 
         {/* Export */}
-        <Button variant="outline" onClick={exportToCsv} className="gap-2">
-          <Download className="h-4 w-4" />
-          CSV出力
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-muted h-9">
+            <Download className="h-4 w-4" />
+            CSV出力
+            <ChevronDownIcon className="h-4 w-4 opacity-50" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => exportToCsv("utf8")}>
+              UTF-8
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportToCsv("sjis")}>
+              Shift-JIS
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Active Filters */}

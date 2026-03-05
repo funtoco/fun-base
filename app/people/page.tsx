@@ -218,6 +218,22 @@ export default function PeoplePage() {
     },
   ]
 
+  const csvColumns: Column<PersonWithVisa>[] = [
+    { key: "name", label: "人材名" },
+    { key: "kana", label: "フリガナ" },
+    { key: "nationality", label: "国籍" },
+    { key: "dob", label: "誕生日" },
+    { key: "phone", label: "電話番号" },
+    { key: "email", label: "メール" },
+    { key: "address", label: "住所" },
+    { key: "tenantName", label: "会社" },
+    { key: "employeeNumber", label: "社員番号" },
+    { key: "workingStatus", label: "就労ステータス" },
+    { key: "residenceCardNo", label: "在留カード番号" },
+    { key: "residenceCardExpiryDate", label: "在留カード期限" },
+    { key: "residenceCardIssuedDate", label: "在留カード許可日" },
+  ]
+
   const handleRowClick = (person: PersonWithVisa) => {
     router.push(`/people/${person.id}`)
   }
@@ -265,6 +281,7 @@ export default function PeoplePage() {
       <DataTable
         data={peopleWithVisas}
         columns={columns}
+        csvColumns={csvColumns}
         filters={filters}
         searchKeys={["name", "tenantName", "nationality"]}
         onRowClick={handleRowClick}
