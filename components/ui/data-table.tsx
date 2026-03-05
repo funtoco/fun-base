@@ -149,7 +149,9 @@ export function DataTable<T extends Record<string, any>>({
 
   const exportToCsv = (encoding: "utf8" | "sjis" = "utf8") => {
     const exportColumns = csvColumns ?? columns
-    const headers = exportColumns.map((col) => col.label).join(",")
+    const headers = exportColumns
+      .map((col) => `"${col.label?.toString().replace(/"/g, '""') || ""}"`)
+      .join(",")
     const exportData = sortedData
     const rows = exportData.map((row) =>
       exportColumns
@@ -176,7 +178,8 @@ export function DataTable<T extends Record<string, any>>({
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = "export.csv"
+    const timestamp = new Date().toISOString().slice(0, 10)
+    a.download = `export_${timestamp}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
