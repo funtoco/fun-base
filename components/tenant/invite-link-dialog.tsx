@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Copy, Check } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface InviteLinkDialogProps {
   tenantId: string
@@ -26,16 +27,39 @@ export function InviteLinkDialog({ tenantId, open, onOpenChange }: InviteLinkDia
   const [defaultRole, setDefaultRole] = useState<'admin' | 'member' | 'guest'>('member')
   const [hasExpiration, setHasExpiration] = useState(false)
   const [expirationDays, setExpirationDays] = useState(7)
-  const [isActive, setIsActive] = useState(true)
   const [generatedLink, setGeneratedLink] = useState("")
   const [copied, setCopied] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
-  const generateLink = () => {
-    // In a real implementation, this would call the API to create an invite link
-    const baseUrl = window.location.origin
-    const token = Math.random().toString(36).substring(2, 15)
-    const link = `${baseUrl}/invite/${token}`
-    setGeneratedLink(link)
+  const handleCreate = async () => {
+    setLoading(true)
+    setError("")
+
+    try {
+      const response = await fetch(`/api/tenants/${tenantId}/invite-links`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          defaultRole,
+          expiresInDays: hasExpiration ? expirationDays : undefined,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(data.error || "招待リンクの作成に失敗しました")
+        return
+      }
+
+      setGeneratedLink(data.url)
+    } catch (err) {
+      console.error("Error creating invite link:", err)
+      setError("招待リンクの作成中にエラーが発生しました")
+    } finally {
+      setLoading(false)
+    }
   }
 
   const copyToClipboard = async () => {
@@ -43,23 +67,29 @@ export function InviteLinkDialog({ tenantId, open, onOpenChange }: InviteLinkDia
       await navigator.clipboard.writeText(generatedLink)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch (error) {
-      console.error('Failed to copy link:', error)
+    } catch (err) {
+      console.error("Failed to copy link:", err)
     }
-  }
-
-  const handleCreate = () => {
-    generateLink()
   }
 
   const handleClose = () => {
     setGeneratedLink("")
     setCopied(false)
+    setError("")
     onOpenChange(false)
   }
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setGeneratedLink("")
+      setCopied(false)
+      setError("")
+    }
+    onOpenChange(nextOpen)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>招待リンクを作成</DialogTitle>
@@ -70,6 +100,12 @@ export function InviteLinkDialog({ tenantId, open, onOpenChange }: InviteLinkDia
 
         {!generatedLink ? (
           <div className="grid gap-4 py-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
             <div className="grid gap-2">
               <Label htmlFor="defaultRole">デフォルトロール</Label>
               <Select value={defaultRole} onValueChange={(value: 'admin' | 'member' | 'guest') => setDefaultRole(value)}>
@@ -106,15 +142,6 @@ export function InviteLinkDialog({ tenantId, open, onOpenChange }: InviteLinkDia
                 />
               </div>
             )}
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="isActive"
-                checked={isActive}
-                onCheckedChange={setIsActive}
-              />
-              <Label htmlFor="isActive">リンクを有効にする</Label>
-            </div>
           </div>
         ) : (
           <div className="grid gap-4 py-4">
@@ -149,7 +176,6 @@ export function InviteLinkDialog({ tenantId, open, onOpenChange }: InviteLinkDia
               <div className="space-y-1 text-sm text-muted-foreground">
                 <p>デフォルトロール: {defaultRole === 'admin' ? 'Admin' : defaultRole === 'member' ? 'Member' : 'Guest'}</p>
                 {hasExpiration && <p>有効期限: {expirationDays}日</p>}
-                <p>ステータス: {isActive ? '有効' : '無効'}</p>
               </div>
             </div>
           </div>
@@ -160,8 +186,8 @@ export function InviteLinkDialog({ tenantId, open, onOpenChange }: InviteLinkDia
             {generatedLink ? '閉じる' : 'キャンセル'}
           </Button>
           {!generatedLink && (
-            <Button type="button" onClick={handleCreate}>
-              リンクを作成
+            <Button type="button" onClick={handleCreate} disabled={loading}>
+              {loading ? "作成中..." : "リンクを作成"}
             </Button>
           )}
         </DialogFooter>

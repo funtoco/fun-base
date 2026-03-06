@@ -391,6 +391,132 @@ export async function deleteTenant(tenantId: string): Promise<{ success: boolean
   }
 }
 
+export interface InviteLinkInfo {
+  tenantId: string
+  tenantName: string
+  defaultRole: 'admin' | 'member' | 'guest'
+  isActive: boolean
+  isExpired: boolean
+}
+
+// Public: look up invite link info without authentication (uses admin client)
+export async function getInviteLinkInfo(token: string): Promise<{ success: boolean; info?: InviteLinkInfo; error?: string }> {
+  try {
+    const adminSupabase = createAdminClient()
+
+    const { data, error } = await adminSupabase
+      .from('tenant_invite_links')
+      .select('tenant_id, default_role, expires_at, is_active, tenants(name)')
+      .eq('token', token)
+      .single()
+
+    if (error || !data) {
+      return { success: false, error: '招待リンクが見つかりません' }
+    }
+
+    const isExpired = data.expires_at ? new Date(data.expires_at) < new Date() : false
+    const tenant = data.tenants as { name: string } | null
+
+    return {
+      success: true,
+      info: {
+        tenantId: data.tenant_id,
+        tenantName: tenant?.name ?? '不明なテナント',
+        defaultRole: data.default_role as 'admin' | 'member' | 'guest',
+        isActive: data.is_active,
+        isExpired,
+      },
+    }
+  } catch (error) {
+    console.error('Error in getInviteLinkInfo:', error)
+    return { success: false, error: 'サーバーエラーが発生しました' }
+  }
+}
+
+// Accept an invite link: add the authenticated user to the tenant
+export async function acceptTenantInvitation(
+  token: string,
+  userId: string,
+  userEmail: string
+): Promise<{ success: boolean; tenantId?: string; error?: string }> {
+  try {
+    const adminSupabase = createAdminClient()
+
+    // 1. Look up the invite link
+    const { data: link, error: linkError } = await adminSupabase
+      .from('tenant_invite_links')
+      .select('id, tenant_id, default_role, expires_at, is_active')
+      .eq('token', token)
+      .single()
+
+    if (linkError || !link) {
+      return { success: false, error: '招待リンクが見つかりません' }
+    }
+
+    if (!link.is_active) {
+      return { success: false, error: 'この招待リンクは無効化されています' }
+    }
+
+    if (link.expires_at && new Date(link.expires_at) < new Date()) {
+      return { success: false, error: 'この招待リンクは期限切れです' }
+    }
+
+    // 2. Check if user is already a member
+    const { data: existing, error: existingError } = await adminSupabase
+      .from('user_tenants')
+      .select('id, status')
+      .eq('tenant_id', link.tenant_id)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (existingError) {
+      console.error('Error fetching existing membership:', existingError)
+      return { success: false, error: '既存メンバー情報の確認に失敗しました' }
+    }
+
+    if (existing) {
+      if (existing.status === 'active') {
+        return { success: false, error: 'すでにこのテナントのメンバーです' }
+      }
+      // Activate pending membership
+      const { error: updateError } = await adminSupabase
+        .from('user_tenants')
+        .update({ status: 'active', joined_at: new Date().toISOString() })
+        .eq('id', existing.id)
+
+      if (updateError) {
+        console.error('Error activating membership:', updateError)
+        return { success: false, error: 'テナント参加処理に失敗しました' }
+      }
+
+      return { success: true, tenantId: link.tenant_id }
+    }
+
+    // 3. Add user to tenant
+    const { error: insertError } = await adminSupabase.from('user_tenants').insert({
+      user_id: userId,
+      tenant_id: link.tenant_id,
+      email: userEmail,
+      role: link.default_role,
+      status: 'active',
+      joined_at: new Date().toISOString(),
+    })
+
+    if (insertError) {
+      if (insertError.code === '23505') {
+        return { success: true, tenantId: link.tenant_id }
+      }
+      console.error('Error inserting user_tenants:', insertError)
+      return { success: false, error: 'テナントへの参加に失敗しました' }
+    }
+
+    return { success: true, tenantId: link.tenant_id }
+  } catch (error) {
+    console.error('Error in acceptTenantInvitation:', error)
+    return { success: false, error: 'サーバーエラーが発生しました' }
+  }
+}
+
 export async function updateTenant(
   tenantId: string,
   tenantData: {

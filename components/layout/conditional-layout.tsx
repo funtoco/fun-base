@@ -16,7 +16,11 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
 
   // 認証が不要なページ（ログイン、サインアップ）
   const publicPages = ["/login", "/signup"]
-  const isPublicPage = publicPages.includes(pathname) || pathname.startsWith("/auth")
+  const isPublicPage =
+    publicPages.includes(pathname) ||
+    pathname.startsWith("/auth") ||
+    pathname === "/invite" ||
+    pathname.startsWith("/invite/")
 
   // auth が完了していてログイン済みの非公開ページのみ記録する
   usePageViewLogger({ enabled: !loading && !!user && !isPublicPage })
