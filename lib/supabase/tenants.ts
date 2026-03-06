@@ -460,22 +460,33 @@ export async function acceptTenantInvitation(
     }
 
     // 2. Check if user is already a member
-    const { data: existing } = await adminSupabase
+    const { data: existing, error: existingError } = await adminSupabase
       .from('user_tenants')
       .select('id, status')
       .eq('tenant_id', link.tenant_id)
       .eq('user_id', userId)
-      .single()
+      .maybeSingle()
+
+    if (existingError) {
+      console.error('Error fetching existing membership:', existingError)
+      return { success: false, error: '既存メンバー情報の確認に失敗しました' }
+    }
 
     if (existing) {
       if (existing.status === 'active') {
         return { success: false, error: 'すでにこのテナントのメンバーです' }
       }
       // Activate pending membership
-      await adminSupabase
+      const { error: updateError } = await adminSupabase
         .from('user_tenants')
         .update({ status: 'active', joined_at: new Date().toISOString() })
         .eq('id', existing.id)
+
+      if (updateError) {
+        console.error('Error activating membership:', updateError)
+        return { success: false, error: 'テナント参加処理に失敗しました' }
+      }
+
       return { success: true, tenantId: link.tenant_id }
     }
 
@@ -490,6 +501,9 @@ export async function acceptTenantInvitation(
     })
 
     if (insertError) {
+      if (insertError.code === '23505') {
+        return { success: true, tenantId: link.tenant_id }
+      }
       console.error('Error inserting user_tenants:', insertError)
       return { success: false, error: 'テナントへの参加に失敗しました' }
     }

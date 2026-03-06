@@ -15,15 +15,20 @@ export async function POST(
     }
 
     // Check permission: admin or owner only
-    const { data: membership } = await supabase
+    const { data: membership, error: membershipError } = await supabase
       .from("user_tenants")
       .select("role")
       .eq("tenant_id", params.tenantId)
       .eq("user_id", user.id)
       .eq("status", "active")
-      .single()
+      .maybeSingle()
 
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
+    if (membershipError) {
+      console.error("Error checking tenant membership:", membershipError)
+      return NextResponse.json({ error: "Failed to verify membership" }, { status: 500 })
+    }
+
+    if (!membership?.role || !["owner", "admin"].includes(membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -34,8 +39,21 @@ export async function POST(
       return NextResponse.json({ error: "Invalid role" }, { status: 400 })
     }
 
-    const expiresAt = expiresInDays
-      ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString()
+    const normalizedExpiresInDays =
+      expiresInDays === undefined || expiresInDays === null ? null : Number(expiresInDays)
+
+    if (
+      normalizedExpiresInDays !== null &&
+      (!Number.isFinite(normalizedExpiresInDays) ||
+        !Number.isInteger(normalizedExpiresInDays) ||
+        normalizedExpiresInDays < 1 ||
+        normalizedExpiresInDays > 365)
+    ) {
+      return NextResponse.json({ error: "Invalid expiration" }, { status: 400 })
+    }
+
+    const expiresAt = normalizedExpiresInDays
+      ? new Date(Date.now() + normalizedExpiresInDays * 24 * 60 * 60 * 1000).toISOString()
       : null
 
     const adminSupabase = createAdminClient()

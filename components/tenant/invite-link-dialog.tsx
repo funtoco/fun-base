@@ -79,8 +79,17 @@ export function InviteLinkDialog({ tenantId, open, onOpenChange }: InviteLinkDia
     onOpenChange(false)
   }
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setGeneratedLink("")
+      setCopied(false)
+      setError("")
+    }
+    onOpenChange(nextOpen)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>招待リンクを作成</DialogTitle>

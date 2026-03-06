@@ -52,26 +52,32 @@ export default function InviteAcceptancePage() {
   // Step 1: fetch invite info and check login state
   useEffect(() => {
     const init = async () => {
-      // Fetch invite info (public endpoint)
-      const res = await fetch(`/api/invite/${token}`)
-      const data = await res.json()
+      try {
+        // Fetch invite info (public endpoint)
+        const res = await fetch(`/api/invite/${token}`)
+        const data = await res.json()
 
-      if (!res.ok) {
-        setInviteError(data.error || "招待リンクが見つかりません")
+        if (!res.ok) {
+          setInviteError(data.error || "招待リンクが見つかりません")
+          setStatus("inviteInvalid")
+          return
+        }
+
+        setInviteInfo({ tenantName: data.tenantName, defaultRole: data.defaultRole })
+
+        // Check if user is logged in
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (user) {
+          setStatus("accepting")
+          await acceptInvite()
+        } else {
+          setStatus("notLoggedIn")
+        }
+      } catch (error) {
+        console.error("Error initializing invite page:", error)
+        setInviteError("招待情報の取得に失敗しました")
         setStatus("inviteInvalid")
-        return
-      }
-
-      setInviteInfo({ tenantName: data.tenantName, defaultRole: data.defaultRole })
-
-      // Check if user is logged in
-      const { data: { user } } = await supabase.auth.getUser()
-
-      if (user) {
-        setStatus("accepting")
-        await acceptInvite()
-      } else {
-        setStatus("notLoggedIn")
       }
     }
 
@@ -79,14 +85,20 @@ export default function InviteAcceptancePage() {
   }, [token])
 
   const acceptInvite = async () => {
-    setStatus("accepting")
-    const res = await fetch(`/api/invite/${token}`, { method: "POST" })
-    const data = await res.json()
+    try {
+      setStatus("accepting")
+      const res = await fetch(`/api/invite/${token}`, { method: "POST" })
+      const data = await res.json()
 
-    if (res.ok && data.success) {
-      setStatus("success")
-    } else {
-      setAcceptError(data.error || "招待の受け入れに失敗しました")
+      if (res.ok && data.success) {
+        setStatus("success")
+      } else {
+        setAcceptError(data.error || "招待の受け入れに失敗しました")
+        setStatus("error")
+      }
+    } catch (error) {
+      console.error("Error accepting invite:", error)
+      setAcceptError(error instanceof Error ? error.message : "招待の受け入れに失敗しました")
       setStatus("error")
     }
   }
@@ -96,17 +108,22 @@ export default function InviteAcceptancePage() {
     setAuthLoading(true)
     setAuthError("")
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
 
-    if (error) {
-      setAuthError("ログインに失敗しました。メールアドレスとパスワードを確認してください。")
+      if (error) {
+        setAuthError("ログインに失敗しました。メールアドレスとパスワードを確認してください。")
+        return
+      }
+
+      // Logged in successfully → accept invite
+      await acceptInvite()
+    } catch (error) {
+      console.error("Error during login:", error)
+      setAuthError("ログイン中にエラーが発生しました。")
+    } finally {
       setAuthLoading(false)
-      return
     }
-
-    // Logged in successfully → accept invite
-    await acceptInvite()
-    setAuthLoading(false)
   }
 
   const handleRegister = async (e: FormEvent) => {
@@ -118,20 +135,30 @@ export default function InviteAcceptancePage() {
     // After email confirmation, redirect back to this invite page
     const emailRedirectTo = `${origin}/auth/callback?next=/invite/${token}`
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo },
-    })
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo },
+      })
 
-    if (error) {
-      setAuthError("アカウント作成に失敗しました。メールアドレスを確認してください。")
+      if (error) {
+        setAuthError("アカウント作成に失敗しました。メールアドレスを確認してください。")
+        return
+      }
+
+      if (data.session) {
+        await acceptInvite()
+        return
+      }
+
+      setStatus("signupSent")
+    } catch (error) {
+      console.error("Error during signup:", error)
+      setAuthError("アカウント作成中にエラーが発生しました。")
+    } finally {
       setAuthLoading(false)
-      return
     }
-
-    setStatus("signupSent")
-    setAuthLoading(false)
   }
 
   // --- Render ---
