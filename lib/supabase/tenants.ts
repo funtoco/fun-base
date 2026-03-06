@@ -114,10 +114,12 @@ export async function getTenantMembers(tenantId: string): Promise<UserTenant[]> 
   const supabase = createClient()
   
   // Get all members from user_tenants table (active, pending, suspended)
+  // Exclude 'supporter' role as they are internal users and should not be shown in UI
   const { data: members, error } = await supabase
     .from('user_tenants')
     .select()
     .eq('tenant_id', tenantId)
+    .neq('role', 'supporter')
     .order('created_at', { ascending: false })
   
   if (error) {
