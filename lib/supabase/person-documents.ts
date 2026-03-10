@@ -17,6 +17,30 @@ export async function getPersonDocuments(personId: string): Promise<PersonDocume
   return (data || []).map(mapToPersonDocument)
 }
 
+export type PersonDocumentWithPerson = PersonDocument & {
+  personName?: string
+  personKana?: string
+}
+
+export async function getAllPersonDocuments(): Promise<PersonDocumentWithPerson[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('person_documents')
+    .select('*, people(name, kana)')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching all person documents:', error)
+    return []
+  }
+
+  return (data || []).map((row: any) => ({
+    ...mapToPersonDocument(row),
+    personName: row.people?.name,
+    personKana: row.people?.kana,
+  }))
+}
+
 export async function getDocumentSignedUrl(storagePath: string): Promise<string | null> {
   const supabase = createClient()
   const { data, error } = await supabase.storage
