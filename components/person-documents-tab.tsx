@@ -45,7 +45,7 @@ export function PersonDocumentsTab({ personId, personDocuments: initialDocuments
   const getExistingDocument = (docType: DocumentType) => {
     const doc = documents.find((d) => d.documentType === docType)
     if (!doc) return null
-    return { id: doc.id, storagePath: doc.storagePath, fileName: doc.fileName }
+    return { id: doc.id, storagePath: doc.storagePath, fileName: doc.fileName, contentType: doc.contentType }
   }
 
   return (
