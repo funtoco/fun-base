@@ -20,14 +20,16 @@ interface PersonDetailPageProps {
 }
 
 export default async function PersonDetailPage({ params }: PersonDetailPageProps) {
-  const person = await getPersonById(params.id)
-  const personVisas = await getVisasByPersonId(params.id)
+  const [person, personVisas, personDocuments] = await Promise.all([
+    getPersonById(params.id),
+    getVisasByPersonId(params.id),
+    getPersonDocumentsByPersonId(params.id),
+  ])
   const excludedVisaStatuses = new Set<string>(['内定[辞退•取消]•退職'])
   const filteredVisas = personVisas.filter((item) => !excludedVisaStatuses.has(item.status))
   const visa = filteredVisas[0] // 最新のvisa (除外済み)
   const personMeetings = allMeetings.filter((m) => m.personId === params.id)
   const personSupportActions = supportActions.filter((sa) => sa.personId === params.id)
-  const personDocuments = await getPersonDocumentsByPersonId(params.id)
 
   if (!person) {
     notFound()

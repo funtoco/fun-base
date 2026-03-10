@@ -11,7 +11,7 @@ interface DocumentUploadCardProps {
   label: string
   personId: string
   documentType: string
-  existingDocument?: { id: string; storagePath: string; fileName?: string } | null
+  existingDocument?: { id: string; storagePath: string; fileName?: string; contentType?: string } | null
   onUploadComplete?: () => void
   onDeleteComplete?: () => void
 }
@@ -27,7 +27,10 @@ export function DocumentUploadCard({
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const isPdf = existingDocument?.contentType === 'application/pdf'
 
   useEffect(() => {
     if (!existingDocument?.storagePath) {
@@ -49,10 +52,11 @@ export function DocumentUploadCard({
     if (!file) return
 
     if (file.size > 10 * 1024 * 1024) {
-      console.error("File size exceeds 10MB limit")
+      setErrorMessage("ファイルサイズは10MB以下にしてください")
       return
     }
 
+    setErrorMessage(null)
     setUploading(true)
     try {
       const formData = new FormData()
@@ -115,19 +119,36 @@ export function DocumentUploadCard({
           <Dialog>
             <DialogTrigger asChild>
               <button className="w-full cursor-pointer">
-                <img
-                  src={signedUrl}
-                  alt={label}
-                  className="h-32 w-full rounded-md object-cover"
-                />
+                {isPdf ? (
+                  <div className="flex h-32 w-full items-center justify-center rounded-md bg-muted">
+                    <span className="text-sm text-muted-foreground">PDF</span>
+                  </div>
+                ) : (
+                  <img
+                    src={signedUrl}
+                    alt={label}
+                    className="h-32 w-full rounded-md object-cover"
+                  />
+                )}
               </button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl">
-              <img
-                src={signedUrl}
-                alt={label}
-                className="w-full rounded-md object-contain"
-              />
+              {isPdf ? (
+                <object
+                  data={signedUrl}
+                  type="application/pdf"
+                  className="h-[80vh] w-full rounded-md"
+                  aria-label={label}
+                >
+                  <p>PDFを表示できません。<a href={signedUrl} target="_blank" rel="noopener noreferrer">ダウンロード</a></p>
+                </object>
+              ) : (
+                <img
+                  src={signedUrl}
+                  alt={label}
+                  className="w-full rounded-md object-contain"
+                />
+              )}
             </DialogContent>
           </Dialog>
 
@@ -169,6 +190,10 @@ export function DocumentUploadCard({
           <Upload className="h-6 w-6" />
           <span className="text-xs">{label}</span>
         </button>
+      )}
+
+      {errorMessage && (
+        <p className="text-xs text-destructive">{errorMessage}</p>
       )}
     </Card>
   )

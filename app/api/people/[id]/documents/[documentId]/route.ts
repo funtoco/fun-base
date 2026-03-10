@@ -36,8 +36,30 @@ export async function DELETE(
       )
     }
 
+    // Validate storage_path has expected tenant prefix
+    const { data: person } = await supabase
+      .from('people')
+      .select('tenant_id')
+      .eq('id', personId)
+      .single()
+
+    if (person && !document.storage_path.startsWith(`${person.tenant_id}/`)) {
+      console.error('Storage path does not match tenant prefix:', document.storage_path)
+      return NextResponse.json(
+        { error: 'Invalid storage path' },
+        { status: 400 }
+      )
+    }
+
     // Delete file from storage
-    await deleteFileFromStorage(BUCKET_NAME, document.storage_path)
+    const storageResult = await deleteFileFromStorage(BUCKET_NAME, document.storage_path)
+    if (!storageResult.success) {
+      console.error('Failed to delete file from storage:', storageResult.error)
+      return NextResponse.json(
+        { error: 'Failed to delete file from storage' },
+        { status: 500 }
+      )
+    }
 
     // Delete DB record
     const { error: deleteError } = await supabase

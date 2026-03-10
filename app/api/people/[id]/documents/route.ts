@@ -147,18 +147,7 @@ export async function POST(
       .eq('document_type', documentType)
       .single()
 
-    if (existingDoc) {
-      // Delete old file from storage
-      await deleteFileFromStorage(BUCKET_NAME, existingDoc.storage_path)
-
-      // Delete old DB record
-      await supabase
-        .from('person_documents')
-        .delete()
-        .eq('id', existingDoc.id)
-    }
-
-    // Generate file path and upload
+    // Upload new file first (before deleting old data to avoid data loss on failure)
     const filePath = generateFilePath(tenantId, personId, documentType, file.name)
     const arrayBuffer = await file.arrayBuffer()
     const contentType = file.type
@@ -190,10 +179,29 @@ export async function POST(
 
     if (insertError) {
       console.error('Error inserting person document:', insertError)
+      // Clean up the uploaded file since DB insert failed
+      await deleteFileFromStorage(BUCKET_NAME, filePath)
       return NextResponse.json(
         { error: 'Failed to save document record' },
         { status: 500 }
       )
+    }
+
+    // Delete old document after new one is successfully saved
+    if (existingDoc) {
+      const storageResult = await deleteFileFromStorage(BUCKET_NAME, existingDoc.storage_path)
+      if (!storageResult.success) {
+        console.error('Failed to delete old file from storage:', storageResult.error)
+      }
+
+      const { error: deleteError } = await supabase
+        .from('person_documents')
+        .delete()
+        .eq('id', existingDoc.id)
+
+      if (deleteError) {
+        console.error('Failed to delete old document record:', deleteError)
+      }
     }
 
     revalidatePath(`/people/${personId}`)
