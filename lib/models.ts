@@ -120,6 +120,23 @@ export type Company = {
   isActive: boolean
 }
 
+export type Announcement = {
+  id: string
+  title: string
+  body: string
+  published: boolean
+  createdBy?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type AnnouncementRead = {
+  id: string
+  announcementId: string
+  userId: string
+  readAt: string
+}
+
 export type DocumentType = 'passport_front' | 'passport_back' | 'residence_card_front' | 'residence_card_back'
 
 export type PersonDocument = {
