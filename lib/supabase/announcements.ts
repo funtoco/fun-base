@@ -1,6 +1,17 @@
 import { createClient } from './client'
 import type { Announcement } from '@/lib/models'
 
+/** DBのannouncementsテーブルの行型 */
+interface AnnouncementRow {
+  id: string
+  title: string
+  body: string
+  published: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 /** 公開済みお知らせ一覧を取得 */
 export async function getPublishedAnnouncements(): Promise<Announcement[]> {
   const supabase = createClient()
@@ -19,13 +30,15 @@ export async function getPublishedAnnouncements(): Promise<Announcement[]> {
   return data.map(mapToAnnouncement)
 }
 
-/** 全お知らせ一覧を取得（管理者用） */
+/**
+ * 全お知らせ一覧を取得（管理者用）
+ * NOTE: RLSで published=true のみ許可しているため、
+ * ブラウザクライアント経由では公開済みのお知らせのみ返される。
+ * 未公開お知らせの取得が必要な場合は、サーバーサイドAPIで createAdminClient() を使用すること。
+ */
 export async function getAllAnnouncements(): Promise<Announcement[]> {
   const supabase = createClient()
 
-  // admin用 - publishedに関わらず全件取得
-  // RLSは published=true のみ許可しているため、service roleが必要
-  // ここではclient側で使うので、published=trueのものだけ + 未公開は別途API経由で取得
   const { data, error } = await supabase
     .from('announcements')
     .select('*')
@@ -73,14 +86,17 @@ export async function updateAnnouncement(
 ): Promise<Announcement> {
   const supabase = createClient()
 
+  // undefinedのフィールドを除外してNULL上書きを防ぐ
+  const updateData: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  }
+  if (updates.title !== undefined) updateData.title = updates.title
+  if (updates.body !== undefined) updateData.body = updates.body
+  if (updates.published !== undefined) updateData.published = updates.published
+
   const { data, error } = await supabase
     .from('announcements')
-    .update({
-      title: updates.title,
-      body: updates.body,
-      published: updates.published,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', id)
     .select()
     .single()
@@ -108,6 +124,12 @@ export async function deleteAnnouncement(id: string): Promise<void> {
   }
 }
 
+/*
+ * 既読管理系の関数（getReadAnnouncementIds, markAnnouncementAsRead, markAllAnnouncementsAsRead）は
+ * 非クリティカルな機能のため、エラー時はログ出力のみでthrowしない。
+ * 失敗しても既読状態が一時的に不整合になるだけでUXへの影響は軽微。
+ */
+
 /** ユーザーの既読お知らせIDリストを取得 */
 export async function getReadAnnouncementIds(): Promise<string[]> {
   const supabase = createClient()
@@ -121,7 +143,7 @@ export async function getReadAnnouncementIds(): Promise<string[]> {
     return []
   }
 
-  return data.map((r: any) => r.announcement_id)
+  return data.map((r: { announcement_id: string }) => r.announcement_id)
 }
 
 /** お知らせを既読にする */
@@ -167,13 +189,13 @@ export async function markAllAnnouncementsAsRead(announcementIds: string[]): Pro
   }
 }
 
-function mapToAnnouncement(row: any): Announcement {
+function mapToAnnouncement(row: AnnouncementRow): Announcement {
   return {
     id: row.id,
     title: row.title,
     body: row.body,
     published: row.published,
-    createdBy: row.created_by,
+    createdBy: row.created_by ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Megaphone } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
+import { formatDate } from "@/lib/utils"
 import {
   getPublishedAnnouncements,
   getReadAnnouncementIds,
@@ -43,28 +44,27 @@ export default function AnnouncementsPage() {
             setReadIds(prev => [...prev, idParam])
           }
         }
-      } catch {
-        // silent
+      } catch (err) {
+        console.error('Failed to load announcements:', err)
       } finally {
         setLoading(false)
       }
     }
     if (user) load()
-  }, [user])
+  }, [user, searchParams])
 
   const selected = announcements.find(a => a.id === selectedId)
 
   const handleSelect = async (id: string) => {
     setSelectedId(id)
     if (!readIds.includes(id)) {
-      await markAnnouncementAsRead(id)
-      setReadIds(prev => [...prev, id])
+      try {
+        await markAnnouncementAsRead(id)
+        setReadIds(prev => [...prev, id])
+      } catch (err) {
+        console.error('Failed to mark announcement as read:', err)
+      }
     }
-  }
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr)
-    return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
   }
 
   if (loading) {

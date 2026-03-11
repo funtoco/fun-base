@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
 import { currentUser } from "@/data/users"
+import { formatDate } from "@/lib/utils"
 import {
   getPublishedAnnouncements,
   getReadAnnouncementIds,
@@ -44,8 +45,8 @@ export function Header() {
       ])
       setAnnouncements(items)
       setReadIds(reads)
-    } catch {
-      // 認証未設定時などはサイレントに無視
+    } catch (err) {
+      console.debug('Failed to load announcements:', err)
     }
   }, [])
 
@@ -56,24 +57,27 @@ export function Header() {
   }, [user, loadAnnouncements])
 
   const handleMarkAsRead = async (id: string) => {
-    await markAnnouncementAsRead(id)
-    setReadIds(prev => [...prev, id])
+    try {
+      await markAnnouncementAsRead(id)
+      setReadIds(prev => [...prev, id])
+    } catch (err) {
+      console.error('Failed to mark announcement as read:', err)
+    }
   }
 
   const handleMarkAllAsRead = async () => {
     const unreadIds = announcements.filter(a => !readIds.includes(a.id)).map(a => a.id)
     if (unreadIds.length === 0) return
-    await markAllAnnouncementsAsRead(unreadIds)
-    setReadIds(prev => [...prev, ...unreadIds])
+    try {
+      await markAllAnnouncementsAsRead(unreadIds)
+      setReadIds(prev => [...prev, ...unreadIds])
+    } catch (err) {
+      console.error('Failed to mark all announcements as read:', err)
+    }
   }
 
   const handleSignOut = async () => {
     await signOut()
-  }
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr)
-    return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
   }
 
   return (

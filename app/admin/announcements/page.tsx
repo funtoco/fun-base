@@ -20,6 +20,7 @@ import {
 import { ArrowLeft, Plus, Pencil, Trash2, Megaphone } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/lib/hooks/use-toast"
+import { formatDateTime } from "@/lib/utils"
 import {
   getAllAnnouncements,
   createAnnouncement,
@@ -105,6 +106,7 @@ export default function AdminAnnouncementsPage() {
   }
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm("このお知らせを削除しますか？")) return
     try {
       await deleteAnnouncement(id)
       toast({ title: "お知らせを削除しました" })
@@ -113,11 +115,6 @@ export default function AdminAnnouncementsPage() {
       console.error("Failed to delete announcement:", error)
       toast({ title: "削除に失敗しました", variant: "destructive" })
     }
-  }
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr)
-    return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   }
 
   return (
@@ -181,7 +178,7 @@ export default function AdminAnnouncementsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(a.createdAt)}
+                      {formatDateTime(a.createdAt)}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
