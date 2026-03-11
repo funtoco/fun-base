@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { getPersonById } from "@/lib/supabase/people-server"
 import { getVisasByPersonId } from "@/lib/supabase/visas-server"
+import { getPersonDocumentsByPersonId } from "@/lib/supabase/person-documents-server"
 import { allMeetings } from "@/data/meetings"
 import { supportActions } from "@/data/support-actions"
 import { formatDate, formatDateTime } from "@/lib/utils"
@@ -19,8 +20,11 @@ interface PersonDetailPageProps {
 }
 
 export default async function PersonDetailPage({ params }: PersonDetailPageProps) {
-  const person = await getPersonById(params.id)
-  const personVisas = await getVisasByPersonId(params.id)
+  const [person, personVisas, personDocuments] = await Promise.all([
+    getPersonById(params.id),
+    getVisasByPersonId(params.id),
+    getPersonDocumentsByPersonId(params.id),
+  ])
   const excludedVisaStatuses = new Set<string>(['内定[辞退•取消]•退職'])
   const filteredVisas = personVisas.filter((item) => !excludedVisaStatuses.has(item.status))
   const visa = filteredVisas[0] // 最新のvisa (除外済み)
@@ -103,10 +107,12 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Tabs Content */}
         <div className="lg:col-span-2">
-          <PersonDetailTabs 
+          <PersonDetailTabs
+            personId={params.id}
             personMeetings={personMeetings}
             personSupportActions={personSupportActions}
             personVisas={personVisas}
+            personDocuments={personDocuments}
           />
         </div>
 

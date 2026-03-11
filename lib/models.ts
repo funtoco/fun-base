@@ -119,3 +119,19 @@ export type Company = {
   name: string
   isActive: boolean
 }
+
+export type DocumentType = 'passport_front' | 'passport_back' | 'residence_card_front' | 'residence_card_back'
+
+export type PersonDocument = {
+  id: string
+  personId: string
+  tenantId: string
+  documentType: DocumentType
+  storagePath: string
+  fileName?: string
+  contentType?: string
+  fileSizeBytes?: number
+  uploadedBy?: string
+  createdAt: string
+  updatedAt: string
+}

@@ -4,7 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, Users, FileText, Calendar, Clock, CheckSquare } from "lucide-react"
+import { LayoutDashboard, Users, FileText, FolderOpen, Calendar, Clock, CheckSquare } from "lucide-react"
 
 const navigation = [
   // {
@@ -21,6 +21,11 @@ const navigation = [
     name: "ビザ進捗管理",
     href: "/visas",
     icon: FileText,
+  },
+  {
+    name: "書類管理",
+    href: "/documents",
+    icon: FolderOpen,
   },
   // {
   //   name: "面談記録",

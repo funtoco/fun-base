@@ -8,15 +8,18 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { Timeline } from "@/components/ui/timeline"
 import { TreeNoteView } from "@/components/ui/tree-note-view"
 import { formatDateTime } from "@/lib/utils"
-import type { Meeting, SupportAction, Visa } from "@/lib/models"
+import type { Meeting, SupportAction, Visa, PersonDocument } from "@/lib/models"
+import { PersonDocumentsTab } from "@/components/person-documents-tab"
 
 interface PersonDetailTabsProps {
+  personId: string
   personMeetings: Meeting[]
   personSupportActions: SupportAction[]
   personVisas: Visa[]
+  personDocuments: PersonDocument[]
 }
 
-export function PersonDetailTabs({ personMeetings, personSupportActions, personVisas }: PersonDetailTabsProps) {
+export function PersonDetailTabs({ personId, personMeetings, personSupportActions, personVisas, personDocuments }: PersonDetailTabsProps) {
   const [activeTab, setActiveTab] = useState("timeline")
 
   const baseTimelineItems = [
@@ -128,10 +131,11 @@ export function PersonDetailTabs({ personMeetings, personSupportActions, personV
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-3">
+      <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="timeline">タイムライン</TabsTrigger>
         <TabsTrigger value="meetings">面談記録</TabsTrigger>
         <TabsTrigger value="support">サポート記録</TabsTrigger>
+        <TabsTrigger value="documents">書類</TabsTrigger>
       </TabsList>
 
       <TabsContent value="timeline" className="mt-6">
@@ -247,6 +251,10 @@ export function PersonDetailTabs({ personMeetings, personSupportActions, personV
             ))
           )}
         </div>
+      </TabsContent>
+
+      <TabsContent value="documents" className="mt-6">
+        <PersonDocumentsTab personId={personId} personDocuments={personDocuments} />
       </TabsContent>
     </Tabs>
   )
