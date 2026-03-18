@@ -81,7 +81,7 @@ export function Header() {
   }
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-border bg-background px-6">
+    <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4 md:px-6">
       {/* Search and Company Switcher */}
       <div className="flex items-center gap-4 flex-1">
         <div className="relative max-w-md">
