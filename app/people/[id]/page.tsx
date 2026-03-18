@@ -13,7 +13,7 @@ import { getPersonDocumentsByPersonId } from "@/lib/supabase/person-documents-se
 import { allMeetings } from "@/data/meetings"
 import { supportActions } from "@/data/support-actions"
 import { formatDate, formatDateTime } from "@/lib/utils"
-import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit } from "lucide-react"
+import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText } from "lucide-react"
 
 interface PersonDetailPageProps {
   params: { id: string }
@@ -216,6 +216,24 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                   <span className="text-sm">{person.company}</span>
                 </div>
               )}
+              {person.employmentNotificationDate && (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">雇用状況届出日</span>
+                  </div>
+                  <span className="text-sm">{person.employmentNotificationDate}</span>
+                </div>
+              )}
+              {person.employmentChangeNotificationDate && (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">変更届出日</span>
+                  </div>
+                  <span className="text-sm">{person.employmentChangeNotificationDate}</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -238,6 +256,24 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">担当者</span>
                     <span className="text-sm">{visa.manager}</span>
+                  </div>
+                )}
+                {visa.receptionApplicationNumber && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">受付申請番号</span>
+                    <span className="text-sm font-mono">{visa.receptionApplicationNumber}</span>
+                  </div>
+                )}
+                {visa.receptionNumber && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">受付番号</span>
+                    <span className="text-sm font-mono">{visa.receptionNumber}</span>
+                  </div>
+                )}
+                {visa.receptionDate && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">受付日</span>
+                    <span className="text-sm">{visa.receptionDate}</span>
                   </div>
                 )}
               </CardContent>

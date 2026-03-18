@@ -60,6 +60,8 @@ export async function getPersonById(id: string): Promise<Person | null> {
     visaId: data.visa_id,
     externalId: data.external_id,
     imagePath: data.image_path,
+    employmentNotificationDate: data.employment_notification_date,
+    employmentChangeNotificationDate: data.employment_change_notification_date,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   }

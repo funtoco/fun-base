@@ -19,6 +19,8 @@ export type Person = {
   visaId?: string
   externalId?: string
   imagePath?: string
+  employmentNotificationDate?: string
+  employmentChangeNotificationDate?: string
   createdAt: string
   updatedAt: string
 }
@@ -51,6 +53,9 @@ export type Visa = {
   applicationDate?: string
   additionalDocumentsDate?: string
   visaAcquiredDate?: string
+  receptionNumber?: string
+  receptionDate?: string
+  receptionApplicationNumber?: string
 }
 
 export type MeetingNote = {

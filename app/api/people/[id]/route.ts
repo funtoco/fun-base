@@ -18,26 +18,29 @@ export async function PUT(
       )
     }
 
-    // 現在は従業員番号のみ更新可能
-    const { employeeNumber } = body
-
-    if (employeeNumber === undefined) {
-      return NextResponse.json(
-        { error: 'employeeNumber is required' },
-        { status: 400 }
-      )
-    }
+    const { employeeNumber, employmentNotificationDate, employmentChangeNotificationDate } = body
 
     // サーバー側のSupabaseクライアントを使用
     const supabase = await createClient()
 
+    // 更新対象のフィールドを構築
+    const updateFields: Record<string, any> = {
+      updated_at: new Date().toISOString()
+    }
+    if (employeeNumber !== undefined) {
+      updateFields.employee_number = employeeNumber?.trim() || null
+    }
+    if (employmentNotificationDate !== undefined) {
+      updateFields.employment_notification_date = employmentNotificationDate || null
+    }
+    if (employmentChangeNotificationDate !== undefined) {
+      updateFields.employment_change_notification_date = employmentChangeNotificationDate || null
+    }
+
     // 更新処理
     const { data, error } = await supabase
       .from('people')
-      .update({
-        employee_number: employeeNumber?.trim() || null,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateFields)
       .eq('id', id)
       .select(`
         *,
@@ -82,6 +85,8 @@ export async function PUT(
       visaId: data.visa_id,
       externalId: data.external_id,
       imagePath: data.image_path,
+      employmentNotificationDate: data.employment_notification_date,
+      employmentChangeNotificationDate: data.employment_change_notification_date,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     }

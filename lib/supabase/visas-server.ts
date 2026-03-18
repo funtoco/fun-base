@@ -36,7 +36,10 @@ export async function getVisasByPersonId(personId: string): Promise<Visa[]> {
     visaApplicationPreparationDate: visa.visa_application_preparation_date,
     applicationDate: visa.application_date,
     additionalDocumentsDate: visa.additional_documents_date,
-    visaAcquiredDate: visa.visa_acquired_date
+    visaAcquiredDate: visa.visa_acquired_date,
+    receptionNumber: visa.reception_number,
+    receptionDate: visa.reception_date,
+    receptionApplicationNumber: visa.reception_application_number
   }))
 }
 
