@@ -13,6 +13,9 @@ interface PersonWithVisa extends Person {
   visaStatus?: string
   visaType?: string
   expiryDate?: string
+  receptionApplicationNumber?: string
+  receptionNumber?: string
+  receptionDate?: string
 }
 
 export default function PeoplePage() {
@@ -102,6 +105,9 @@ export default function PeoplePage() {
       visaStatus: visa?.status,
       visaType: visa?.type,
       expiryDate: visa?.expiryDate,
+      receptionApplicationNumber: visa?.receptionApplicationNumber,
+      receptionNumber: visa?.receptionNumber,
+      receptionDate: visa?.receptionDate,
     }
   })
 
@@ -232,6 +238,14 @@ export default function PeoplePage() {
     { key: "residenceCardNo", label: "在留カード番号" },
     { key: "residenceCardExpiryDate", label: "在留カード期限" },
     { key: "residenceCardIssuedDate", label: "在留カード許可日" },
+    { key: "specificSkillField", label: "特定技能分野" },
+    { key: "employmentNotificationDate", label: "雇用状況届出日" },
+    { key: "employmentChangeNotificationDate", label: "変更届出日" },
+    { key: "visaStatus", label: "ビザステータス" },
+    { key: "visaType", label: "ビザ種別" },
+    { key: "receptionApplicationNumber", label: "受付申請番号" },
+    { key: "receptionNumber", label: "受付番号" },
+    { key: "receptionDate", label: "受付日" },
   ]
 
   const handleRowClick = (person: PersonWithVisa) => {
