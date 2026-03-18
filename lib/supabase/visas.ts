@@ -91,7 +91,10 @@ export async function getVisaById(id: string): Promise<Visa | null> {
     visaApplicationPreparationDate: data.visa_application_preparation_date,
     applicationDate: data.application_date,
     additionalDocumentsDate: data.additional_documents_date,
-    visaAcquiredDate: data.visa_acquired_date
+    visaAcquiredDate: data.visa_acquired_date,
+    receptionNumber: data.reception_number,
+    receptionDate: data.reception_date,
+    receptionApplicationNumber: data.reception_application_number
   }
 }
 
@@ -186,7 +189,10 @@ export async function createVisa(visa: Omit<Visa, 'updatedAt'>): Promise<Visa> {
     visaApplicationPreparationDate: data.visa_application_preparation_date,
     applicationDate: data.application_date,
     additionalDocumentsDate: data.additional_documents_date,
-    visaAcquiredDate: data.visa_acquired_date
+    visaAcquiredDate: data.visa_acquired_date,
+    receptionNumber: data.reception_number,
+    receptionDate: data.reception_date,
+    receptionApplicationNumber: data.reception_application_number
   }
 }
 
@@ -241,7 +247,10 @@ export async function updateVisa(id: string, updates: Partial<Omit<Visa, 'id' | 
     visaApplicationPreparationDate: data.visa_application_preparation_date,
     applicationDate: data.application_date,
     additionalDocumentsDate: data.additional_documents_date,
-    visaAcquiredDate: data.visa_acquired_date
+    visaAcquiredDate: data.visa_acquired_date,
+    receptionNumber: data.reception_number,
+    receptionDate: data.reception_date,
+    receptionApplicationNumber: data.reception_application_number
   }
 }
 

@@ -20,6 +20,17 @@ export async function PUT(
 
     const { employeeNumber, employmentNotificationDate, employmentChangeNotificationDate } = body
 
+    // 入力型バリデーション
+    if (employeeNumber !== undefined && employeeNumber !== null && typeof employeeNumber !== 'string') {
+      return NextResponse.json({ error: 'employeeNumber must be a string or null' }, { status: 400 })
+    }
+    if (employmentNotificationDate !== undefined && employmentNotificationDate !== null && typeof employmentNotificationDate !== 'string') {
+      return NextResponse.json({ error: 'employmentNotificationDate must be a string or null' }, { status: 400 })
+    }
+    if (employmentChangeNotificationDate !== undefined && employmentChangeNotificationDate !== null && typeof employmentChangeNotificationDate !== 'string') {
+      return NextResponse.json({ error: 'employmentChangeNotificationDate must be a string or null' }, { status: 400 })
+    }
+
     // サーバー側のSupabaseクライアントを使用
     const supabase = await createClient()
 
@@ -28,7 +39,7 @@ export async function PUT(
       updated_at: new Date().toISOString()
     }
     if (employeeNumber !== undefined) {
-      updateFields.employee_number = employeeNumber?.trim() || null
+      updateFields.employee_number = employeeNumber ? employeeNumber.trim() : null
     }
     if (employmentNotificationDate !== undefined) {
       updateFields.employment_notification_date = employmentNotificationDate || null

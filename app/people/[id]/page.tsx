@@ -222,7 +222,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                     <FileText className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">雇用状況届出日</span>
                   </div>
-                  <span className="text-sm">{person.employmentNotificationDate}</span>
+                  <span className="text-sm">{formatDate(person.employmentNotificationDate)}</span>
                 </div>
               )}
               {person.employmentChangeNotificationDate && (
@@ -231,7 +231,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                     <FileText className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">変更届出日</span>
                   </div>
-                  <span className="text-sm">{person.employmentChangeNotificationDate}</span>
+                  <span className="text-sm">{formatDate(person.employmentChangeNotificationDate)}</span>
                 </div>
               )}
             </CardContent>
@@ -273,7 +273,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                 {visa.receptionDate && (
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">受付日</span>
-                    <span className="text-sm">{visa.receptionDate}</span>
+                    <span className="text-sm">{formatDate(visa.receptionDate)}</span>
                   </div>
                 )}
               </CardContent>
