@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Search, FilterIcon, Download, ChevronUp, ChevronDown, X, ChevronDown as ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -97,7 +96,7 @@ function DataTableFilterPopover({
           <ChevronDownIcon className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 max-w-[90vw] p-0" align="start">
+      <PopoverContent className="w-80 max-w-[90vw] overflow-hidden p-0" align="start">
         <div className="border-b px-4 py-3">
           <div className="text-sm font-medium">{filter.label}</div>
           {showSearchInput && (
@@ -122,8 +121,8 @@ function DataTableFilterPopover({
             該当する候補がありません
           </div>
         ) : (
-          <ScrollArea className="max-h-72">
-            <div className="space-y-1 p-2">
+          <div className="max-h-72 overflow-y-auto overscroll-contain p-2">
+            <div className="space-y-1">
               {filteredOptions.map((option) => {
                 const isSelected = selectedValues.includes(option.value)
 
@@ -145,7 +144,7 @@ function DataTableFilterPopover({
                 )
               })}
             </div>
-          </ScrollArea>
+          </div>
         )}
       </PopoverContent>
     </Popover>
