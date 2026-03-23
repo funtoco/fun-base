@@ -47,6 +47,8 @@ export async function getPeople(): Promise<Person[]> {
       visaId: person.visa_id,
       externalId: person.external_id,
       imagePath: person.image_path,
+      employmentNotificationDate: person.employment_notification_date,
+      employmentChangeNotificationDate: person.employment_change_notification_date,
       createdAt: person.created_at,
       updatedAt: person.updated_at
   }))
@@ -111,6 +113,8 @@ export async function getPersonById(id: string): Promise<Person | null> {
     visaId: data.visa_id,
     externalId: data.external_id,
     imagePath: data.image_path,
+    employmentNotificationDate: data.employment_notification_date,
+    employmentChangeNotificationDate: data.employment_change_notification_date,
     createdAt: data.created_at,
     updatedAt: data.updated_at
   }
@@ -139,7 +143,9 @@ export async function createPerson(person: Omit<Person, 'createdAt' | 'updatedAt
       company: person.company,
       note: person.note,
       visa_id: person.visaId,
-      external_id: person.externalId
+      external_id: person.externalId,
+      employment_notification_date: person.employmentNotificationDate,
+      employment_change_notification_date: person.employmentChangeNotificationDate
     })
     .select(`
       *,
@@ -173,6 +179,8 @@ export async function createPerson(person: Omit<Person, 'createdAt' | 'updatedAt
     visaId: data.visa_id,
     externalId: data.external_id,
     imagePath: data.image_path,
+    employmentNotificationDate: data.employment_notification_date,
+    employmentChangeNotificationDate: data.employment_change_notification_date,
     createdAt: data.created_at,
     updatedAt: data.updated_at
   }
@@ -200,7 +208,9 @@ export async function updatePerson(id: string, updates: Partial<Omit<Person, 'id
       company: updates.company,
       note: updates.note,
       visa_id: updates.visaId,
-      external_id: updates.externalId
+      external_id: updates.externalId,
+      employment_notification_date: updates.employmentNotificationDate,
+      employment_change_notification_date: updates.employmentChangeNotificationDate
     })
     .eq('id', id)
     .select(`
@@ -235,6 +245,8 @@ export async function updatePerson(id: string, updates: Partial<Omit<Person, 'id
     visaId: data.visa_id,
     externalId: data.external_id,
     imagePath: data.image_path,
+    employmentNotificationDate: data.employment_notification_date,
+    employmentChangeNotificationDate: data.employment_change_notification_date,
     createdAt: data.created_at,
     updatedAt: data.updated_at
   }
@@ -288,6 +300,8 @@ export async function getPersonByExternalId(externalId: string): Promise<Person 
     visaId: data.visa_id,
     externalId: data.external_id,
     imagePath: data.image_path,
+    employmentNotificationDate: data.employment_notification_date,
+    employmentChangeNotificationDate: data.employment_change_notification_date,
     createdAt: data.created_at,
     updatedAt: data.updated_at
   }

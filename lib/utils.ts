@@ -53,38 +53,38 @@ export function isExpiringSoon(expiryDate: string, days = 30): boolean {
 // Get visa status color
 export function getVisaStatusColor(status: string): string {
   const statusColors: Record<string, string> = {
-    書類準備中: "bg-gray-100 text-gray-800",
-    書類作成中: "bg-blue-100 text-blue-800",
-    書類確認中: "bg-yellow-100 text-yellow-800",
-    申請準備中: "bg-orange-100 text-orange-800",
-    ビザ申請準備中: "bg-purple-100 text-purple-800",
-    申請中: "bg-indigo-100 text-indigo-800",
-    ビザ取得済み: "bg-green-100 text-green-800",
+    書類準備中: "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
+    書類作成中: "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200",
+    書類確認中: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+    申請準備中: "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-200",
+    ビザ申請準備中: "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200",
+    申請中: "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200",
+    ビザ取得済み: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
   }
-  return statusColors[status] || "bg-gray-100 text-gray-800"
+  return statusColors[status] || "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"
 }
 
 // Get support action status color
 export function getSupportStatusColor(status: string): string {
   const statusColors: Record<string, string> = {
-    open: "bg-red-100 text-red-800",
-    in_progress: "bg-yellow-100 text-yellow-800",
-    done: "bg-green-100 text-green-800",
+    open: "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200",
+    in_progress: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+    done: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
   }
-  return statusColors[status] || "bg-gray-100 text-gray-800"
+  return statusColors[status] || "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200"
 }
 
 // Get working status color
 export function getWorkingStatusColor(status: string): string {
   const statusColors: Record<string, string> = {
-    入社待ち: "bg-blue-100 text-blue-800",
-    在籍中: "bg-green-100 text-green-800",
-    退職: "bg-red-100 text-red-800",
-    内定取消: "bg-red-100 text-red-800",
-    内定辞退: "bg-orange-100 text-orange-800",
-    支援終了: "bg-gray-100 text-gray-800",
+    入社待ち: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200",
+    在籍中: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+    退職: "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200",
+    内定取消: "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200",
+    内定辞退: "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-200",
+    支援終了: "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200",
   }
-  return statusColors[status] || "bg-gray-100 text-gray-800"
+  return statusColors[status] || "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200"
 }
 
 // Generate activity timeline from various data sources

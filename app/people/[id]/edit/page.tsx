@@ -23,8 +23,10 @@ export default function EditPersonPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  // フォーム状態（従業員番号のみ編集可能）
+  // フォーム状態
   const [employeeNumber, setEmployeeNumber] = useState('')
+  const [employmentNotificationDate, setEmploymentNotificationDate] = useState('')
+  const [employmentChangeNotificationDate, setEmploymentChangeNotificationDate] = useState('')
 
   // 初期データ取得
   useEffect(() => {
@@ -38,6 +40,8 @@ export default function EditPersonPage() {
         }
         setPerson(data)
         setEmployeeNumber(data.employeeNumber || '')
+        setEmploymentNotificationDate(data.employmentNotificationDate || '')
+        setEmploymentChangeNotificationDate(data.employmentChangeNotificationDate || '')
       } catch (err) {
         console.error('Error fetching person:', err)
         setError(err instanceof Error ? err.message : 'データの取得に失敗しました')
@@ -67,6 +71,8 @@ export default function EditPersonPage() {
         },
         body: JSON.stringify({
           employeeNumber: employeeNumber.trim() || null,
+          employmentNotificationDate: employmentNotificationDate || null,
+          employmentChangeNotificationDate: employmentChangeNotificationDate || null,
         }),
       })
 
@@ -201,9 +207,6 @@ export default function EditPersonPage() {
                   placeholder="従業員番号を入力"
                   disabled={saving}
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  この項目のみ編集可能です
-                </p>
               </div>
             </div>
 
@@ -276,6 +279,38 @@ export default function EditPersonPage() {
                 />
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* 雇用状況届出 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>雇用状況届出</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <Label htmlFor="employmentNotificationDate" className="text-right">届出日</Label>
+              <Input
+                id="employmentNotificationDate"
+                type="date"
+                value={employmentNotificationDate}
+                onChange={(e) => setEmploymentNotificationDate(e.target.value)}
+                disabled={saving}
+                className="w-full"
+              />
+            </div>
+
+            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <Label htmlFor="employmentChangeNotificationDate" className="text-right">変更届出日</Label>
+              <Input
+                id="employmentChangeNotificationDate"
+                type="date"
+                value={employmentChangeNotificationDate}
+                onChange={(e) => setEmploymentChangeNotificationDate(e.target.value)}
+                disabled={saving}
+                className="w-full"
+              />
+            </div>
           </CardContent>
         </Card>
 

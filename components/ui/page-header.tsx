@@ -20,8 +20,8 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, breadcrumbs, actions }: PageHeaderProps) {
   return (
-    <div className="border-b border-border bg-card">
-      <div className="px-6 py-4">
+    <div className="border-b border-border bg-card shadow-sm">
+      <div className="px-6 py-5">
         {breadcrumbs && breadcrumbs.length > 0 && (
           <Breadcrumb className="mb-2">
             <BreadcrumbList>

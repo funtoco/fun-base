@@ -51,7 +51,10 @@ export async function getVisas(): Promise<Visa[]> {
     visaApplicationPreparationDate: visa.visa_application_preparation_date,
     applicationDate: visa.application_date,
     additionalDocumentsDate: visa.additional_documents_date,
-    visaAcquiredDate: visa.visa_acquired_date
+    visaAcquiredDate: visa.visa_acquired_date,
+    receptionNumber: visa.reception_number,
+    receptionDate: visa.reception_date,
+    receptionApplicationNumber: visa.reception_application_number
   }))
 }
 
@@ -88,7 +91,10 @@ export async function getVisaById(id: string): Promise<Visa | null> {
     visaApplicationPreparationDate: data.visa_application_preparation_date,
     applicationDate: data.application_date,
     additionalDocumentsDate: data.additional_documents_date,
-    visaAcquiredDate: data.visa_acquired_date
+    visaAcquiredDate: data.visa_acquired_date,
+    receptionNumber: data.reception_number,
+    receptionDate: data.reception_date,
+    receptionApplicationNumber: data.reception_application_number
   }
 }
 
@@ -125,7 +131,10 @@ export async function getVisasByPersonId(personId: string): Promise<Visa[]> {
     visaApplicationPreparationDate: visa.visa_application_preparation_date,
     applicationDate: visa.application_date,
     additionalDocumentsDate: visa.additional_documents_date,
-    visaAcquiredDate: visa.visa_acquired_date
+    visaAcquiredDate: visa.visa_acquired_date,
+    receptionNumber: visa.reception_number,
+    receptionDate: visa.reception_date,
+    receptionApplicationNumber: visa.reception_application_number
   }))
 }
 
@@ -150,7 +159,10 @@ export async function createVisa(visa: Omit<Visa, 'updatedAt'>): Promise<Visa> {
       visa_application_preparation_date: visa.visaApplicationPreparationDate,
       application_date: visa.applicationDate,
       additional_documents_date: visa.additionalDocumentsDate,
-      visa_acquired_date: visa.visaAcquiredDate
+      visa_acquired_date: visa.visaAcquiredDate,
+      reception_number: visa.receptionNumber,
+      reception_date: visa.receptionDate,
+      reception_application_number: visa.receptionApplicationNumber
     })
     .select()
     .single()
@@ -177,7 +189,10 @@ export async function createVisa(visa: Omit<Visa, 'updatedAt'>): Promise<Visa> {
     visaApplicationPreparationDate: data.visa_application_preparation_date,
     applicationDate: data.application_date,
     additionalDocumentsDate: data.additional_documents_date,
-    visaAcquiredDate: data.visa_acquired_date
+    visaAcquiredDate: data.visa_acquired_date,
+    receptionNumber: data.reception_number,
+    receptionDate: data.reception_date,
+    receptionApplicationNumber: data.reception_application_number
   }
 }
 
@@ -201,7 +216,10 @@ export async function updateVisa(id: string, updates: Partial<Omit<Visa, 'id' | 
       visa_application_preparation_date: updates.visaApplicationPreparationDate,
       application_date: updates.applicationDate,
       additional_documents_date: updates.additionalDocumentsDate,
-      visa_acquired_date: updates.visaAcquiredDate
+      visa_acquired_date: updates.visaAcquiredDate,
+      reception_number: updates.receptionNumber,
+      reception_date: updates.receptionDate,
+      reception_application_number: updates.receptionApplicationNumber
     })
     .eq('id', id)
     .select()
@@ -229,7 +247,10 @@ export async function updateVisa(id: string, updates: Partial<Omit<Visa, 'id' | 
     visaApplicationPreparationDate: data.visa_application_preparation_date,
     applicationDate: data.application_date,
     additionalDocumentsDate: data.additional_documents_date,
-    visaAcquiredDate: data.visa_acquired_date
+    visaAcquiredDate: data.visa_acquired_date,
+    receptionNumber: data.reception_number,
+    receptionDate: data.reception_date,
+    receptionApplicationNumber: data.reception_application_number
   }
 }
 
@@ -325,6 +346,9 @@ export async function getVisasPaginated(
     applicationDate: item.application_date,
     additionalDocumentsDate: item.additional_documents_date,
     visaAcquiredDate: item.visa_acquired_date,
+    receptionNumber: item.reception_number,
+    receptionDate: item.reception_date,
+    receptionApplicationNumber: item.reception_application_number,
     // Add person data for display
     person: {
       id: item.people.id,

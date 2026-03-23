@@ -548,9 +548,9 @@ export default function VisasPage() {
         {kanbanColumns.map((column) => (
           <div key={column.id} className="flex-shrink-0 w-80">
             {/* Column Header */}
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-lg">{column.title}</h3>
-              <Badge variant="secondary" className="ml-2">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b-2 border-primary/20">
+              <h3 className="font-semibold text-sm text-foreground">{column.title}</h3>
+              <Badge variant="secondary" className="ml-2 text-xs">
                 {column.totalCount}
               </Badge>
             </div>
@@ -568,7 +568,14 @@ export default function VisasPage() {
                   {column.items.map((item) => (
                     <Card
                       key={item.id}
-                      className="cursor-pointer hover:shadow-md transition-shadow"
+                      className={cn(
+                        "cursor-pointer hover:shadow-md transition-all border-l-3",
+                        item.metadata.isUrgent
+                          ? "border-l-red-500 bg-red-50/30"
+                          : item.metadata.isWarning
+                            ? "border-l-amber-500 bg-amber-50/20"
+                            : "border-l-transparent"
+                      )}
                       onClick={() => handleItemClick(item)}
                     >
                       <CardContent className="p-4">

@@ -19,6 +19,8 @@ export type Person = {
   visaId?: string
   externalId?: string
   imagePath?: string
+  employmentNotificationDate?: string
+  employmentChangeNotificationDate?: string
   createdAt: string
   updatedAt: string
 }
@@ -51,6 +53,9 @@ export type Visa = {
   applicationDate?: string
   additionalDocumentsDate?: string
   visaAcquiredDate?: string
+  receptionNumber?: string
+  receptionDate?: string
+  receptionApplicationNumber?: string
 }
 
 export type MeetingNote = {
@@ -118,4 +123,37 @@ export type Company = {
   id: string
   name: string
   isActive: boolean
+}
+
+export type Announcement = {
+  id: string
+  title: string
+  body: string
+  published: boolean
+  createdBy?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type AnnouncementRead = {
+  id: string
+  announcementId: string
+  userId: string
+  readAt: string
+}
+
+export type DocumentType = 'passport_front' | 'passport_back' | 'residence_card_front' | 'residence_card_back'
+
+export type PersonDocument = {
+  id: string
+  personId: string
+  tenantId: string
+  documentType: DocumentType
+  storagePath: string
+  fileName?: string
+  contentType?: string
+  fileSizeBytes?: number
+  uploadedBy?: string
+  createdAt: string
+  updatedAt: string
 }

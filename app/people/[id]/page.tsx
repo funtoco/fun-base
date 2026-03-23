@@ -9,18 +9,22 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { getPersonById } from "@/lib/supabase/people-server"
 import { getVisasByPersonId } from "@/lib/supabase/visas-server"
+import { getPersonDocumentsByPersonId } from "@/lib/supabase/person-documents-server"
 import { allMeetings } from "@/data/meetings"
 import { supportActions } from "@/data/support-actions"
 import { formatDate, formatDateTime } from "@/lib/utils"
-import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit } from "lucide-react"
+import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText } from "lucide-react"
 
 interface PersonDetailPageProps {
   params: { id: string }
 }
 
 export default async function PersonDetailPage({ params }: PersonDetailPageProps) {
-  const person = await getPersonById(params.id)
-  const personVisas = await getVisasByPersonId(params.id)
+  const [person, personVisas, personDocuments] = await Promise.all([
+    getPersonById(params.id),
+    getVisasByPersonId(params.id),
+    getPersonDocumentsByPersonId(params.id),
+  ])
   const excludedVisaStatuses = new Set<string>(['内定[辞退•取消]•退職'])
   const filteredVisas = personVisas.filter((item) => !excludedVisaStatuses.has(item.status))
   const visa = filteredVisas[0] // 最新のvisa (除外済み)
@@ -103,10 +107,12 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Tabs Content */}
         <div className="lg:col-span-2">
-          <PersonDetailTabs 
+          <PersonDetailTabs
+            personId={params.id}
             personMeetings={personMeetings}
             personSupportActions={personSupportActions}
             personVisas={personVisas}
+            personDocuments={personDocuments}
           />
         </div>
 
@@ -210,6 +216,24 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                   <span className="text-sm">{person.company}</span>
                 </div>
               )}
+              {person.employmentNotificationDate && (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">雇用状況届出日</span>
+                  </div>
+                  <span className="text-sm">{formatDate(person.employmentNotificationDate)}</span>
+                </div>
+              )}
+              {person.employmentChangeNotificationDate && (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">変更届出日</span>
+                  </div>
+                  <span className="text-sm">{formatDate(person.employmentChangeNotificationDate)}</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -232,6 +256,24 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">担当者</span>
                     <span className="text-sm">{visa.manager}</span>
+                  </div>
+                )}
+                {visa.receptionApplicationNumber && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">受付申請番号</span>
+                    <span className="text-sm font-mono">{visa.receptionApplicationNumber}</span>
+                  </div>
+                )}
+                {visa.receptionNumber && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">受付番号</span>
+                    <span className="text-sm font-mono">{visa.receptionNumber}</span>
+                  </div>
+                )}
+                {visa.receptionDate && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">受付日</span>
+                    <span className="text-sm">{formatDate(visa.receptionDate)}</span>
                   </div>
                 )}
               </CardContent>
