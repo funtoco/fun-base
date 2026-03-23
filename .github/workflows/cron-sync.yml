@@ -31,27 +31,60 @@ jobs:
       - name: Sync People Data
         run: |
           echo "🕐 Starting people sync at $(date)"
-          
-          # API呼び出し
-          response=$(curl -s -w "\n%{http_code}" \
-            -X GET \
-            "${{ secrets.API_BASE_URL }}/api/cron/sync-by-type?type=people&secret=${{ secrets.CRON_SECRET }}")
-          
-          # レスポンスとステータスコードを分離
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n -1)
-          
-          echo "Response status: $http_code"
-          echo "Response body: $body"
-          
-          if [ "$http_code" -eq 200 ]; then
-            echo "✅ People sync completed successfully"
-            echo "$body" | jq '.'
-          else
-            echo "❌ People sync failed with status $http_code"
-            echo "$body"
-            exit 1
-          fi
+
+          cursor=0
+          batch_size=10
+          batch_no=1
+          total_synced=0
+          total_processed=0
+
+          while true; do
+            echo "➡️ People sync batch ${batch_no} (cursor=${cursor}, batchSize=${batch_size})"
+
+            response=$(curl -s -w "\n%{http_code}" \
+              -X GET \
+              "${{ secrets.API_BASE_URL }}/api/cron/sync-by-type?type=people&secret=${{ secrets.CRON_SECRET }}&cursor=${cursor}&batchSize=${batch_size}")
+
+            http_code=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | head -n -1)
+
+            echo "Response status: $http_code"
+
+            if [ "$http_code" -ne 200 ]; then
+              echo "❌ People sync failed with status $http_code"
+              echo "$body"
+              exit 1
+            fi
+
+            batch_success=$(echo "$body" | jq -r '.success')
+            if [ "$batch_success" != "true" ]; then
+              echo "❌ People sync batch ${batch_no} completed with connector failures"
+              echo "$body" | jq '.'
+              exit 1
+            fi
+
+            batch_synced=$(echo "$body" | jq -r '.totalSynced')
+            processed_count=$(echo "$body" | jq -r '.processedConnectorCount')
+            has_more=$(echo "$body" | jq -r '.hasMore')
+            next_cursor=$(echo "$body" | jq -r '.nextCursor // empty')
+
+            total_synced=$((total_synced + batch_synced))
+            total_processed=$((total_processed + processed_count))
+
+            echo "✅ People batch ${batch_no} succeeded"
+            echo "$body" | jq '{message, processedConnectorCount, totalConnectorCount, totalSynced, successCount, failedCount, hasMore, nextCursor}'
+
+            if [ "$has_more" != "true" ]; then
+              break
+            fi
+
+            cursor="$next_cursor"
+            batch_no=$((batch_no + 1))
+          done
+
+          echo "🏁 People sync completed successfully"
+          echo "Total processed connectors: ${total_processed}"
+          echo "Total synced records: ${total_synced}"
 
   sync-visas:
     if: github.event_name == 'schedule' && github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch' && (github.event.inputs.sync_type == 'visas' || github.event.inputs.sync_type == 'both')
@@ -62,24 +95,57 @@ jobs:
       - name: Sync Visas Data
         run: |
           echo "🕐 Starting visas sync at $(date)"
-          
-          # API呼び出し
-          response=$(curl -s -w "\n%{http_code}" \
-            -X GET \
-            "${{ secrets.API_BASE_URL }}/api/cron/sync-by-type?type=visas&secret=${{ secrets.CRON_SECRET }}")
-          
-          # レスポンスとステータスコードを分離
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n -1)
-          
-          echo "Response status: $http_code"
-          echo "Response body: $body"
-          
-          if [ "$http_code" -eq 200 ]; then
-            echo "✅ Visas sync completed successfully"
-            echo "$body" | jq '.'
-          else
-            echo "❌ Visas sync failed with status $http_code"
-            echo "$body"
-            exit 1
-          fi
+
+          cursor=0
+          batch_size=10
+          batch_no=1
+          total_synced=0
+          total_processed=0
+
+          while true; do
+            echo "➡️ Visas sync batch ${batch_no} (cursor=${cursor}, batchSize=${batch_size})"
+
+            response=$(curl -s -w "\n%{http_code}" \
+              -X GET \
+              "${{ secrets.API_BASE_URL }}/api/cron/sync-by-type?type=visas&secret=${{ secrets.CRON_SECRET }}&cursor=${cursor}&batchSize=${batch_size}")
+
+            http_code=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | head -n -1)
+
+            echo "Response status: $http_code"
+
+            if [ "$http_code" -ne 200 ]; then
+              echo "❌ Visas sync failed with status $http_code"
+              echo "$body"
+              exit 1
+            fi
+
+            batch_success=$(echo "$body" | jq -r '.success')
+            if [ "$batch_success" != "true" ]; then
+              echo "❌ Visas sync batch ${batch_no} completed with connector failures"
+              echo "$body" | jq '.'
+              exit 1
+            fi
+
+            batch_synced=$(echo "$body" | jq -r '.totalSynced')
+            processed_count=$(echo "$body" | jq -r '.processedConnectorCount')
+            has_more=$(echo "$body" | jq -r '.hasMore')
+            next_cursor=$(echo "$body" | jq -r '.nextCursor // empty')
+
+            total_synced=$((total_synced + batch_synced))
+            total_processed=$((total_processed + processed_count))
+
+            echo "✅ Visas batch ${batch_no} succeeded"
+            echo "$body" | jq '{message, processedConnectorCount, totalConnectorCount, totalSynced, successCount, failedCount, hasMore, nextCursor}'
+
+            if [ "$has_more" != "true" ]; then
+              break
+            fi
+
+            cursor="$next_cursor"
+            batch_no=$((batch_no + 1))
+          done
+
+          echo "🏁 Visas sync completed successfully"
+          echo "Total processed connectors: ${total_processed}"
+          echo "Total synced records: ${total_synced}"

@@ -6,11 +6,17 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createSyncService } from '@/lib/sync/kintone-sync'
-import { getConnector, setConnectorStatus } from '@/lib/db/connectors'
+import { setConnectorStatus } from '@/lib/db/connectors'
+import { getBatchMeta, normalizeBatchParams } from '@/lib/sync/cron-sync-batching'
 import { createClient } from '@supabase/supabase-js'
 
 // Use Node.js runtime for crypto operations
 export const runtime = 'nodejs'
+
+const parsedDefaultBatchSize = Number(process.env.SYNC_BATCH_SIZE || 10)
+const parsedMaxBatchSize = Number(process.env.SYNC_MAX_BATCH_SIZE || 25)
+const DEFAULT_BATCH_SIZE = Number.isFinite(parsedDefaultBatchSize) && parsedDefaultBatchSize > 0 ? parsedDefaultBatchSize : 10
+const MAX_BATCH_SIZE = Number.isFinite(parsedMaxBatchSize) && parsedMaxBatchSize > 0 ? parsedMaxBatchSize : 25
 
 // Server-side Supabase client
 function getServerClient() {
@@ -49,6 +55,12 @@ async function handleSyncByType(request: NextRequest) {
     // Get target app type from query parameters
     const { searchParams } = new URL(request.url)
     const targetAppType = searchParams.get('type')
+    const { cursor, batchSize } = normalizeBatchParams({
+      cursorParam: searchParams.get('cursor'),
+      batchSizeParam: searchParams.get('batchSize'),
+      defaultBatchSize: DEFAULT_BATCH_SIZE,
+      maxBatchSize: MAX_BATCH_SIZE,
+    })
     
     if (!targetAppType || !['people', 'visas'].includes(targetAppType)) {
       return NextResponse.json(
@@ -57,12 +69,15 @@ async function handleSyncByType(request: NextRequest) {
       )
     }
 
-    console.log(`🕐 Starting scheduled sync process for ${targetAppType}`)
+    console.log(`🕐 Starting scheduled sync process for ${targetAppType}`, {
+      cursor,
+      batchSize,
+    })
     
     const supabase = getServerClient()
     
     // Get all connected Kintone connectors that have active mappings for the target app type
-    const { data: connectors, error: connectorsError } = await supabase
+    const { data: connectors, error: connectorsError, count } = await supabase
       .from('connectors')
       .select(`
         *,
@@ -72,23 +87,41 @@ async function handleSyncByType(request: NextRequest) {
           target_app_type,
           is_active
         )
-      `)
+      `, { count: 'exact' })
       .eq('provider', 'kintone')
       .eq('connection_status.status', 'connected')
       .eq('connector_app_mappings.target_app_type', targetAppType)
       .eq('connector_app_mappings.is_active', true)
+      .order('id', { ascending: true })
+      .range(cursor, cursor + batchSize - 1)
     
     if (connectorsError) {
       throw new Error(`Failed to fetch connectors: ${connectorsError.message}`)
     }
+
+    const totalConnectorCount = typeof count === 'number' ? count : cursor + (connectors?.length || 0)
     
     if (!connectors || connectors.length === 0) {
-      console.log(`ℹ️ No connected Kintone connectors found with active ${targetAppType} mappings`)
+      console.log(`ℹ️ No connected Kintone connectors found with active ${targetAppType} mappings`, {
+        cursor,
+        batchSize,
+      })
+      const batchMeta = getBatchMeta({
+        cursor,
+        batchSize,
+        totalCount: totalConnectorCount,
+      })
+
       return NextResponse.json({
         success: true,
         message: `No connectors to sync for ${targetAppType}`,
         synced: 0,
-        targetAppType
+        targetAppType,
+        cursor,
+        batchSize,
+        processedConnectorCount: 0,
+        totalConnectorCount,
+        ...batchMeta,
       })
     }
     
@@ -154,17 +187,33 @@ async function handleSyncByType(request: NextRequest) {
     }, 0)
     const successCount = results.filter(r => r.success).length
     const failedCount = results.length - successCount
+    const batchMeta = getBatchMeta({
+      cursor,
+      batchSize,
+      totalCount: totalConnectorCount,
+    })
     
-    console.log(`🏁 Scheduled ${targetAppType} sync process completed: ${successCount} successful, ${failedCount} failed, ${totalSynced} total records synced`)
+    console.log(`🏁 Scheduled ${targetAppType} sync batch completed: ${successCount} successful, ${failedCount} failed, ${totalSynced} total records synced`, {
+      cursor,
+      batchSize,
+      totalConnectorCount,
+      nextCursor: batchMeta.nextCursor,
+      hasMore: batchMeta.hasMore,
+    })
     
     return NextResponse.json({
       success: failedCount === 0,
-      message: `Scheduled ${targetAppType} sync completed: ${successCount} successful, ${failedCount} failed`,
+      message: `Scheduled ${targetAppType} sync batch completed: ${successCount} successful, ${failedCount} failed`,
       targetAppType,
       totalSynced,
       connectorCount: connectors.length,
+      processedConnectorCount: connectors.length,
+      totalConnectorCount,
       successCount,
       failedCount,
+      cursor,
+      batchSize,
+      ...batchMeta,
       results
     })
     
