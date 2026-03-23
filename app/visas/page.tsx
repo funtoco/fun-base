@@ -11,7 +11,7 @@ import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-po
 import { Search, FileText, Clock, X, ChevronDown, ChevronUp, Building2 } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
-import { isExpiringSoon } from "@/lib/utils"
+import { cn, isExpiringSoon } from "@/lib/utils"
 import type { VisaStatus, Person, Visa } from "@/lib/models"
 
 const visaStatuses: VisaStatus[] = [
