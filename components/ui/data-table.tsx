@@ -6,11 +6,10 @@ import { useState, useEffect, useRef } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Search, FilterIcon, Download, ChevronUp, ChevronDown, X, ChevronDown as ChevronDownIcon } from "lucide-react"
+import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
 import { cn } from "@/lib/utils"
 import Encoding from "encoding-japanese"
 
@@ -205,56 +204,16 @@ export function DataTable<T extends Record<string, any>>({
           {/* Filters */}
           {filters.map((filter) => {
             const selectedValues = activeFilters[filter.key] || []
-            const selectedCount = selectedValues.length
-            
+
             return (
-              <Popover key={filter.key}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 h-9 px-4 py-2 min-w-[140px] max-w-[240px] justify-between"
-                  >
-                    <FilterIcon className="h-4 w-4 flex-shrink-0 mr-2" />
-                    <span className="truncate">
-                      {filter.label}
-                      {selectedCount > 0 && (
-                        <span className="ml-1 text-muted-foreground">
-                          ({selectedCount})
-                        </span>
-                      )}
-                    </span>
-                    <ChevronDownIcon className="h-4 w-4 flex-shrink-0 opacity-50 ml-2" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[240px] p-4" align="start">
-                  <div className="space-y-1">
-                    {filter.options.length === 0 ? (
-                      <div className="text-sm text-muted-foreground text-center">
-                        オプションがありません
-                      </div>
-                    ) : (
-                      filter.options.map((option) => {
-                        const isSelected = selectedValues.includes(option.value)
-                        return (
-                          <div
-                            key={option.value}
-                            className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-accent cursor-pointer"
-                            onClick={() => handleFilterChange(filter.key, option.value)}
-                          >
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={() => {}}
-                            />
-                            <span className="flex-1 text-sm cursor-pointer select-none">
-                              {option.label}
-                            </span>
-                          </div>
-                        )
-                      })
-                    )}
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <FilterMultiSelectPopover
+                key={filter.key}
+                label={filter.label}
+                options={filter.options}
+                selectedValues={selectedValues}
+                onToggle={(value) => handleFilterChange(filter.key, value)}
+                triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+              />
             )
           })}
         </div>

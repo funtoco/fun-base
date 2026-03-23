@@ -4,16 +4,14 @@ import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Search, FileText, Clock, X, ChevronDown, ChevronUp, Building2, FilterIcon, ChevronDown as ChevronDownIcon } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
+import { Search, FileText, Clock, X, ChevronDown, ChevronUp, Building2 } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
-import { isExpiringSoon } from "@/lib/utils"
+import { cn, isExpiringSoon } from "@/lib/utils"
 import type { VisaStatus, Person, Visa } from "@/lib/models"
 
 const visaStatuses: VisaStatus[] = [
@@ -482,101 +480,27 @@ export default function VisasPage() {
             <span className="text-xs text-muted-foreground">期限</span>
           </div>
 
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 h-9 px-4 py-2 min-w-[140px] max-w-[240px] justify-between"
-              >
-                <Building2 className="h-4 w-4 flex-shrink-0 mr-2" />
-                <span className="truncate">
-                  会社
-                  {companyFilter.length > 0 && (
-                    <span className="ml-1 text-muted-foreground">
-                      ({companyFilter.length})
-                    </span>
-                  )}
-                </span>
-                <ChevronDownIcon className="h-4 w-4 flex-shrink-0 opacity-50 ml-2" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[240px] p-4" align="start">
-              <div className="space-y-1">
-                {companies.length === 0 ? (
-                  <div className="text-sm text-muted-foreground text-center">
-                    オプションがありません
-                  </div>
-                ) : (
-                  companies.map((company) => {
-                    const isSelected = companyFilter.includes(company || '')
-                    return (
-                      <div
-                        key={company}
-                        className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-accent cursor-pointer"
-                        onClick={() => handleCompanyFilterChange(company || '')}
-                      >
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => {}}
-                        />
-                        <span className="flex-1 text-sm cursor-pointer select-none">
-                          {company}
-                        </span>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <FilterMultiSelectPopover
+            label="会社"
+            options={companies.map((company) => ({
+              value: company || "",
+              label: company || "",
+            }))}
+            selectedValues={companyFilter}
+            onToggle={handleCompanyFilterChange}
+            triggerIcon={<Building2 className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 h-9 px-4 py-2 min-w-[140px] max-w-[240px] justify-between"
-              >
-                <Building2 className="h-4 w-4 flex-shrink-0 mr-2" />
-                <span className="truncate">
-                  所属先
-                  {affiliationFilter.length > 0 && (
-                    <span className="ml-1 text-muted-foreground">
-                      ({affiliationFilter.length})
-                    </span>
-                  )}
-                </span>
-                <ChevronDownIcon className="h-4 w-4 flex-shrink-0 opacity-50 ml-2" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[240px] p-4" align="start">
-              <div className="space-y-1">
-                {affiliations.length === 0 ? (
-                  <div className="text-sm text-muted-foreground text-center">
-                    オプションがありません
-                  </div>
-                ) : (
-                  affiliations.map((affiliation) => {
-                    const isSelected = affiliationFilter.includes(affiliation || '')
-                    return (
-                      <div
-                        key={affiliation}
-                        className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-accent cursor-pointer"
-                        onClick={() => handleAffiliationFilterChange(affiliation || '')}
-                      >
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => {}}
-                        />
-                        <span className="flex-1 text-sm cursor-pointer select-none">
-                          {affiliation}
-                        </span>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <FilterMultiSelectPopover
+            label="所属先"
+            options={affiliations.map((affiliation) => ({
+              value: affiliation || "",
+              label: affiliation || "",
+            }))}
+            selectedValues={affiliationFilter}
+            onToggle={handleAffiliationFilterChange}
+            triggerIcon={<Building2 className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
           {/* Clear filters button */}
           {(typeFilter !== "all" || expiryFilter !== "all" || companyFilter.length > 0 || affiliationFilter.length > 0) && (
