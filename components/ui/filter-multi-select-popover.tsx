@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ChevronDown as ChevronDownIcon, Search } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
@@ -47,6 +47,12 @@ export function FilterMultiSelectPopover({
 
   const selectedCount = selectedValues.length
   const showSearchInput = options.length > 8
+
+  useEffect(() => {
+    if (!showSearchInput && searchTerm) {
+      setSearchTerm("")
+    }
+  }, [showSearchInput, searchTerm])
 
   return (
     <Popover
@@ -106,20 +112,19 @@ export function FilterMultiSelectPopover({
                 const isSelected = selectedValues.includes(option.value)
 
                 return (
-                  <button
+                  <label
                     key={option.value}
-                    type="button"
-                    className="flex w-full items-start gap-3 rounded-sm px-2 py-2 text-left hover:bg-accent"
-                    onClick={() => onToggle(option.value)}
+                    className="flex cursor-pointer items-start gap-3 rounded-sm px-2 py-2 text-left hover:bg-accent"
                   >
                     <Checkbox
                       checked={isSelected}
-                      className="mt-0.5 pointer-events-none"
+                      onCheckedChange={() => onToggle(option.value)}
+                      className="mt-0.5"
                     />
                     <span className="flex-1 select-none text-sm leading-5 [overflow-wrap:anywhere]">
                       {option.label}
                     </span>
-                  </button>
+                  </label>
                 )
               })}
             </div>
