@@ -107,9 +107,27 @@ async function runSyncByType(targetAppType: SyncTargetType) {
 
   for (const connector of connectors) {
     try {
+      if (!connector.tenant_id) {
+        console.warn(`⚠️ Skipping ${targetAppType} sync for connector ${connector.id}: missing tenant_id`)
+
+        results.push({
+          connectorId: connector.id,
+          connectorName: connector.display_name,
+          tenantId: null,
+          targetAppType,
+          success: false,
+          error: 'Missing tenant_id',
+          synced: {},
+          errors: ['Missing tenant_id'],
+          duration: 0,
+        })
+
+        continue
+      }
+
       const syncService = await createSyncService(
         connector.id,
-        connector.tenant_id || '',
+        connector.tenant_id,
         'scheduled'
       )
 
@@ -120,6 +138,12 @@ async function runSyncByType(targetAppType: SyncTargetType) {
           connector.id,
           'error',
           `Scheduled ${targetAppType} sync completed with ${result.errors.length} errors`
+        )
+      } else {
+        await setConnectorStatus(
+          connector.id,
+          'connected',
+          `Scheduled ${targetAppType} sync completed successfully`
         )
       }
 
