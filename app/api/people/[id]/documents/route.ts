@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { uploadFileToStorage, generateFilePath, deleteFileFromStorage } from '@/lib/storage/file-uploader'
 
-const VALID_DOCUMENT_TYPES = ['passport_front', 'passport_back', 'residence_card_front', 'residence_card_back']
+const VALID_DOCUMENT_TYPES = ['passport_front', 'passport_back', 'residence_card_front', 'residence_card_back', 'coe_copy', 'flight_ticket_copy', 'bank_card_copy', 'resident_card_copy', 'resume', 'designation_document']
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const VALID_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']
 const BUCKET_NAME = 'person-documents'

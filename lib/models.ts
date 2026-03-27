@@ -21,6 +21,19 @@ export type Person = {
   imagePath?: string
   employmentNotificationDate?: string
   employmentChangeNotificationDate?: string
+  // 入社前
+  interviewDate?: string
+  jobOfferDate?: string
+  applicationNumber?: string
+  departureProcedureStatus?: string
+  entryConfirmedDate?: string
+  myNumber?: string
+  // 入社後
+  joiningDate?: string
+  // 社会保険／雇用保険
+  insuranceNumber?: string
+  insuranceAcquiredDate?: string
+  insuranceEnrollmentStatus?: Record<string, boolean>
   createdAt: string
   updatedAt: string
 }
@@ -142,7 +155,7 @@ export type AnnouncementRead = {
   readAt: string
 }
 
-export type DocumentType = 'passport_front' | 'passport_back' | 'residence_card_front' | 'residence_card_back'
+export type DocumentType = 'passport_front' | 'passport_back' | 'residence_card_front' | 'residence_card_back' | 'coe_copy' | 'flight_ticket_copy' | 'bank_card_copy' | 'resident_card_copy' | 'resume' | 'designation_document'
 
 export type PersonDocument = {
   id: string
