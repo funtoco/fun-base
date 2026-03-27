@@ -27,6 +27,18 @@ export default function EditPersonPage() {
   const [employeeNumber, setEmployeeNumber] = useState('')
   const [employmentNotificationDate, setEmploymentNotificationDate] = useState('')
   const [employmentChangeNotificationDate, setEmploymentChangeNotificationDate] = useState('')
+  // 入社前
+  const [interviewDate, setInterviewDate] = useState('')
+  const [jobOfferDate, setJobOfferDate] = useState('')
+  const [applicationNumber, setApplicationNumber] = useState('')
+  const [departureProcedureStatus, setDepartureProcedureStatus] = useState('')
+  const [entryConfirmedDate, setEntryConfirmedDate] = useState('')
+  const [myNumber, setMyNumber] = useState('')
+  // 入社後
+  const [joiningDate, setJoiningDate] = useState('')
+  // 社会保険
+  const [insuranceNumber, setInsuranceNumber] = useState('')
+  const [insuranceAcquiredDate, setInsuranceAcquiredDate] = useState('')
 
   // 初期データ取得
   useEffect(() => {
@@ -42,6 +54,15 @@ export default function EditPersonPage() {
         setEmployeeNumber(data.employeeNumber || '')
         setEmploymentNotificationDate(data.employmentNotificationDate || '')
         setEmploymentChangeNotificationDate(data.employmentChangeNotificationDate || '')
+        setInterviewDate(data.interviewDate || '')
+        setJobOfferDate(data.jobOfferDate || '')
+        setApplicationNumber(data.applicationNumber || '')
+        setDepartureProcedureStatus(data.departureProcedureStatus || '')
+        setEntryConfirmedDate(data.entryConfirmedDate || '')
+        setMyNumber(data.myNumber || '')
+        setJoiningDate(data.joiningDate || '')
+        setInsuranceNumber(data.insuranceNumber || '')
+        setInsuranceAcquiredDate(data.insuranceAcquiredDate || '')
       } catch (err) {
         console.error('Error fetching person:', err)
         setError(err instanceof Error ? err.message : 'データの取得に失敗しました')
@@ -73,6 +94,15 @@ export default function EditPersonPage() {
           employeeNumber: employeeNumber.trim() || null,
           employmentNotificationDate: employmentNotificationDate || null,
           employmentChangeNotificationDate: employmentChangeNotificationDate || null,
+          interviewDate: interviewDate || null,
+          jobOfferDate: jobOfferDate || null,
+          applicationNumber: applicationNumber.trim() || null,
+          departureProcedureStatus: departureProcedureStatus.trim() || null,
+          entryConfirmedDate: entryConfirmedDate || null,
+          myNumber: myNumber.trim() || null,
+          joiningDate: joiningDate || null,
+          insuranceNumber: insuranceNumber.trim() || null,
+          insuranceAcquiredDate: insuranceAcquiredDate || null,
         }),
       })
 
@@ -307,6 +337,134 @@ export default function EditPersonPage() {
                 type="date"
                 value={employmentChangeNotificationDate}
                 onChange={(e) => setEmploymentChangeNotificationDate(e.target.value)}
+                disabled={saving}
+                className="w-full"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 入社前情報 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>入社前情報</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <Label htmlFor="interviewDate" className="text-right">面接日</Label>
+              <Input
+                id="interviewDate"
+                type="date"
+                value={interviewDate}
+                onChange={(e) => setInterviewDate(e.target.value)}
+                disabled={saving}
+                className="w-full"
+              />
+            </div>
+
+            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <Label htmlFor="jobOfferDate" className="text-right">内定日</Label>
+              <Input
+                id="jobOfferDate"
+                type="date"
+                value={jobOfferDate}
+                onChange={(e) => setJobOfferDate(e.target.value)}
+                disabled={saving}
+                className="w-full"
+              />
+            </div>
+
+            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <Label htmlFor="applicationNumber" className="text-right">申請番号</Label>
+              <Input
+                id="applicationNumber"
+                value={applicationNumber}
+                onChange={(e) => setApplicationNumber(e.target.value)}
+                placeholder="申請番号を入力"
+                disabled={saving}
+              />
+            </div>
+
+            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <Label htmlFor="departureProcedureStatus" className="text-right">出国手続きの状況</Label>
+              <Input
+                id="departureProcedureStatus"
+                value={departureProcedureStatus}
+                onChange={(e) => setDepartureProcedureStatus(e.target.value)}
+                placeholder="出国手続きの状況を入力"
+                disabled={saving}
+              />
+            </div>
+
+            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <Label htmlFor="entryConfirmedDate" className="text-right">入国確定日</Label>
+              <Input
+                id="entryConfirmedDate"
+                type="date"
+                value={entryConfirmedDate}
+                onChange={(e) => setEntryConfirmedDate(e.target.value)}
+                disabled={saving}
+                className="w-full"
+              />
+            </div>
+
+            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <Label htmlFor="myNumber" className="text-right">マイナンバー</Label>
+              <Input
+                id="myNumber"
+                value={myNumber}
+                onChange={(e) => setMyNumber(e.target.value)}
+                placeholder="マイナンバーを入力"
+                disabled={saving}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 入社後情報 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>入社後情報</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <Label htmlFor="joiningDate" className="text-right">入社日</Label>
+              <Input
+                id="joiningDate"
+                type="date"
+                value={joiningDate}
+                onChange={(e) => setJoiningDate(e.target.value)}
+                disabled={saving}
+                className="w-full"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 社会保険／雇用保険 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>社会保険／雇用保険</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <Label htmlFor="insuranceNumber" className="text-right">保険番号</Label>
+              <Input
+                id="insuranceNumber"
+                value={insuranceNumber}
+                onChange={(e) => setInsuranceNumber(e.target.value)}
+                placeholder="保険番号を入力"
+                disabled={saving}
+              />
+            </div>
+
+            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <Label htmlFor="insuranceAcquiredDate" className="text-right">取得日</Label>
+              <Input
+                id="insuranceAcquiredDate"
+                type="date"
+                value={insuranceAcquiredDate}
+                onChange={(e) => setInsuranceAcquiredDate(e.target.value)}
                 disabled={saving}
                 className="w-full"
               />

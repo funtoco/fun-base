@@ -18,17 +18,28 @@ export async function PUT(
       )
     }
 
-    const { employeeNumber, employmentNotificationDate, employmentChangeNotificationDate } = body
+    const {
+      employeeNumber, employmentNotificationDate, employmentChangeNotificationDate,
+      interviewDate, jobOfferDate, applicationNumber, departureProcedureStatus,
+      entryConfirmedDate, myNumber, joiningDate,
+      insuranceNumber, insuranceAcquiredDate, insuranceEnrollmentStatus
+    } = body
 
-    // 入力型バリデーション
-    if (employeeNumber !== undefined && employeeNumber !== null && typeof employeeNumber !== 'string') {
-      return NextResponse.json({ error: 'employeeNumber must be a string or null' }, { status: 400 })
+    // 文字列フィールドのバリデーション
+    const stringFields = [
+      'employeeNumber', 'employmentNotificationDate', 'employmentChangeNotificationDate',
+      'interviewDate', 'jobOfferDate', 'applicationNumber', 'departureProcedureStatus',
+      'entryConfirmedDate', 'myNumber', 'joiningDate',
+      'insuranceNumber', 'insuranceAcquiredDate'
+    ] as const
+    for (const field of stringFields) {
+      const value = body[field]
+      if (value !== undefined && value !== null && typeof value !== 'string') {
+        return NextResponse.json({ error: `${field} must be a string or null` }, { status: 400 })
+      }
     }
-    if (employmentNotificationDate !== undefined && employmentNotificationDate !== null && typeof employmentNotificationDate !== 'string') {
-      return NextResponse.json({ error: 'employmentNotificationDate must be a string or null' }, { status: 400 })
-    }
-    if (employmentChangeNotificationDate !== undefined && employmentChangeNotificationDate !== null && typeof employmentChangeNotificationDate !== 'string') {
-      return NextResponse.json({ error: 'employmentChangeNotificationDate must be a string or null' }, { status: 400 })
+    if (insuranceEnrollmentStatus !== undefined && insuranceEnrollmentStatus !== null && typeof insuranceEnrollmentStatus !== 'object') {
+      return NextResponse.json({ error: 'insuranceEnrollmentStatus must be an object or null' }, { status: 400 })
     }
 
     // サーバー側のSupabaseクライアントを使用
@@ -38,14 +49,30 @@ export async function PUT(
     const updateFields: Record<string, any> = {
       updated_at: new Date().toISOString()
     }
-    if (employeeNumber !== undefined) {
-      updateFields.employee_number = employeeNumber ? employeeNumber.trim() : null
+
+    // 文字列→DB列名マッピング
+    const fieldMapping: Record<string, string> = {
+      employeeNumber: 'employee_number',
+      employmentNotificationDate: 'employment_notification_date',
+      employmentChangeNotificationDate: 'employment_change_notification_date',
+      interviewDate: 'interview_date',
+      jobOfferDate: 'job_offer_date',
+      applicationNumber: 'application_number',
+      departureProcedureStatus: 'departure_procedure_status',
+      entryConfirmedDate: 'entry_confirmed_date',
+      myNumber: 'my_number',
+      joiningDate: 'joining_date',
+      insuranceNumber: 'insurance_number',
+      insuranceAcquiredDate: 'insurance_acquired_date',
     }
-    if (employmentNotificationDate !== undefined) {
-      updateFields.employment_notification_date = employmentNotificationDate || null
+    for (const [camelKey, snakeKey] of Object.entries(fieldMapping)) {
+      const value = body[camelKey]
+      if (value !== undefined) {
+        updateFields[snakeKey] = (typeof value === 'string' && value.trim()) ? value.trim() : null
+      }
     }
-    if (employmentChangeNotificationDate !== undefined) {
-      updateFields.employment_change_notification_date = employmentChangeNotificationDate || null
+    if (insuranceEnrollmentStatus !== undefined) {
+      updateFields.insurance_enrollment_status = insuranceEnrollmentStatus || {}
     }
 
     // 更新処理
@@ -98,6 +125,16 @@ export async function PUT(
       imagePath: data.image_path,
       employmentNotificationDate: data.employment_notification_date,
       employmentChangeNotificationDate: data.employment_change_notification_date,
+      interviewDate: data.interview_date,
+      jobOfferDate: data.job_offer_date,
+      applicationNumber: data.application_number,
+      departureProcedureStatus: data.departure_procedure_status,
+      entryConfirmedDate: data.entry_confirmed_date,
+      myNumber: data.my_number,
+      joiningDate: data.joining_date,
+      insuranceNumber: data.insurance_number,
+      insuranceAcquiredDate: data.insurance_acquired_date,
+      insuranceEnrollmentStatus: data.insurance_enrollment_status,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     }
