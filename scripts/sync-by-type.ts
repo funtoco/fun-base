@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 import { createSyncService } from '@/lib/sync/kintone-sync'
-import { setConnectorStatus } from '@/lib/db/connectors'
 
 type SyncTargetType = 'people' | 'visas'
 type CliSyncType = SyncTargetType | 'both'
@@ -133,20 +132,6 @@ async function runSyncByType(targetAppType: SyncTargetType) {
 
       const result = await syncService.syncAll(undefined, targetAppType)
 
-      if (result.errors.length > 0) {
-        await setConnectorStatus(
-          connector.id,
-          'error',
-          `Scheduled ${targetAppType} sync completed with ${result.errors.length} errors`
-        )
-      } else {
-        await setConnectorStatus(
-          connector.id,
-          'connected',
-          `Scheduled ${targetAppType} sync completed successfully`
-        )
-      }
-
       results.push({
         connectorId: connector.id,
         connectorName: connector.display_name,
@@ -155,13 +140,18 @@ async function runSyncByType(targetAppType: SyncTargetType) {
         ...result,
       })
 
+      console.log('[cron-sync] connector-finished', {
+        connectorId: connector.id,
+        targetAppType,
+        success: result.errors.length === 0,
+        errorCount: result.errors.length,
+      })
+
       console.log(`✅ ${targetAppType} sync completed for ${connector.display_name}`)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
       console.error(`❌ ${targetAppType} sync failed for connector ${connector.id}:`, errorMessage)
-
-      await setConnectorStatus(connector.id, 'error', errorMessage)
 
       results.push({
         connectorId: connector.id,
