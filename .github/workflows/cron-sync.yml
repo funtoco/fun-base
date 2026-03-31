@@ -1,14 +1,9 @@
 name: Data Sync Cron Jobs
 
 on:
-  # スケジュール実行
   schedule:
-    # people: 毎日 2:00 UTC (日本時間 11:00)
     - cron: '0 2 * * *'
-    # visas: 毎日 3:00 UTC (日本時間 12:00)  
     - cron: '0 3 * * *'
-  
-  # 手動実行
   workflow_dispatch:
     inputs:
       sync_type:
@@ -25,61 +20,55 @@ jobs:
   sync-people:
     if: github.event_name == 'schedule' && github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch' && (github.event.inputs.sync_type == 'people' || github.event.inputs.sync_type == 'both')
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6時間のタイムアウト
-    
+    timeout-minutes: 360
+    environment: Production
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Sync People Data
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           echo "🕐 Starting people sync at $(date)"
-          
-          # API呼び出し
-          response=$(curl -s -w "\n%{http_code}" \
-            -X GET \
-            "${{ secrets.API_BASE_URL }}/api/cron/sync-by-type?type=people&secret=${{ secrets.CRON_SECRET }}")
-          
-          # レスポンスとステータスコードを分離
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n -1)
-          
-          echo "Response status: $http_code"
-          echo "Response body: $body"
-          
-          if [ "$http_code" -eq 200 ]; then
-            echo "✅ People sync completed successfully"
-            echo "$body" | jq '.'
-          else
-            echo "❌ People sync failed with status $http_code"
-            echo "$body"
-            exit 1
-          fi
+          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type people
 
   sync-visas:
     if: github.event_name == 'schedule' && github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch' && (github.event.inputs.sync_type == 'visas' || github.event.inputs.sync_type == 'both')
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6時間のタイムアウト
-    
+    timeout-minutes: 360
+    environment: Production
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Sync Visas Data
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           echo "🕐 Starting visas sync at $(date)"
-          
-          # API呼び出し
-          response=$(curl -s -w "\n%{http_code}" \
-            -X GET \
-            "${{ secrets.API_BASE_URL }}/api/cron/sync-by-type?type=visas&secret=${{ secrets.CRON_SECRET }}")
-          
-          # レスポンスとステータスコードを分離
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n -1)
-          
-          echo "Response status: $http_code"
-          echo "Response body: $body"
-          
-          if [ "$http_code" -eq 200 ]; then
-            echo "✅ Visas sync completed successfully"
-            echo "$body" | jq '.'
-          else
-            echo "❌ Visas sync failed with status $http_code"
-            echo "$body"
-            exit 1
-          fi
+          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type visas
