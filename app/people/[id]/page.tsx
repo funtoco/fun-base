@@ -238,7 +238,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
           </Card>
 
           {/* Pre-employment Information */}
-          {(person.interviewDate || person.jobOfferDate || person.applicationNumber || person.departureProcedureStatus || person.entryConfirmedDate || person.myNumber) && (
+          {(person.interviewDate || person.jobOfferDate || person.applicationNumber || person.departureProcedureStatus || person.entryConfirmedDate) && (
             <Card>
               <CardHeader>
                 <CardTitle>入社前情報</CardTitle>
@@ -287,15 +287,6 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                       <span className="text-sm text-muted-foreground">入国確定日</span>
                     </div>
                     <span className="text-sm">{formatDate(person.entryConfirmedDate)}</span>
-                  </div>
-                )}
-                {person.myNumber && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <IdCard className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">マイナンバー</span>
-                    </div>
-                    <span className="text-sm font-mono">****{person.myNumber.slice(-4)}</span>
                   </div>
                 )}
               </CardContent>

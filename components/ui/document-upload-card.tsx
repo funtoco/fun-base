@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
 import { Upload, Trash2, RefreshCw, Loader2 } from "lucide-react"
-import { getDocumentSignedUrl } from "@/lib/supabase/person-documents"
+import { getDocumentSignedUrl, uploadDocumentDirect } from "@/lib/supabase/person-documents"
 
 interface DocumentUploadCardProps {
   label: string
@@ -59,19 +59,12 @@ export function DocumentUploadCard({
     setErrorMessage(null)
     setUploading(true)
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("documentType", documentType)
-
-      const res = await fetch(`/api/people/${personId}/documents`, {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`)
+      const result = await uploadDocumentDirect(personId, documentType, file)
+      if (!result.success) throw new Error(result.error || 'Upload failed')
       onUploadComplete?.()
     } catch (error) {
       console.error("Upload error:", error)
+      setErrorMessage(error instanceof Error ? error.message : "アップロードに失敗しました")
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
