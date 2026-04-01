@@ -49,6 +49,16 @@ export async function getPeople(): Promise<Person[]> {
       imagePath: person.image_path,
       employmentNotificationDate: person.employment_notification_date,
       employmentChangeNotificationDate: person.employment_change_notification_date,
+      interviewDate: person.interview_date,
+      jobOfferDate: person.job_offer_date,
+      applicationNumber: person.application_number,
+      departureProcedureStatus: person.departure_procedure_status,
+      entryConfirmedDate: person.entry_confirmed_date,
+      myNumber: person.my_number,
+      joiningDate: person.joining_date,
+      insuranceNumber: person.insurance_number,
+      insuranceAcquiredDate: person.insurance_acquired_date,
+      insuranceEnrollmentStatus: person.insurance_enrollment_status,
       createdAt: person.created_at,
       updatedAt: person.updated_at
   }))
@@ -115,6 +125,16 @@ export async function getPersonById(id: string): Promise<Person | null> {
     imagePath: data.image_path,
     employmentNotificationDate: data.employment_notification_date,
     employmentChangeNotificationDate: data.employment_change_notification_date,
+    interviewDate: data.interview_date,
+    jobOfferDate: data.job_offer_date,
+    applicationNumber: data.application_number,
+    departureProcedureStatus: data.departure_procedure_status,
+    entryConfirmedDate: data.entry_confirmed_date,
+    myNumber: data.my_number,
+    joiningDate: data.joining_date,
+    insuranceNumber: data.insurance_number,
+    insuranceAcquiredDate: data.insurance_acquired_date,
+    insuranceEnrollmentStatus: data.insurance_enrollment_status,
     createdAt: data.created_at,
     updatedAt: data.updated_at
   }
@@ -145,7 +165,17 @@ export async function createPerson(person: Omit<Person, 'createdAt' | 'updatedAt
       visa_id: person.visaId,
       external_id: person.externalId,
       employment_notification_date: person.employmentNotificationDate,
-      employment_change_notification_date: person.employmentChangeNotificationDate
+      employment_change_notification_date: person.employmentChangeNotificationDate,
+      interview_date: person.interviewDate,
+      job_offer_date: person.jobOfferDate,
+      application_number: person.applicationNumber,
+      departure_procedure_status: person.departureProcedureStatus,
+      entry_confirmed_date: person.entryConfirmedDate,
+      my_number: person.myNumber,
+      joining_date: person.joiningDate,
+      insurance_number: person.insuranceNumber,
+      insurance_acquired_date: person.insuranceAcquiredDate,
+      insurance_enrollment_status: person.insuranceEnrollmentStatus
     })
     .select(`
       *,
@@ -181,6 +211,16 @@ export async function createPerson(person: Omit<Person, 'createdAt' | 'updatedAt
     imagePath: data.image_path,
     employmentNotificationDate: data.employment_notification_date,
     employmentChangeNotificationDate: data.employment_change_notification_date,
+    interviewDate: data.interview_date,
+    jobOfferDate: data.job_offer_date,
+    applicationNumber: data.application_number,
+    departureProcedureStatus: data.departure_procedure_status,
+    entryConfirmedDate: data.entry_confirmed_date,
+    myNumber: data.my_number,
+    joiningDate: data.joining_date,
+    insuranceNumber: data.insurance_number,
+    insuranceAcquiredDate: data.insurance_acquired_date,
+    insuranceEnrollmentStatus: data.insurance_enrollment_status,
     createdAt: data.created_at,
     updatedAt: data.updated_at
   }
@@ -210,7 +250,17 @@ export async function updatePerson(id: string, updates: Partial<Omit<Person, 'id
       visa_id: updates.visaId,
       external_id: updates.externalId,
       employment_notification_date: updates.employmentNotificationDate,
-      employment_change_notification_date: updates.employmentChangeNotificationDate
+      employment_change_notification_date: updates.employmentChangeNotificationDate,
+      interview_date: updates.interviewDate,
+      job_offer_date: updates.jobOfferDate,
+      application_number: updates.applicationNumber,
+      departure_procedure_status: updates.departureProcedureStatus,
+      entry_confirmed_date: updates.entryConfirmedDate,
+      my_number: updates.myNumber,
+      joining_date: updates.joiningDate,
+      insurance_number: updates.insuranceNumber,
+      insurance_acquired_date: updates.insuranceAcquiredDate,
+      insurance_enrollment_status: updates.insuranceEnrollmentStatus
     })
     .eq('id', id)
     .select(`
@@ -247,6 +297,16 @@ export async function updatePerson(id: string, updates: Partial<Omit<Person, 'id
     imagePath: data.image_path,
     employmentNotificationDate: data.employment_notification_date,
     employmentChangeNotificationDate: data.employment_change_notification_date,
+    interviewDate: data.interview_date,
+    jobOfferDate: data.job_offer_date,
+    applicationNumber: data.application_number,
+    departureProcedureStatus: data.departure_procedure_status,
+    entryConfirmedDate: data.entry_confirmed_date,
+    myNumber: data.my_number,
+    joiningDate: data.joining_date,
+    insuranceNumber: data.insurance_number,
+    insuranceAcquiredDate: data.insurance_acquired_date,
+    insuranceEnrollmentStatus: data.insurance_enrollment_status,
     createdAt: data.created_at,
     updatedAt: data.updated_at
   }
@@ -302,6 +362,16 @@ export async function getPersonByExternalId(externalId: string): Promise<Person 
     imagePath: data.image_path,
     employmentNotificationDate: data.employment_notification_date,
     employmentChangeNotificationDate: data.employment_change_notification_date,
+    interviewDate: data.interview_date,
+    jobOfferDate: data.job_offer_date,
+    applicationNumber: data.application_number,
+    departureProcedureStatus: data.departure_procedure_status,
+    entryConfirmedDate: data.entry_confirmed_date,
+    myNumber: data.my_number,
+    joiningDate: data.joining_date,
+    insuranceNumber: data.insurance_number,
+    insuranceAcquiredDate: data.insurance_acquired_date,
+    insuranceEnrollmentStatus: data.insurance_enrollment_status,
     createdAt: data.created_at,
     updatedAt: data.updated_at
   }

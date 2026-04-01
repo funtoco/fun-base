@@ -13,7 +13,7 @@ import { getPersonDocumentsByPersonId } from "@/lib/supabase/person-documents-se
 import { allMeetings } from "@/data/meetings"
 import { supportActions } from "@/data/support-actions"
 import { formatDate, formatDateTime } from "@/lib/utils"
-import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText } from "lucide-react"
+import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase } from "lucide-react"
 
 interface PersonDetailPageProps {
   params: { id: string }
@@ -236,6 +236,118 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
               )}
             </CardContent>
           </Card>
+
+          {/* Pre-employment Information */}
+          {(person.interviewDate || person.jobOfferDate || person.applicationNumber || person.departureProcedureStatus || person.entryConfirmedDate || person.myNumber) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>入社前情報</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {person.interviewDate && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">面接日</span>
+                    </div>
+                    <span className="text-sm">{formatDate(person.interviewDate)}</span>
+                  </div>
+                )}
+                {person.jobOfferDate && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">内定日</span>
+                    </div>
+                    <span className="text-sm">{formatDate(person.jobOfferDate)}</span>
+                  </div>
+                )}
+                {person.applicationNumber && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">申請番号</span>
+                    </div>
+                    <span className="text-sm font-mono">{person.applicationNumber}</span>
+                  </div>
+                )}
+                {person.departureProcedureStatus && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Plane className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">出国手続きの状況</span>
+                    </div>
+                    <span className="text-sm">{person.departureProcedureStatus}</span>
+                  </div>
+                )}
+                {person.entryConfirmedDate && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">入国確定日</span>
+                    </div>
+                    <span className="text-sm">{formatDate(person.entryConfirmedDate)}</span>
+                  </div>
+                )}
+                {person.myNumber && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <IdCard className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">マイナンバー</span>
+                    </div>
+                    <span className="text-sm font-mono">****{person.myNumber.slice(-4)}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Post-employment Information */}
+          {person.joiningDate && (
+            <Card>
+              <CardHeader>
+                <CardTitle>入社後情報</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">入社日</span>
+                  </div>
+                  <span className="text-sm">{formatDate(person.joiningDate)}</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Insurance Information */}
+          {(person.insuranceNumber || person.insuranceAcquiredDate) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>社会保険／雇用保険</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {person.insuranceNumber && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">保険番号</span>
+                    </div>
+                    <span className="text-sm font-mono">{person.insuranceNumber}</span>
+                  </div>
+                )}
+                {person.insuranceAcquiredDate && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">取得日</span>
+                    </div>
+                    <span className="text-sm">{formatDate(person.insuranceAcquiredDate)}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Visa Information */}
           {visa && (
