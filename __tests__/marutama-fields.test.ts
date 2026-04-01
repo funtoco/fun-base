@@ -81,28 +81,6 @@ describe('Person型: マルタマ対応フィールド', () => {
   })
 })
 
-// --- マイナンバー下4桁マスク表示 ---
-
-describe('マイナンバー: 下4桁マスク表示', () => {
-  // 詳細ページ (app/people/[id]/page.tsx) で使われるマスク表示ロジック
-  function maskMyNumber(myNumber: string): string {
-    return `****${myNumber.slice(-4)}`
-  }
-
-  it('12桁のマイナンバーが下4桁のみ表示されること', () => {
-    expect(maskMyNumber('123456789012')).toBe('****9012')
-  })
-
-  it('短いマイナンバーでも下4桁が表示されること', () => {
-    expect(maskMyNumber('1234')).toBe('****1234')
-  })
-
-  it('4桁未満でもクラッシュしないこと', () => {
-    expect(maskMyNumber('12')).toBe('****12')
-    expect(maskMyNumber('')).toBe('****')
-  })
-})
-
 // --- DocumentType: 新規6タイプ ---
 
 describe('DocumentType: 新規書類タイプ', () => {

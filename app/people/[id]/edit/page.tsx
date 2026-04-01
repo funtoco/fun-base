@@ -33,7 +33,6 @@ export default function EditPersonPage() {
   const [applicationNumber, setApplicationNumber] = useState('')
   const [departureProcedureStatus, setDepartureProcedureStatus] = useState('')
   const [entryConfirmedDate, setEntryConfirmedDate] = useState('')
-  const [myNumber, setMyNumber] = useState('')
   // 入社後
   const [joiningDate, setJoiningDate] = useState('')
   // 社会保険
@@ -59,7 +58,6 @@ export default function EditPersonPage() {
         setApplicationNumber(data.applicationNumber || '')
         setDepartureProcedureStatus(data.departureProcedureStatus || '')
         setEntryConfirmedDate(data.entryConfirmedDate || '')
-        setMyNumber(data.myNumber || '')
         setJoiningDate(data.joiningDate || '')
         setInsuranceNumber(data.insuranceNumber || '')
         setInsuranceAcquiredDate(data.insuranceAcquiredDate || '')
@@ -99,7 +97,6 @@ export default function EditPersonPage() {
           applicationNumber: applicationNumber.trim() || null,
           departureProcedureStatus: departureProcedureStatus.trim() || null,
           entryConfirmedDate: entryConfirmedDate || null,
-          myNumber: myNumber.trim() || null,
           joiningDate: joiningDate || null,
           insuranceNumber: insuranceNumber.trim() || null,
           insuranceAcquiredDate: insuranceAcquiredDate || null,
@@ -408,16 +405,6 @@ export default function EditPersonPage() {
               />
             </div>
 
-            <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
-              <Label htmlFor="myNumber" className="text-right">マイナンバー</Label>
-              <Input
-                id="myNumber"
-                value={myNumber}
-                onChange={(e) => setMyNumber(e.target.value)}
-                placeholder="マイナンバーを入力"
-                disabled={saving}
-              />
-            </div>
           </CardContent>
         </Card>
 
