@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
+import { canManageTenant, isTenantOwner } from "@/lib/tenant-access"
 
 export async function DELETE(
   request: NextRequest,
@@ -15,21 +16,29 @@ export async function DELETE(
     }
 
     // Check if user is owner of the tenant
-    const { data: userTenant, error: userTenantError } = await supabase
+    const { data: currentUserMemberships, error: currentUserMembershipsError } = await supabase
       .from('user_tenants')
       .select('role')
       .eq('tenant_id', params.tenantId)
       .eq('user_id', user.id)
-      .maybeSingle()
+      .eq('status', 'active')
 
-    if (userTenantError || !userTenant) {
+    if (currentUserMembershipsError) {
+      console.error('Error checking tenant ownership:', currentUserMembershipsError)
+      return NextResponse.json(
+        { error: "Failed to verify tenant ownership" },
+        { status: 500 }
+      )
+    }
+
+    if (!currentUserMemberships || currentUserMemberships.length === 0) {
       return NextResponse.json(
         { error: "Tenant not found or access denied" },
         { status: 404 }
       )
     }
 
-    if (userTenant.role !== 'owner') {
+    if (!isTenantOwner(currentUserMemberships)) {
       return NextResponse.json(
         { error: "Only tenant owners can delete tenants" },
         { status: 403 }
@@ -87,21 +96,29 @@ export async function PATCH(
     }
 
     // Check if user has permission (owner or admin)
-    const { data: userTenant, error: userTenantError } = await supabase
+    const { data: currentUserMemberships, error: currentUserMembershipsError } = await supabase
       .from('user_tenants')
       .select('role')
       .eq('tenant_id', params.tenantId)
       .eq('user_id', user.id)
-      .maybeSingle()
+      .eq('status', 'active')
 
-    if (userTenantError || !userTenant) {
+    if (currentUserMembershipsError) {
+      console.error('Error checking tenant permissions:', currentUserMembershipsError)
+      return NextResponse.json(
+        { error: "Failed to verify tenant permissions" },
+        { status: 500 }
+      )
+    }
+
+    if (!currentUserMemberships || currentUserMemberships.length === 0) {
       return NextResponse.json(
         { error: "Tenant not found or access denied" },
         { status: 404 }
       )
     }
 
-    if (userTenant.role !== 'owner' && userTenant.role !== 'admin') {
+    if (!canManageTenant(currentUserMemberships)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
         { status: 403 }

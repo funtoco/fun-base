@@ -121,7 +121,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   // Handle role change
   const handleChangeRole = async (memberId: string, role: 'owner' | 'admin' | 'member' | 'guest') => {
     try {
-      await updateUserTenantRole(memberId, role)
+      await updateUserTenantRole(tenantId, memberId, role)
       await fetchData()
     } catch (error) {
       console.error('Error updating role:', error)
@@ -131,7 +131,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   // Handle member removal
   const handleDeleteMember = async (memberId: string) => {
     try {
-      await removeUserFromTenant(memberId)
+      await removeUserFromTenant(tenantId, memberId)
       await fetchData()
       setSelectedMembers(prev => prev.filter(id => id !== memberId))
     } catch (error) {
@@ -143,7 +143,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   const handleBulkAction = async (action: string) => {
     if (action === "delete") {
       try {
-        await Promise.all(selectedMembers.map(id => removeUserFromTenant(id)))
+        await Promise.all(selectedMembers.map(id => removeUserFromTenant(tenantId, id)))
         await fetchData()
         setSelectedMembers([])
       } catch (error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
+import { canManageTenant } from "@/lib/tenant-access"
 
 export async function POST(
   request: NextRequest,
@@ -25,15 +26,22 @@ export async function POST(
     }
 
     // Check if user has permission to add members
-    const { data: userTenant } = await supabase
+    const { data: currentUserMemberships, error: currentUserMembershipsError } = await supabase
       .from('user_tenants')
       .select('role')
       .eq('user_id', user.id)
       .eq('tenant_id', params.tenantId)
       .eq('status', 'active')
-      .single()
 
-    if (!userTenant || !['owner', 'admin'].includes(userTenant.role)) {
+    if (currentUserMembershipsError) {
+      console.error('Error checking current user membership:', currentUserMembershipsError)
+      return NextResponse.json(
+        { error: "Failed to verify current user membership" },
+        { status: 500 }
+      )
+    }
+
+    if (!currentUserMemberships || !canManageTenant(currentUserMemberships)) {
       return NextResponse.json(
         { error: "You don't have permission to add members" },
         { status: 403 }
@@ -41,20 +49,36 @@ export async function POST(
     }
 
     // Check if the user is already a member
-    const { data: existingMember } = await supabase
+    const { data: existingMemberships, error: existingMembershipsError } = await supabase
       .from('user_tenants')
-      .select('id, status')
+      .select('id, status, role')
       .eq('user_id', userId)
       .eq('tenant_id', params.tenantId)
-      .single()
 
-    if (existingMember) {
-      if (existingMember.status === 'active') {
-        return NextResponse.json(
-          { error: "This user is already a member" },
-          { status: 400 }
-        )
-      } else if (existingMember.status === 'pending') {
+    if (existingMembershipsError) {
+      console.error('Error checking existing memberships:', existingMembershipsError)
+      return NextResponse.json(
+        { error: "Failed to verify existing memberships" },
+        { status: 500 }
+      )
+    }
+
+    const existingAppMemberships = (existingMemberships || []).filter(
+      (membership) => membership.role !== 'supporter'
+    )
+
+    if (existingAppMemberships.some((membership) => membership.status === 'active')) {
+      return NextResponse.json(
+        { error: "This user is already a member" },
+        { status: 400 }
+      )
+    }
+
+    const pendingMembership = existingAppMemberships.find(
+      (membership) => membership.status === 'pending'
+    )
+
+    if (pendingMembership) {
         // If pending, update to active with new role
         const { error: updateError } = await supabase
           .from('user_tenants')
@@ -63,7 +87,7 @@ export async function POST(
             status: 'active',
             joined_at: new Date().toISOString()
           })
-          .eq('id', existingMember.id)
+          .eq('id', pendingMembership.id)
 
         if (updateError) {
           console.error('Error updating member:', updateError)
@@ -77,7 +101,6 @@ export async function POST(
           success: true, 
           message: "Member added successfully" 
         })
-      }
     }
 
     // Get user email from auth.users
@@ -152,4 +175,3 @@ export async function POST(
     )
   }
 }
-

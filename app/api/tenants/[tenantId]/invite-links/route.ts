@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
+import { canManageTenant } from "@/lib/tenant-access"
 
 export async function POST(
   request: NextRequest,
@@ -15,20 +16,19 @@ export async function POST(
     }
 
     // Check permission: admin or owner only
-    const { data: membership, error: membershipError } = await supabase
+    const { data: memberships, error: membershipError } = await supabase
       .from("user_tenants")
       .select("role")
       .eq("tenant_id", params.tenantId)
       .eq("user_id", user.id)
       .eq("status", "active")
-      .maybeSingle()
 
     if (membershipError) {
       console.error("Error checking tenant membership:", membershipError)
       return NextResponse.json({ error: "Failed to verify membership" }, { status: 500 })
     }
 
-    if (!membership?.role || !["owner", "admin"].includes(membership.role)) {
+    if (!memberships || !canManageTenant(memberships)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
