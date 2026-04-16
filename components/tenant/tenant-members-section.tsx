@@ -43,7 +43,7 @@ export function TenantMembersSection({ tenantId, currentUserRole }: TenantMember
 
   const handleRoleChange = async (userTenantId: string, newRole: 'owner' | 'admin' | 'member' | 'guest') => {
     try {
-      await updateUserTenantRole(userTenantId, newRole)
+      await updateUserTenantRole(tenantId, userTenantId, newRole)
       await fetchMembers()
     } catch (error) {
       console.error('Error updating role:', error)
@@ -54,7 +54,7 @@ export function TenantMembersSection({ tenantId, currentUserRole }: TenantMember
     if (!confirm('このメンバーを削除しますか？')) return
     
     try {
-      await removeUserFromTenant(userTenantId)
+      await removeUserFromTenant(tenantId, userTenantId)
       await fetchMembers()
     } catch (error) {
       console.error('Error removing member:', error)

@@ -272,33 +272,34 @@ export async function activateUserTenantMembership(
 }
 
 export async function updateUserTenantRole(
+  tenantId: string,
   userTenantId: string,
   role: 'owner' | 'admin' | 'member' | 'guest'
 ): Promise<void> {
-  const supabase = createClient()
-  
-  const { error } = await supabase
-    .from('user_tenants')
-    .update({ role })
-    .eq('id', userTenantId)
-  
-  if (error) {
-    console.error('Error updating user tenant role:', error)
-    throw error
+  const response = await fetch(`/api/tenants/${tenantId}/members/${userTenantId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ role }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(result.error || 'Failed to update user tenant role')
   }
 }
 
-export async function removeUserFromTenant(userTenantId: string): Promise<void> {
-  const supabase = createClient()
-  
-  const { error } = await supabase
-    .from('user_tenants')
-    .delete()
-    .eq('id', userTenantId)
-  
-  if (error) {
-    console.error('Error removing user from tenant:', error)
-    throw error
+export async function removeUserFromTenant(tenantId: string, userTenantId: string): Promise<void> {
+  const response = await fetch(`/api/tenants/${tenantId}/members/${userTenantId}`, {
+    method: 'DELETE',
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(result.error || 'Failed to remove user from tenant')
   }
 }
 
@@ -415,7 +416,9 @@ export async function getInviteLinkInfo(token: string): Promise<{ success: boole
     }
 
     const isExpired = data.expires_at ? new Date(data.expires_at) < new Date() : false
-    const tenant = data.tenants as { name: string } | null
+    const tenant = (
+      Array.isArray(data.tenants) ? data.tenants[0] : data.tenants
+    ) as { name: string } | null | undefined
 
     return {
       success: true,
