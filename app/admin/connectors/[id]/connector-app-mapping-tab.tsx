@@ -573,7 +573,8 @@ export function ConnectorAppMappingTab({ connector, tenantId, connectionStatus, 
       throw new Error(result.error || 'Failed to start sync')
     }
 
-    if (result.success === false) {
+    const syncFailed = !result.success
+    if (syncFailed) {
       const detail = Array.isArray(result.errors) && result.errors.length > 0
         ? result.errors.join('; ')
         : 'Sync completed with errors'
@@ -622,7 +623,7 @@ export function ConnectorAppMappingTab({ connector, tenantId, connectionStatus, 
       }
 
       const result = await runSyncRequest(mapping.id)
-      toast.success('連携を開始しました', {
+      toast.success('連携が完了しました', {
         description: 'データの同期処理が完了しました'
       })
 

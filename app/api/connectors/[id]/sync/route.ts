@@ -7,7 +7,8 @@ import { createClient } from '@supabase/supabase-js'
 
 // Use Node.js runtime for crypto operations
 export const runtime = 'nodejs'
-export const maxDuration = 300
+const MAX_DURATION_SECONDS = 300
+export const maxDuration = MAX_DURATION_SECONDS
 
 // Validation schema
 const kintoneRecordIdSchema = z.string().trim().regex(/^\d+$/, {
@@ -25,31 +26,33 @@ const syncRequestSchema = z.object({
   recordId: kintoneRecordIdSchema.optional(),
   recordIdFrom: kintoneRecordIdSchema.optional(),
   recordIdTo: kintoneRecordIdSchema.optional()
-}).refine(
-  (body) => {
-    const hasRecordFilter = !!body.recordId || !!body.recordIdFrom || !!body.recordIdTo
-    return !hasRecordFilter || !!body.appMappingId
-  },
-  {
-    message: 'appMappingId is required when syncing a specific Kintone record id',
-    path: ['appMappingId']
+}).superRefine((body, ctx) => {
+  const hasRecordFilter = Boolean(body.recordId || body.recordIdFrom || body.recordIdTo)
+
+  if (hasRecordFilter && !body.appMappingId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'appMappingId is required when syncing a specific Kintone record id',
+      path: ['appMappingId']
+    })
   }
-).refine(
-  (body) => !body.recordId || (!body.recordIdFrom && !body.recordIdTo),
-  {
-    message: 'recordId cannot be combined with recordIdFrom or recordIdTo',
-    path: ['recordId']
+
+  if (body.recordId && (body.recordIdFrom || body.recordIdTo)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'recordId cannot be combined with recordIdFrom or recordIdTo',
+      path: ['recordId']
+    })
   }
-).refine(
-  (body) => {
-    if (!body.recordIdFrom || !body.recordIdTo) return true
-    return Number(body.recordIdFrom) <= Number(body.recordIdTo)
-  },
-  {
-    message: 'recordIdFrom must be less than or equal to recordIdTo',
-    path: ['recordIdFrom']
+
+  if (body.recordIdFrom && body.recordIdTo && Number(body.recordIdFrom) > Number(body.recordIdTo)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'recordIdFrom must be less than or equal to recordIdTo',
+      path: ['recordIdFrom']
+    })
   }
-)
+})
 
 function getServerClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
