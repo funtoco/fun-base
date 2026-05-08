@@ -3,6 +3,8 @@ import test from 'node:test'
 
 import {
   applyFileFieldProcessResult,
+  buildRecordIdQuery,
+  combineKintoneQueries,
   buildPeopleImageStoragePath,
   shouldSkipMissingUpdateTarget,
 } from './kintone-sync'
@@ -87,4 +89,29 @@ test('people_image sync always skips records without an existing target person',
   assert.equal(shouldSkipMissingUpdateTarget('people_image', true), true)
   assert.equal(shouldSkipMissingUpdateTarget('people', false), false)
   assert.equal(shouldSkipMissingUpdateTarget('people', true), true)
+})
+
+test('buildRecordIdQuery targets one Kintone record by numeric id', () => {
+  assert.equal(buildRecordIdQuery({ recordId: '2447' }), '$id = 2447')
+})
+
+test('buildRecordIdQuery supports bounded Kintone record id ranges', () => {
+  assert.equal(
+    buildRecordIdQuery({ recordIdFrom: '2400', recordIdTo: '2500' }),
+    '$id >= 2400 and $id <= 2500'
+  )
+})
+
+test('buildRecordIdQuery rejects non-numeric record ids', () => {
+  assert.throws(
+    () => buildRecordIdQuery({ recordId: '2447 or status = "x"' }),
+    /Kintone record id must be numeric/
+  )
+})
+
+test('combineKintoneQueries preserves existing filters and adds record id filter', () => {
+  assert.equal(
+    combineKintoneQueries('status = "在籍中"', buildRecordIdQuery({ recordId: '2447' })),
+    'status = "在籍中" and $id = 2447'
+  )
 })

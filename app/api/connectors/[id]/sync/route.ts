@@ -9,10 +9,41 @@ export const runtime = 'nodejs'
 export const maxDuration = 300
 
 // Validation schema
+const kintoneRecordIdSchema = z.string().trim().regex(/^\d+$/, {
+  message: 'Kintone record id must be numeric'
+})
+
 const syncRequestSchema = z.object({
   force: z.boolean().optional(),
-  appMappingId: z.string().optional()
-})
+  appMappingId: z.string().optional(),
+  recordId: kintoneRecordIdSchema.optional(),
+  recordIdFrom: kintoneRecordIdSchema.optional(),
+  recordIdTo: kintoneRecordIdSchema.optional()
+}).refine(
+  (body) => {
+    const hasRecordFilter = !!body.recordId || !!body.recordIdFrom || !!body.recordIdTo
+    return !hasRecordFilter || !!body.appMappingId
+  },
+  {
+    message: 'appMappingId is required when syncing a specific Kintone record id',
+    path: ['appMappingId']
+  }
+).refine(
+  (body) => !body.recordId || (!body.recordIdFrom && !body.recordIdTo),
+  {
+    message: 'recordId cannot be combined with recordIdFrom or recordIdTo',
+    path: ['recordId']
+  }
+).refine(
+  (body) => {
+    if (!body.recordIdFrom || !body.recordIdTo) return true
+    return Number(body.recordIdFrom) <= Number(body.recordIdTo)
+  },
+  {
+    message: 'recordIdFrom must be less than or equal to recordIdTo',
+    path: ['recordIdFrom']
+  }
+)
 
 export async function POST(
   request: NextRequest,
@@ -23,7 +54,7 @@ export async function POST(
     const body = await request.json()
     
     // Validate input
-    const { force, appMappingId } = syncRequestSchema.parse(body)
+    const { force, appMappingId, recordId, recordIdFrom, recordIdTo } = syncRequestSchema.parse(body)
     
     // Get and validate connector
     const connector = await getConnector(connectorId)
@@ -57,14 +88,23 @@ export async function POST(
     try {
       // If tenantId is not provided, fall back to connector.tenant_id for tenantless/global connectors
       const effectiveTenantId = tenantId || connector.tenant_id || ''
-      console.log('[sync-api] start manual sync', { connectorId, tenantId, connectorTenant: connector.tenant_id, effectiveTenantId, appMappingId })
+      const syncOptions = { recordId, recordIdFrom, recordIdTo }
+      console.log('[sync-api] start manual sync', {
+        connectorId,
+        tenantId,
+        connectorTenant: connector.tenant_id,
+        effectiveTenantId,
+        appMappingId,
+        force,
+        ...syncOptions
+      })
       const syncService = await createSyncService(
         connectorId,
         effectiveTenantId,
         'manual',
         request.headers.get('x-user-id') || undefined
       )
-      const result = await syncService.syncAll(appMappingId)
+      const result = await syncService.syncAll(appMappingId, undefined, syncOptions)
       console.log('[sync-api] result', result)
       
       // Update connector status if there were errors

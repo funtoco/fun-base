@@ -141,6 +141,43 @@ export function shouldSkipMissingUpdateTarget(
   return skipIfNoUpdateTarget || targetAppType === 'people_image'
 }
 
+export interface KintoneSyncOptions {
+  recordId?: string
+  recordIdFrom?: string
+  recordIdTo?: string
+}
+
+function assertKintoneRecordId(value: string, label: string): string {
+  const trimmed = value.trim()
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error(`Invalid ${label}: Kintone record id must be numeric`)
+  }
+  return trimmed
+}
+
+export function buildRecordIdQuery(options: KintoneSyncOptions = {}): string {
+  if (options.recordId) {
+    return `$id = ${assertKintoneRecordId(options.recordId, 'recordId')}`
+  }
+
+  const conditions: string[] = []
+  if (options.recordIdFrom) {
+    conditions.push(`$id >= ${assertKintoneRecordId(options.recordIdFrom, 'recordIdFrom')}`)
+  }
+  if (options.recordIdTo) {
+    conditions.push(`$id <= ${assertKintoneRecordId(options.recordIdTo, 'recordIdTo')}`)
+  }
+
+  return conditions.join(' and ')
+}
+
+export function combineKintoneQueries(...queries: Array<string | null | undefined>): string {
+  return queries
+    .map((query) => query?.trim())
+    .filter((query): query is string => !!query)
+    .join(' and ')
+}
+
 /**
  * Process FILE type field - download from Kintone and upload to Supabase Storage
  */
@@ -461,7 +498,11 @@ export class KintoneDataSync {
    * @param appMappingId Optional specific app mapping ID to sync. If not provided, syncs all active mappings.
    * @param targetAppType Optional target app type to filter mappings. If not provided, syncs all target app types.
    */
-  async syncAll(appMappingId?: string, targetAppType?: string): Promise<SyncResult> {
+  async syncAll(
+    appMappingId?: string,
+    targetAppType?: string,
+    options: KintoneSyncOptions = {}
+  ): Promise<SyncResult> {
     if (process.env.ALLOW_LEGACY_IMPORTS === 'false' || process.env.IMPORTS_DISABLED_UNTIL_MAPPING_ACTIVE === 'true') {
       // Check active mapping exists for this connector
       const { data: activeMappings } = await this.supabase
@@ -486,7 +527,10 @@ export class KintoneDataSync {
         connectorId: this.connectorId,
         tenantId: this.tenantId,
         targetAppType,
-        appMappingId
+        appMappingId,
+        recordId: options.recordId,
+        recordIdFrom: options.recordIdFrom,
+        recordIdTo: options.recordIdTo
       })
       // Start sync session
       sessionId = await this.syncLogger.startSession(
@@ -533,7 +577,7 @@ export class KintoneDataSync {
       console.log('[sync] syncAll:mappings', appMappings.map(m => ({ id: m.id, target_app_type: m.target_app_type, source_app_id: m.source_app_id })))
       for (const appMapping of appMappings) {
         try {
-          const syncedCount = await this.syncAppData(appMapping.target_app_type, appMapping.source_app_id, appMapping.id)
+          const syncedCount = await this.syncAppData(appMapping.target_app_type, appMapping.source_app_id, appMapping.id, options)
           synced[appMapping.target_app_type] = syncedCount
         } catch (err) {
           const error = `${appMapping.target_app_type} sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`
@@ -589,7 +633,12 @@ export class KintoneDataSync {
   /**
    * Sync app data from Kintone based on app mapping configuration
    */
-  private async syncAppData(targetAppType: string, sourceAppId: string, appMappingId?: string): Promise<number> {
+  private async syncAppData(
+    targetAppType: string,
+    sourceAppId: string,
+    appMappingId?: string,
+    options: KintoneSyncOptions = {}
+  ): Promise<number> {
     if (process.env.ALLOW_LEGACY_IMPORTS === 'false' || process.env.IMPORTS_DISABLED_UNTIL_MAPPING_ACTIVE === 'true') {
       const { data: active } = await this.supabase
         .from('connector_app_mappings')
@@ -649,7 +698,14 @@ export class KintoneDataSync {
       for (const appMapping of appMappings) {
         // Build query using only database filter conditions
         const filterQuery = await this.buildFilterQuery(targetAppType as 'people' | 'visas', appMappingId)
-        const query = filterQuery || ''
+        const recordIdQuery = buildRecordIdQuery(options)
+        const query = combineKintoneQueries(filterQuery, recordIdQuery)
+        console.log('[sync] kintone-query', {
+          targetAppType,
+          sourceAppId,
+          appMappingId: appMapping.id,
+          query
+        })
         
         // Get records from Kintone
         const records = await this.kintoneClient.getRecords(appMapping.source_app_id, query, [])
