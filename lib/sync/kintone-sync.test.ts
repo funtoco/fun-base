@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   applyFileFieldProcessResult,
   buildPeopleImageStoragePath,
+  shouldSkipMissingUpdateTarget,
 } from './kintone-sync'
 import { buildUpdateCondition } from './update-key-utils'
 
@@ -79,4 +80,11 @@ test('buildUpdateCondition treats __ID__ mapping as Kintone record id', () => {
   )
 
   assert.deepEqual(condition, { external_id: '2447' })
+})
+
+test('people_image sync always skips records without an existing target person', () => {
+  assert.equal(shouldSkipMissingUpdateTarget('people_image', false), true)
+  assert.equal(shouldSkipMissingUpdateTarget('people_image', true), true)
+  assert.equal(shouldSkipMissingUpdateTarget('people', false), false)
+  assert.equal(shouldSkipMissingUpdateTarget('people', true), true)
 })

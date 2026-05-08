@@ -134,6 +134,13 @@ export function applyFileFieldProcessResult(
   }
 }
 
+export function shouldSkipMissingUpdateTarget(
+  targetAppType: string,
+  skipIfNoUpdateTarget: boolean
+): boolean {
+  return skipIfNoUpdateTarget || targetAppType === 'people_image'
+}
+
 /**
  * Process FILE type field - download from Kintone and upload to Supabase Storage
  */
@@ -689,7 +696,7 @@ export class KintoneDataSync {
             // Check if we should skip this record when there is no update target
             // We need to know existence cheaply; perform a minimal select when skip flag is on
             let exists: boolean | undefined
-            if (appMapping.skip_if_no_update_target) {
+            if (shouldSkipMissingUpdateTarget(targetAppType, appMapping.skip_if_no_update_target)) {
               const { data: headCheck, error: headErr } = await this.supabase
                 .from(targetTable)
                 .select('id')
@@ -768,6 +775,11 @@ export class KintoneDataSync {
               error = updateError
             }
             if (!error && (!updatedRows || updatedRows.length === 0)) {
+              if (targetAppType === 'people_image') {
+                console.log(`[sync] skip-no-target-after-update rec=${record.$id?.value}`)
+                return
+              }
+
               // No rows updated -> insert new
               const { error: insertError } = await this.supabase
                 .from(targetTable)
