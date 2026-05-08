@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 
 // Use Node.js runtime for crypto operations
 export const runtime = 'nodejs'
+export const maxDuration = 300
 
 // Validation schema
 const syncRequestSchema = z.object({

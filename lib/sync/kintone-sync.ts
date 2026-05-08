@@ -163,9 +163,15 @@ async function processFileField(
     
     // Use the original filename (decode MIME Encoded-Word if necessary)
     const decodedName = decodeMimeEncodedWord(fileData.fileName) || fileData.fileName
+    const recordIdValue = record.$id?.value
+    if (recordIdValue === undefined || recordIdValue === null) {
+      console.log(`[file] no-record-id field=%s`, fieldMapping.source_field_code)
+      return { shouldUpdate: false, path: null }
+    }
+
     const filePath = buildPeopleImageStoragePath({
       tenantId,
-      recordId: String(record.$id.value),
+      recordId: String(recordIdValue),
       fieldCode: fieldMapping.source_field_code,
       fileName: decodedName
     })

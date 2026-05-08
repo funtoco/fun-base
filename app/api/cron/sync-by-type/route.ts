@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js'
 
 // Use Node.js runtime for crypto operations
 export const runtime = 'nodejs'
+export const maxDuration = 300
 
 // Server-side Supabase client
 function getServerClient() {
