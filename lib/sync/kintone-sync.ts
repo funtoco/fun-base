@@ -430,6 +430,17 @@ export class KintoneDataSync {
     
   }
 
+  async getMaxRecordId(sourceAppId: string): Promise<number> {
+    const records = await this.kintoneClient.getRecords(sourceAppId, 'order by $id desc limit 1')
+    const maxRecordId = Number(records[0]?.$id?.value || 0)
+
+    if (!Number.isFinite(maxRecordId) || maxRecordId < 0) {
+      throw new Error(`Invalid max Kintone record id for app ${sourceAppId}`)
+    }
+
+    return maxRecordId
+  }
+
   /**
    * Build Kintone query from filter conditions
    */

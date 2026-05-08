@@ -21,8 +21,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { Database, Settings, ExternalLink, RefreshCw, Loader2, Plus, Edit, Trash2, Search, X, GitBranch, AlertCircle, ToggleLeft, ToggleRight } from "lucide-react"
 import { type Connector } from "@/lib/types/connector"
+import { buildRecordIdBatches } from "@/lib/sync/batch-utils"
 import { toast } from "sonner"
 import { StatusToggleDialog } from "@/components/ui/status-toggle-dialog"
+
+const PEOPLE_IMAGE_BATCH_SIZE = 100
+const PEOPLE_IMAGE_BATCH_DELAY_MS = 500
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 interface AppMapping {
   id: string
@@ -171,6 +179,11 @@ export function ConnectorAppMappingTab({ connector, tenantId, connectionStatus, 
   const [savingMappings, setSavingMappings] = useState(false)
   const [loadingFields, setLoadingFields] = useState(false)
   const [syncingMapping, setSyncingMapping] = useState<string | null>(null)
+  const [syncProgress, setSyncProgress] = useState<Record<string, {
+    current: number
+    total: number
+    range: string
+  }>>({})
   
   const debouncedSearch = useDebounce(searchTerm, 300)
 
@@ -516,33 +529,104 @@ export function ConnectorAppMappingTab({ connector, tenantId, connectionStatus, 
     }
   }
 
-  const handleStartSync = async (mappingId: string) => {
-    try {
-      setSyncingMapping(mappingId)
-      
-      const response = await fetch(`/api/connectors/${connector.id}/sync`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          tenantId,
-          force: true,
-          appMappingId: mappingId
-        })
+  const fetchMaxRecordId = async (appMappingId: string): Promise<number> => {
+    const response = await fetch(`/api/connectors/${connector.id}/sync?appMappingId=${encodeURIComponent(appMappingId)}&metric=maxRecordId`)
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || 'Failed to fetch max Kintone record id')
+    }
+
+    const data = await response.json()
+    const maxRecordId = Number(data.maxRecordId)
+
+    if (!Number.isInteger(maxRecordId) || maxRecordId < 1) {
+      throw new Error('Kintone app has no syncable records')
+    }
+
+    return maxRecordId
+  }
+
+  const runSyncRequest = async (
+    mappingId: string,
+    range?: { from: number; to: number }
+  ) => {
+    const response = await fetch(`/api/connectors/${connector.id}/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tenantId,
+        force: true,
+        appMappingId: mappingId,
+        ...(range ? {
+          recordIdFrom: String(range.from),
+          recordIdTo: String(range.to)
+        } : {})
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to start sync')
+    })
+
+    const result = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to start sync')
+    }
+
+    if (result.success === false) {
+      const detail = Array.isArray(result.errors) && result.errors.length > 0
+        ? result.errors.join('; ')
+        : 'Sync completed with errors'
+      throw new Error(detail)
+    }
+
+    return result
+  }
+
+  const handlePeopleImageBatchSync = async (mapping: AppMapping) => {
+    const maxRecordId = await fetchMaxRecordId(mapping.id)
+    const batches = buildRecordIdBatches(1, maxRecordId, PEOPLE_IMAGE_BATCH_SIZE)
+    let totalSynced = 0
+
+    for (let index = 0; index < batches.length; index++) {
+      const batch = batches[index]
+      setSyncProgress(prev => ({
+        ...prev,
+        [mapping.id]: {
+          current: index + 1,
+          total: batches.length,
+          range: `${batch.from}-${batch.to}`
+        }
+      }))
+
+      const result = await runSyncRequest(mapping.id, batch)
+      totalSynced += Number(result.synced?.people_image || 0)
+
+      if (index < batches.length - 1) {
+        await sleep(PEOPLE_IMAGE_BATCH_DELAY_MS)
       }
-      
-      const result = await response.json()
+    }
+
+    toast.success('画像連携が完了しました', {
+      description: `${batches.length} batch / ${totalSynced}件を更新しました`
+    })
+  }
+
+  const handleStartSync = async (mapping: AppMapping) => {
+    try {
+      setSyncingMapping(mapping.id)
+
+      if (mapping.target_app_type === 'people_image') {
+        await handlePeopleImageBatchSync(mapping)
+        return
+      }
+
+      const result = await runSyncRequest(mapping.id)
       toast.success('連携を開始しました', {
-        description: 'データの同期処理が開始されました'
+        description: 'データの同期処理が完了しました'
       })
-      
-      console.log('Sync started:', result)
+
+      console.log('Sync completed:', result)
     } catch (error) {
       console.error('Error starting sync:', error)
       toast.error('連携の開始に失敗しました', {
@@ -550,6 +634,11 @@ export function ConnectorAppMappingTab({ connector, tenantId, connectionStatus, 
       })
     } finally {
       setSyncingMapping(null)
+      setSyncProgress(prev => {
+        const next = { ...prev }
+        delete next[mapping.id]
+        return next
+      })
     }
   }
 
@@ -1159,7 +1248,7 @@ export function ConnectorAppMappingTab({ connector, tenantId, connectionStatus, 
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleStartSync(mapping.id)
+                            handleStartSync(mapping)
                           }}
                           disabled={syncingMapping === mapping.id}
                         >
@@ -1168,7 +1257,11 @@ export function ConnectorAppMappingTab({ connector, tenantId, connectionStatus, 
                           ) : (
                             <RefreshCw className="h-4 w-4 mr-1" />
                           )}
-                          {syncingMapping === mapping.id ? '連携中...' : '連携開始'}
+                          {syncingMapping === mapping.id
+                            ? (syncProgress[mapping.id]
+                              ? `連携中 ${syncProgress[mapping.id].current}/${syncProgress[mapping.id].total}`
+                              : '連携中...')
+                            : '連携開始'}
                         </Button>
                       )}
                       <Button

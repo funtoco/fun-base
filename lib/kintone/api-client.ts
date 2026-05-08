@@ -33,6 +33,24 @@ export interface KintoneApiConfig {
   accessToken: string
 }
 
+export function buildKintoneRecordsQuery(query: string | undefined, limit: number, offset: number): string {
+  const trimmedQuery = query?.trim()
+  const hasLimit = !!trimmedQuery && /\blimit\s+\d+\b/i.test(trimmedQuery)
+
+  if (!trimmedQuery) {
+    return `order by $id asc limit ${limit} offset ${offset}`
+  }
+
+  if (hasLimit) {
+    return trimmedQuery
+  }
+
+  const hasOrderBy = /\border\s+by\b/i.test(trimmedQuery)
+  const orderClause = hasOrderBy ? '' : ' order by $id asc'
+
+  return `${trimmedQuery}${orderClause} limit ${limit} offset ${offset}`
+}
+
 export class KintoneApiClient {
   private domain: string
   private accessToken: string
@@ -169,14 +187,11 @@ export class KintoneApiClient {
     const limit = 500
     let offset = 0
     let allRecords: KintoneRecord[] = []
+    const isExplicitlyLimited = !!query?.trim() && /\blimit\s+\d+\b/i.test(query)
 
     while (true) {
-      let endpoint = `/k/v1/records.json?app=${appId}&query=order by $id asc limit ${limit} offset ${offset}`
-      
-      // Override query if provided
-      if (query) {
-        endpoint = `/k/v1/records.json?app=${appId}&query=${encodeURIComponent(query + ' order by $id asc')} limit ${limit} offset ${offset}`
-      }
+      const recordsQuery = buildKintoneRecordsQuery(query, limit, offset)
+      let endpoint = `/k/v1/records.json?app=${appId}&query=${encodeURIComponent(recordsQuery)}`
       
       if (fields && fields.length > 0) {
         const fieldsParam = fields.map(field => `fields[]=${encodeURIComponent(field)}`).join('&')
@@ -189,7 +204,7 @@ export class KintoneApiClient {
       allRecords = allRecords.concat(records)
       
       // If we got fewer records than the limit, we've reached the end
-      if (records.length < limit) {
+      if (isExplicitlyLimited || records.length < limit) {
         break
       }
       

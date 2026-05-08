@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { createSyncService } from '@/lib/sync/kintone-sync'
 import { getConnector, setConnectorStatus } from '@/lib/db/connectors'
 import { revalidatePath } from 'next/cache'
+import { createClient } from '@supabase/supabase-js'
 
 // Use Node.js runtime for crypto operations
 export const runtime = 'nodejs'
@@ -11,6 +12,11 @@ export const maxDuration = 300
 // Validation schema
 const kintoneRecordIdSchema = z.string().trim().regex(/^\d+$/, {
   message: 'Kintone record id must be numeric'
+})
+
+const syncMetadataQuerySchema = z.object({
+  appMappingId: z.string().min(1),
+  metric: z.literal('maxRecordId').default('maxRecordId')
 })
 
 const syncRequestSchema = z.object({
@@ -44,6 +50,92 @@ const syncRequestSchema = z.object({
     path: ['recordIdFrom']
   }
 )
+
+function getServerClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error('Missing Supabase configuration')
+  }
+
+  return createClient(supabaseUrl, serviceKey)
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const connectorId = params.id
+    const { searchParams } = new URL(request.url)
+    const { appMappingId } = syncMetadataQuerySchema.parse({
+      appMappingId: searchParams.get('appMappingId'),
+      metric: searchParams.get('metric') || 'maxRecordId'
+    })
+
+    const connector = await getConnector(connectorId)
+
+    if (!connector) {
+      return NextResponse.json(
+        { error: 'Connector not found' },
+        { status: 404 }
+      )
+    }
+
+    if (connector.provider !== 'kintone') {
+      return NextResponse.json(
+        { error: 'Only Kintone connectors support data sync' },
+        { status: 400 }
+      )
+    }
+
+    const supabase = getServerClient()
+    const { data: appMapping, error: appMappingError } = await supabase
+      .from('connector_app_mappings')
+      .select('source_app_id')
+      .eq('id', appMappingId)
+      .eq('connector_id', connectorId)
+      .eq('is_active', true)
+      .single()
+
+    if (appMappingError || !appMapping) {
+      return NextResponse.json(
+        { error: 'Active app mapping not found' },
+        { status: 404 }
+      )
+    }
+
+    const effectiveTenantId = connector.tenant_id || ''
+    const syncService = await createSyncService(connectorId, effectiveTenantId, 'manual')
+    const maxRecordId = await syncService.getMaxRecordId(appMapping.source_app_id)
+
+    return NextResponse.json({
+      success: true,
+      appMappingId,
+      sourceAppId: appMapping.source_app_id,
+      maxRecordId
+    })
+  } catch (error) {
+    console.error('Sync metadata request error:', error)
+
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        {
+          error: 'Validation failed',
+          details: error.errors
+        },
+        { status: 400 }
+      )
+    }
+
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500 }
+    )
+  }
+}
 
 export async function POST(
   request: NextRequest,
