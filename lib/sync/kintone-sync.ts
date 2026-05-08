@@ -677,7 +677,15 @@ export class KintoneDataSync {
             const includeTenant = !!this.tenantId
             const whereCondition = buildUpdateCondition(record, updateKeys, this.tenantId, includeTenant)
             console.log(`[sync] where=${JSON.stringify(whereCondition)}`)
-            
+
+            const missingUpdateKeys = updateKeys.filter((fieldMapping) => {
+              return whereCondition[fieldMapping.target_field_id] === undefined || whereCondition[fieldMapping.target_field_id] === null
+            })
+            if (missingUpdateKeys.length > 0) {
+              console.log(`[sync] skip-missing-update-key rec=${record.$id?.value} keys=%s`, missingUpdateKeys.map((key) => `${key.source_field_code}->${key.target_field_id}`).join(','))
+              return
+            }
+
             // Check if we should skip this record when there is no update target
             // We need to know existence cheaply; perform a minimal select when skip flag is on
             let exists: boolean | undefined

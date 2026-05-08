@@ -5,6 +5,7 @@ import {
   applyFileFieldProcessResult,
   buildPeopleImageStoragePath,
 } from './kintone-sync'
+import { buildUpdateCondition } from './update-key-utils'
 
 test('buildPeopleImageStoragePath keeps same filenames isolated per Kintone record', () => {
   const first = buildPeopleImageStoragePath({
@@ -56,4 +57,26 @@ test('applyFileFieldProcessResult clears image when Kintone FILE field is intent
   })
 
   assert.equal(data.image_path, null)
+})
+
+test('buildUpdateCondition treats __ID__ mapping as Kintone record id', () => {
+  const condition = buildUpdateCondition(
+    {
+      $id: { value: '2447' },
+      image: { value: [{ fileKey: 'file-key' }] },
+    },
+    [
+      {
+        source_field_code: '__ID__',
+        target_field_id: 'external_id',
+        is_required: true,
+        sort_order: 0,
+        is_update_key: true,
+      },
+    ],
+    '',
+    false
+  )
+
+  assert.deepEqual(condition, { external_id: '2447' })
 })
