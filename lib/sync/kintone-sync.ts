@@ -11,7 +11,7 @@ import { decryptJson } from '@/lib/security/crypto'
 // import { loadKintoneClientConfig } from '@/lib/db/credential-loader'
 import { SyncLogger, createSyncLogger } from './sync-logger'
 import { getUpdateKeysByConnector, buildConflictColumns, buildUpdateCondition } from './update-key-utils'
-import { uploadFileToStorage, generateFilePath } from '@/lib/storage/file-uploader'
+import { uploadFileToStorage } from '@/lib/storage/file-uploader'
 import { getDataMappings, mapFieldValues, type DataMapping } from '@/lib/mappings/value-mapper'
 // import { getKintoneMapping, type KintoneMapping } from './mapping-loader'
 
@@ -89,6 +89,25 @@ function encodeFilenameBase64Url(filename: string): string {
   return `${b64url}${ext}`
 }
 
+export function buildPeopleImageStoragePath({
+  tenantId,
+  recordId,
+  fieldCode,
+  fileName
+}: {
+  tenantId?: string | null
+  recordId: string
+  fieldCode: string
+  fileName: string
+}): string {
+  const tenantScope = sanitizeStorageKey(tenantId || 'global')
+  const safeRecordId = sanitizeStorageKey(recordId)
+  const safeFieldCode = sanitizeStorageKey(fieldCode)
+  const safeFileName = sanitizeStorageKey(encodeFilenameBase64Url(fileName))
+
+  return `${tenantScope}/people_image/${safeRecordId}/${safeFieldCode}/${safeFileName}`
+}
+
 interface AppMapping {
   id: string
   source_app_id: string
@@ -100,6 +119,21 @@ interface AppMapping {
   field_mappings: FieldMapping[]
 }
 
+interface FileFieldProcessResult {
+  shouldUpdate: boolean
+  path: string | null
+}
+
+export function applyFileFieldProcessResult(
+  data: Record<string, any>,
+  targetFieldId: string,
+  result: FileFieldProcessResult
+): void {
+  if (result.shouldUpdate) {
+    data[targetFieldId] = result.path
+  }
+}
+
 /**
  * Process FILE type field - download from Kintone and upload to Supabase Storage
  */
@@ -108,20 +142,20 @@ async function processFileField(
   record: KintoneRecord,
   fieldMapping: FieldMapping,
   tenantId: string
-): Promise<string | null> {
+): Promise<FileFieldProcessResult> {
   try {
     const sourceValue = record[fieldMapping.source_field_code]?.value
     
     if (!sourceValue || !Array.isArray(sourceValue) || sourceValue.length === 0) {
       console.log(`[file] no-data field=%s`, fieldMapping.source_field_code)
-      return null
+      return { shouldUpdate: true, path: null }
     }
 
     // Get the first file (Kintone FILE fields can have multiple files)
     const fileInfo = sourceValue[0]
     if (!fileInfo || !fileInfo.fileKey) {
       console.log(`[file] no-key field=%s`, fieldMapping.source_field_code)
-      return null
+      return { shouldUpdate: false, path: null }
     }
 
     // Download file from Kintone
@@ -129,10 +163,12 @@ async function processFileField(
     
     // Use the original filename (decode MIME Encoded-Word if necessary)
     const decodedName = decodeMimeEncodedWord(fileData.fileName) || fileData.fileName
-    // Encode basename to URL-safe Base64 to avoid storage key issues, keep extension
-    const encodedName = encodeFilenameBase64Url(decodedName)
-    // Use URL-safe Base64-encoded basename + original extension as the storage key
-    const filePath = encodedName
+    const filePath = buildPeopleImageStoragePath({
+      tenantId,
+      recordId: String(record.$id.value),
+      fieldCode: fieldMapping.source_field_code,
+      fileName: decodedName
+    })
 
     // Upload to Supabase Storage
     const uploadResult = await uploadFileToStorage(
@@ -145,15 +181,15 @@ async function processFileField(
 
     if (!uploadResult.success) {
       console.error(`[file] upload-failed field=%s path=%s err=%s`, fieldMapping.source_field_code, filePath, uploadResult.error)
-      return null
+      return { shouldUpdate: false, path: null }
     }
 
     console.log(`[file] uploaded field=%s path=%s`, fieldMapping.source_field_code, uploadResult.path || filePath)
-    return uploadResult.path || null
+    return { shouldUpdate: true, path: uploadResult.path || null }
 
   } catch (error) {
     console.error(`[file] error field=%s err=%o`, fieldMapping.source_field_code, error)
-    return null
+    return { shouldUpdate: false, path: null }
   }
 }
 
@@ -669,9 +705,9 @@ export class KintoneDataSync {
             // Map fields using database configuration
             for (const fieldMapping of appMapping.field_mappings) {
               if (fieldMapping.source_field_type === 'FILE') {
-                const filePath = await processFileField(this.kintoneClient, record, fieldMapping, this.tenantId)
-                data[fieldMapping.target_field_id] = filePath
-                console.log(`[sync] file-mapped target_field=%s path=%s`, fieldMapping.target_field_id, filePath)
+                const fileResult = await processFileField(this.kintoneClient, record, fieldMapping, this.tenantId)
+                applyFileFieldProcessResult(data, fieldMapping.target_field_id, fileResult)
+                console.log(`[sync] file-mapped target_field=%s path=%s shouldUpdate=%s`, fieldMapping.target_field_id, fileResult.path, fileResult.shouldUpdate)
               } else {
                 // Regular field mapping
                 const sourceValue = record[fieldMapping.source_field_code]?.value
@@ -759,6 +795,7 @@ export class KintoneDataSync {
   private getTargetTable(targetAppType: string): string | null {
     const tableMap: Record<string, string> = {
       'people': 'people',
+      'people_image': 'people',
       'visas': 'visas',
       'meetings': 'meetings'
     }

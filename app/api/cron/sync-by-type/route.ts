@@ -1,6 +1,6 @@
 /**
  * Scheduled data synchronization endpoint by target app type
- * POST /api/cron/sync-by-type?type=people|visas
+ * POST /api/cron/sync-by-type?type=people|people_image|visas
  * This endpoint is called by Vercel Cron Jobs for scheduled syncs by type
  */
 
@@ -50,9 +50,9 @@ async function handleSyncByType(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const targetAppType = searchParams.get('type')
     
-    if (!targetAppType || !['people', 'visas'].includes(targetAppType)) {
+    if (!targetAppType || !['people', 'people_image', 'visas'].includes(targetAppType)) {
       return NextResponse.json(
-        { error: 'Invalid or missing type parameter. Must be "people" or "visas"' },
+        { error: 'Invalid or missing type parameter. Must be "people", "people_image", or "visas"' },
         { status: 400 }
       )
     }
