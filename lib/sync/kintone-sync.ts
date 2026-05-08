@@ -10,7 +10,7 @@ import { getCredential } from '@/lib/db/connectors'
 import { decryptJson } from '@/lib/security/crypto'
 // import { loadKintoneClientConfig } from '@/lib/db/credential-loader'
 import { SyncLogger, createSyncLogger } from './sync-logger'
-import { getUpdateKeysByConnector, buildConflictColumns, buildUpdateCondition } from './update-key-utils'
+import { getUpdateKeysByConnector, buildConflictColumns, buildUpdateCondition, getKintoneRecordValue } from './update-key-utils'
 import { uploadFileToStorage } from '@/lib/storage/file-uploader'
 import { getDataMappings, mapFieldValues, type DataMapping } from '@/lib/mappings/value-mapper'
 // import { getKintoneMapping, type KintoneMapping } from './mapping-loader'
@@ -207,7 +207,7 @@ async function processFileField(
     
     // Use the original filename (decode MIME Encoded-Word if necessary)
     const decodedName = decodeMimeEncodedWord(fileData.fileName) || fileData.fileName
-    const recordIdValue = record.$id?.value
+    const recordIdValue = getKintoneRecordValue(record, '$id')
     if (recordIdValue === undefined || recordIdValue === null) {
       console.log(`[file] no-record-id field=%s`, fieldMapping.source_field_code)
       return { shouldUpdate: false, path: null }

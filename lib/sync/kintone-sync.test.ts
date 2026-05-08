@@ -8,7 +8,7 @@ import {
   buildPeopleImageStoragePath,
   shouldSkipMissingUpdateTarget,
 } from './kintone-sync'
-import { buildUpdateCondition } from './update-key-utils'
+import { buildUpdateCondition, getKintoneRecordValue } from './update-key-utils'
 
 test('buildPeopleImageStoragePath keeps same filenames isolated per Kintone record', () => {
   const first = buildPeopleImageStoragePath({
@@ -82,6 +82,11 @@ test('buildUpdateCondition treats __ID__ mapping as Kintone record id', () => {
   )
 
   assert.deepEqual(condition, { external_id: '2447' })
+})
+
+test('getKintoneRecordValue resolves Kintone record id aliases consistently', () => {
+  assert.equal(getKintoneRecordValue({ $id: { value: '2447' } }, '$id'), '2447')
+  assert.equal(getKintoneRecordValue({ __ID__: { value: '2447' } }, '__ID__'), '2447')
 })
 
 test('people_image sync always skips records without an existing target person', () => {

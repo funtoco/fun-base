@@ -140,7 +140,7 @@ export function buildUpdateCondition(
   return condition
 }
 
-function getKintoneRecordValue(record: Record<string, any>, sourceFieldCode: string): any {
+export function getKintoneRecordValue(record: Record<string, any>, sourceFieldCode: string): any {
   if (sourceFieldCode === '$id' || sourceFieldCode === '__ID__') {
     return record.$id?.value ?? record.__ID__?.value
   }
