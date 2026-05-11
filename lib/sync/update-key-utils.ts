@@ -129,7 +129,7 @@ export function buildUpdateCondition(
   }
   
   for (const fieldMapping of updateKeys) {
-    const sourceValue = record[fieldMapping.source_field_code]?.value
+    const sourceValue = getKintoneRecordValue(record, fieldMapping.source_field_code)
     const targetKey = fieldMapping.target_field_id
     
     if (sourceValue !== undefined && sourceValue !== null) {
@@ -138,4 +138,16 @@ export function buildUpdateCondition(
   }
   
   return condition
+}
+
+export function getKintoneRecordValue(record: Record<string, any>, sourceFieldCode: string): any {
+  if (sourceFieldCode === '$id' || sourceFieldCode === '__ID__') {
+    return record.$id?.value ?? record.__ID__?.value
+  }
+
+  if (sourceFieldCode === '$revision' || sourceFieldCode === '__REVISION__') {
+    return record.$revision?.value ?? record.__REVISION__?.value
+  }
+
+  return record[sourceFieldCode]?.value
 }
