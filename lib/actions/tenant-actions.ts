@@ -67,19 +67,25 @@ export async function createTenantAction(data: CreateTenantData) {
   }
 
   try {
-    // Create tenant
-    const { data: tenant, error: tenantError } = await supabase
+    // Pre-generate the tenant id so we can insert without RETURNING.
+    // tenants has RLS enabled; the creator is not yet a member, so an implicit
+    // SELECT (via .select() / RETURNING) would fail the SELECT policy and
+    // surface as "new row violates row-level security policy". Inserting
+    // without RETURNING relies only on the INSERT WITH CHECK policy.
+    const tenantId = crypto.randomUUID()
+
+    const { error: tenantError } = await supabase
       .from('tenants')
       .insert({
+        id: tenantId,
         name: data.name,
         slug: data.slug,
         description: data.description,
         max_members: 50
       })
-      .select()
-      .single()
 
     if (tenantError) {
+      console.error('Insert tenant error:', tenantError)
       if (tenantError.code === '23505') {
         throw new Error('このスラッグは既に使用されています')
       }
@@ -91,7 +97,7 @@ export async function createTenantAction(data: CreateTenantData) {
       .from('user_tenants')
       .insert({
         user_id: user.id,
-        tenant_id: tenant.id,
+        tenant_id: tenantId,
         email: user.email,
         role: 'owner',
         status: 'active',
@@ -101,7 +107,7 @@ export async function createTenantAction(data: CreateTenantData) {
     if (userTenantError) {
       console.error('Error adding user to tenant:', userTenantError)
       // If user_tenants insertion fails, we should clean up the tenant
-      await supabase.from('tenants').delete().eq('id', tenant.id)
+      await supabase.from('tenants').delete().eq('id', tenantId)
       throw new Error('ユーザーをテナントに追加できませんでした')
     }
 
@@ -109,7 +115,7 @@ export async function createTenantAction(data: CreateTenantData) {
     const { error: updateError } = await supabase.auth.updateUser({
       data: {
         tenant_name: data.name,
-        tenant_id: tenant.id
+        tenant_id: tenantId
       }
     })
 
