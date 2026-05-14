@@ -3,9 +3,7 @@ import type { Person } from '@/lib/models'
 
 export async function getPeople(): Promise<Person[]> {
   const supabase = createClient()
-  
-  console.log('getPeople: Starting query...')
-  
+
   const { data, error } = await supabase
     .from('people')
     .select(`
@@ -13,19 +11,14 @@ export async function getPeople(): Promise<Person[]> {
       tenant:tenant_id (id, name)
     `)
     .order('created_at', { ascending: false })
-  
-  console.log('getPeople: Query result:', { data, error, count: data?.length })
-  
+
   if (error) {
     console.error('Error fetching people:', error)
     throw error
   }
-  
-  if (!data || data.length === 0) {
-    console.log('getPeople: No data found')
-    return []
-  }
-  
+
+  if (!data || data.length === 0) return []
+
   return data.map((person: any) => ({
       id: person.id,
       name: person.name,

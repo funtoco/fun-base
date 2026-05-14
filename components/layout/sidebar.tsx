@@ -4,14 +4,14 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, Users, FileText, FolderOpen, Calendar, Clock, CheckSquare } from "lucide-react"
+import { Home, Users, FileText, FolderOpen, Calendar, Clock, CheckSquare } from "lucide-react"
 
 const navigation = [
-  // {
-  //   name: "ダッシュボード",
-  //   href: "/dashboard",
-  //   icon: LayoutDashboard,
-  // },
+  {
+    name: "ホーム",
+    href: "/dashboard",
+    icon: Home,
+  },
   {
     name: "人材一覧",
     href: "/people",
