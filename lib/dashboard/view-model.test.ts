@@ -126,8 +126,34 @@ describe("buildDashboardViewModel", () => {
       count: 2,
       percentage: 67,
     })
-    expect(viewModel.attentionItems.some((item) => item.id === "recent-meeting")).toBe(true)
-    expect(viewModel.attentionItems.some((item) => item.id === "future-meeting")).toBe(false)
+    expect(viewModel.businessLocations).toEqual([
+      { name: "不明", count: 3, percentage: 100 },
+    ])
+  })
+
+  it("builds a business-location report from the person company field", () => {
+    const viewModel = buildDashboardViewModel({
+      people: [
+        basePerson({ id: "person-1", name: "A", company: "東京事業所" }),
+        basePerson({ id: "person-2", name: "B", company: "東京事業所" }),
+        basePerson({ id: "person-3", name: "C", company: "大阪事業所" }),
+        basePerson({ id: "person-4", name: "D" }),
+      ],
+      visas: [],
+      meetings: [],
+      supportActions: [],
+      announcements: [],
+      readAnnouncementIds: [],
+      now: new Date("2026-05-13T00:00:00.000Z"),
+    })
+
+    expect(viewModel.businessLocations).toEqual([
+      { name: "東京事業所", count: 2, percentage: 50 },
+      { name: "大阪事業所", count: 1, percentage: 25 },
+      { name: "不明", count: 1, percentage: 25 },
+    ])
+    expect(viewModel.otherBusinessLocationCount).toBe(0)
+    expect(viewModel.otherBusinessLocationPercentage).toBe(0)
   })
 
   it("handles empty people data without invalid percentages", () => {
@@ -145,5 +171,8 @@ describe("buildDashboardViewModel", () => {
     expect(viewModel.nationalities).toEqual([])
     expect(viewModel.otherNationalityCount).toBe(0)
     expect(viewModel.otherNationalityPercentage).toBe(0)
+    expect(viewModel.businessLocations).toEqual([])
+    expect(viewModel.otherBusinessLocationCount).toBe(0)
+    expect(viewModel.otherBusinessLocationPercentage).toBe(0)
   })
 })

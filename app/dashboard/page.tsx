@@ -15,6 +15,7 @@ import {
   Megaphone,
   ChevronRight,
   Briefcase,
+  Building2,
   UserCheck,
   UserX
 } from "lucide-react"
@@ -269,7 +270,7 @@ function DashboardContent({
         </Card>
       </div>
 
-      {/* Bottom section: Nationality Report + Attention List */}
+      {/* Bottom section: Nationality Report + Business Location Report */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Nationality Report */}
         <Card>
@@ -313,40 +314,64 @@ function DashboardContent({
           </CardContent>
         </Card>
 
-        {/* Attention List */}
+        {/* Business Location Report */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-500" />
-              <CardTitle className="text-base">要対応</CardTitle>
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base">事業所別レポート</CardTitle>
             </div>
-            <CardDescription className="text-xs">優先度の高い項目</CardDescription>
+            <CardDescription className="text-xs">所属先ごとの人数</CardDescription>
           </CardHeader>
           <CardContent>
-            {viewModel.attentionItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">対応が必要な項目はありません</p>
+            {viewModel.businessLocations.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">事業所データはまだありません</p>
             ) : (
-              <div className="space-y-2">
-                {viewModel.attentionItems.map((item) => (
-                  <Link
-                    key={`${item.type}-${item.id}`}
-                    href={`/people/${item.personId}`}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors -mx-2"
-                  >
-                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                      item.urgency === "high" ? "bg-red-500" :
-                      item.urgency === "medium" ? "bg-amber-500" :
-                      "bg-blue-500"
-                    }`} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs shrink-0">{item.label}</Badge>
-                        <span className="text-sm truncate">{item.personName}</span>
+              <div className="space-y-3">
+                {viewModel.businessLocations.map(({ name, count, percentage }) => {
+                  const content = (
+                    <>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm group-hover:text-primary transition-colors truncate">{name}</span>
+                        <span className="text-sm text-muted-foreground shrink-0">
+                          {count}人 ({percentage}%)
+                        </span>
                       </div>
-                    </div>
-                    <span className="text-xs text-muted-foreground shrink-0">{item.detail}</span>
-                  </Link>
-                ))}
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary/60 group-hover:bg-primary transition-colors rounded-full"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </>
+                  )
+
+                  if (name === "不明") {
+                    return (
+                      <div key={name} className="block">
+                        {content}
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <Link
+                      key={name}
+                      href={buildFilteredHref("/people", { company: name })}
+                      className="block group"
+                    >
+                      {content}
+                    </Link>
+                  )
+                })}
+                {viewModel.otherBusinessLocationCount > 0 && (
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <span className="text-sm text-muted-foreground">その他</span>
+                    <span className="text-sm text-muted-foreground">
+                      {viewModel.otherBusinessLocationCount}人 ({viewModel.otherBusinessLocationPercentage}%)
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

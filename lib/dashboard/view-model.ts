@@ -12,16 +12,6 @@ export const VISA_STATUS_ORDER: VisaStatus[] = [
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
-export type DashboardAttentionItem = {
-  id: string
-  type: "visa_expiry" | "residence_card_expiry" | "support" | "meeting"
-  label: string
-  personName: string
-  personId: string
-  detail: string
-  urgency: "high" | "medium" | "low"
-}
-
 export type DashboardViewModel = {
   kpis: {
     waitingCount: number
@@ -37,7 +27,9 @@ export type DashboardViewModel = {
   nationalities: Array<{ nationality: string; count: number; percentage: number }>
   otherNationalityCount: number
   otherNationalityPercentage: number
-  attentionItems: DashboardAttentionItem[]
+  businessLocations: Array<{ name: string; count: number; percentage: number }>
+  otherBusinessLocationCount: number
+  otherBusinessLocationPercentage: number
 }
 
 type BuildDashboardViewModelInput = {
@@ -57,18 +49,6 @@ function getDaysUntil(date: string, now: Date): number {
 function isWithinDays(date: string | undefined, days: number, now: Date): boolean {
   if (!date) return false
   return getDaysUntil(date, now) <= days
-}
-
-function formatDaysDetail(days: number): string {
-  if (days < 0) return `${Math.abs(days)}日超過`
-  if (days === 0) return "今日"
-  return `${days}日後`
-}
-
-function getUrgency(days: number): "high" | "medium" | "low" {
-  if (days <= 7) return "high"
-  if (days <= 14) return "medium"
-  return "low"
 }
 
 export function buildDashboardViewModel({
@@ -143,83 +123,20 @@ export function buildDashboardViewModel({
   }))
   const otherNationalityCount = sortedNationalities.slice(5).reduce((sum, [, count]) => sum + count, 0)
 
-  const attentionItems: DashboardAttentionItem[] = []
-
-  visas
-    .filter((visa) => isWithinDays(visa.expiryDate, 30, now))
-    .forEach((visa) => {
-      const person = personMap.get(visa.personId)
-      if (!person || !visa.expiryDate) return
-      const days = getDaysUntil(visa.expiryDate, now)
-      attentionItems.push({
-        id: visa.id,
-        type: "visa_expiry",
-        label: "ビザ期限",
-        personName: person.name,
-        personId: person.id,
-        detail: formatDaysDetail(days),
-        urgency: getUrgency(days),
-      })
-    })
-
-  people
-    .filter((person) => isWithinDays(person.residenceCardExpiryDate, 30, now))
-    .forEach((person) => {
-      if (!person.residenceCardExpiryDate) return
-      const days = getDaysUntil(person.residenceCardExpiryDate, now)
-      attentionItems.push({
-        id: person.id,
-        type: "residence_card_expiry",
-        label: "在留カード期限",
-        personName: person.name,
-        personId: person.id,
-        detail: formatDaysDetail(days),
-        urgency: getUrgency(days),
-      })
-    })
-
-  supportActions
-    .filter((action) => action.status === "open" || action.status === "in_progress")
-    .forEach((action) => {
-      const person = personMap.get(action.personId)
-      if (!person) return
-      attentionItems.push({
-        id: action.id,
-        type: "support",
-        label: action.category,
-        personName: person.name,
-        personId: person.id,
-        detail: action.status === "open" ? "未対応" : "対応中",
-        urgency: action.status === "open" ? "high" : "medium",
-      })
-    })
-
-  const sevenDaysAgo = new Date(now)
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-  meetings
-    .filter((meeting) => {
-      const meetingDate = new Date(meeting.datetime)
-      return meetingDate >= sevenDaysAgo && meetingDate <= now
-    })
-    .forEach((meeting) => {
-      const person = personMap.get(meeting.personId)
-      if (!person) return
-      attentionItems.push({
-        id: meeting.id,
-        type: "meeting",
-        label: "最近の面談",
-        personName: person.name,
-        personId: person.id,
-        detail: meeting.kind,
-        urgency: "low",
-      })
-    })
-
-  const urgencyOrder: Record<DashboardAttentionItem["urgency"], number> = {
-    high: 0,
-    medium: 1,
-    low: 2,
-  }
+  const businessLocationCounts = people.reduce<Record<string, number>>((acc, person) => {
+    const locationName = person.company || "不明"
+    acc[locationName] = (acc[locationName] || 0) + 1
+    return acc
+  }, {})
+  const sortedBusinessLocations = Object.entries(businessLocationCounts).sort((a, b) => b[1] - a[1])
+  const topBusinessLocations = sortedBusinessLocations.slice(0, 5).map(([name, count]) => ({
+    name,
+    count,
+    percentage: totalPeople > 0 ? Math.round((count / totalPeople) * 100) : 0,
+  }))
+  const otherBusinessLocationCount = sortedBusinessLocations
+    .slice(5)
+    .reduce((sum, [, count]) => sum + count, 0)
 
   return {
     kpis: {
@@ -237,8 +154,9 @@ export function buildDashboardViewModel({
     otherNationalityCount,
     otherNationalityPercentage:
       totalPeople > 0 ? Math.round((otherNationalityCount / totalPeople) * 100) : 0,
-    attentionItems: attentionItems
-      .sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency])
-      .slice(0, 8),
+    businessLocations: topBusinessLocations,
+    otherBusinessLocationCount,
+    otherBusinessLocationPercentage:
+      totalPeople > 0 ? Math.round((otherBusinessLocationCount / totalPeople) * 100) : 0,
   }
 }
