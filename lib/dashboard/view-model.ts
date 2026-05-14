@@ -124,7 +124,7 @@ export function buildDashboardViewModel({
   const otherNationalityCount = sortedNationalities.slice(5).reduce((sum, [, count]) => sum + count, 0)
 
   const businessLocationCounts = people.reduce<Record<string, number>>((acc, person) => {
-    const locationName = person.company || "不明"
+    const locationName = person.company || "未定"
     acc[locationName] = (acc[locationName] || 0) + 1
     return acc
   }, {})

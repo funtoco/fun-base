@@ -127,7 +127,7 @@ describe("buildDashboardViewModel", () => {
       percentage: 67,
     })
     expect(viewModel.businessLocations).toEqual([
-      { name: "不明", count: 3, percentage: 100 },
+      { name: "未定", count: 3, percentage: 100 },
     ])
   })
 
@@ -150,7 +150,7 @@ describe("buildDashboardViewModel", () => {
     expect(viewModel.businessLocations).toEqual([
       { name: "東京事業所", count: 2, percentage: 50 },
       { name: "大阪事業所", count: 1, percentage: 25 },
-      { name: "不明", count: 1, percentage: 25 },
+      { name: "未定", count: 1, percentage: 25 },
     ])
     expect(viewModel.otherBusinessLocationCount).toBe(0)
     expect(viewModel.otherBusinessLocationPercentage).toBe(0)

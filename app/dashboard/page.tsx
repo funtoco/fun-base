@@ -346,7 +346,7 @@ function DashboardContent({
                     </>
                   )
 
-                  if (name === "不明") {
+                  if (name === "未定") {
                     return (
                       <div key={name} className="block">
                         {content}
