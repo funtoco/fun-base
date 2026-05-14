@@ -156,6 +156,57 @@ describe("buildDashboardViewModel", () => {
     expect(viewModel.otherBusinessLocationPercentage).toBe(0)
   })
 
+  it("does not count already expired dates as expiring soon", () => {
+    const viewModel = buildDashboardViewModel({
+      people: [
+        basePerson({
+          id: "expired-person",
+          name: "Expired Person",
+          residenceCardExpiryDate: "2026-05-01",
+        }),
+        basePerson({
+          id: "future-person",
+          name: "Future Person",
+          residenceCardExpiryDate: "2026-05-20",
+        }),
+      ],
+      visas: [
+        baseVisa({
+          id: "expired-visa",
+          personId: "expired-person",
+          expiryDate: "2026-05-01",
+        }),
+      ],
+      meetings: [],
+      supportActions: [],
+      announcements: [],
+      readAnnouncementIds: [],
+      now: new Date("2026-05-13T00:00:00.000Z"),
+    })
+
+    expect(viewModel.kpis.expiringCount).toBe(1)
+  })
+
+  it("sorts date-times without timezone as UTC instants", () => {
+    const viewModel = buildDashboardViewModel({
+      people: [basePerson({ id: "person-1", name: "A" })],
+      visas: [],
+      meetings: [
+        baseMeeting({ id: "utc-meeting", datetime: "2026-05-13T16:00:00.000Z" }),
+        baseMeeting({ id: "timezone-less-meeting", datetime: "2026-05-14T00:00:00.000" }),
+      ],
+      supportActions: [],
+      announcements: [],
+      readAnnouncementIds: [],
+      now: new Date("2026-05-13T00:00:00.000Z"),
+    })
+
+    expect(viewModel.latestMeetings.map((meeting) => meeting.id)).toEqual([
+      "timezone-less-meeting",
+      "utc-meeting",
+    ])
+  })
+
   it("handles empty people data without invalid percentages", () => {
     const viewModel = buildDashboardViewModel({
       people: [],

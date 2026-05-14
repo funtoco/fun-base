@@ -11,6 +11,9 @@ export const VISA_STATUS_ORDER: VisaStatus[] = [
 ]
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+const DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T\s]/
+const TIMEZONE_SUFFIX_PATTERN = /(Z|[+-]\d{2}:?\d{2})$/i
 
 export type DashboardViewModel = {
   kpis: {
@@ -42,13 +45,28 @@ type BuildDashboardViewModelInput = {
   now?: Date
 }
 
+function parseDashboardDate(date: string): Date {
+  const dateOnlyMatch = date.match(DATE_ONLY_PATTERN)
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch
+    return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)))
+  }
+
+  if (DATE_TIME_PATTERN.test(date) && !TIMEZONE_SUFFIX_PATTERN.test(date)) {
+    return new Date(`${date.replace(" ", "T")}Z`)
+  }
+
+  return new Date(date)
+}
+
 function getDaysUntil(date: string, now: Date): number {
-  return Math.ceil((new Date(date).getTime() - now.getTime()) / MS_PER_DAY)
+  return Math.ceil((parseDashboardDate(date).getTime() - now.getTime()) / MS_PER_DAY)
 }
 
 function isWithinDays(date: string | undefined, days: number, now: Date): boolean {
   if (!date) return false
-  return getDaysUntil(date, now) <= days
+  const daysUntil = getDaysUntil(date, now)
+  return daysUntil >= 0 && daysUntil <= days
 }
 
 export function buildDashboardViewModel({
@@ -80,7 +98,7 @@ export function buildDashboardViewModel({
   }))
 
   const latestMeetings = [...meetings]
-    .sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime())
+    .sort((a, b) => parseDashboardDate(b.datetime).getTime() - parseDashboardDate(a.datetime).getTime())
     .slice(0, 5)
     .map((meeting) => ({ ...meeting, person: personMap.get(meeting.personId) }))
 
@@ -93,16 +111,16 @@ export function buildDashboardViewModel({
     .sort((a, b) => {
       const statusDiff = supportActionStatusOrder[a.status] - supportActionStatusOrder[b.status]
       if (statusDiff !== 0) return statusDiff
-      if (a.due && b.due) return new Date(a.due).getTime() - new Date(b.due).getTime()
+      if (a.due && b.due) return parseDashboardDate(a.due).getTime() - parseDashboardDate(b.due).getTime()
       if (a.due) return -1
       if (b.due) return 1
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      return parseDashboardDate(b.createdAt).getTime() - parseDashboardDate(a.createdAt).getTime()
     })
     .slice(0, 5)
     .map((action) => ({ ...action, person: personMap.get(action.personId) }))
 
   const latestAnnouncements = [...announcements]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .sort((a, b) => parseDashboardDate(b.createdAt).getTime() - parseDashboardDate(a.createdAt).getTime())
     .slice(0, 3)
     .map((announcement) => ({
       ...announcement,
