@@ -172,11 +172,14 @@ export type PersonDocument = {
 }
 
 // Kintone App 98: 就労_面談記録 types
+// timeInterview values from Kintone
 export type InterviewRecordType = "定期面談" | "日々の面談" | "家族面談"
 
-export type InterviewMethod = "対面" | "電話" | "ビデオ通話" | "チャット" | "その他"
+// interviewMethod values from Kintone
+export type InterviewMethod = "オンラインMTG" | "対面" | "電話" | "メール"
 
-export type InterviewStatus = "下書き" | "完了" | "確認待ち" | "承認済み"
+// Status values from Kintone App 98
+export type InterviewStatus = "Not started" | "完了" | "確認不要" | "クローズ" | "確認中" | "差戻(確認事項あり)"
 
 // tableStorageDaily parsed structure
 export type DailySupportEntry = {

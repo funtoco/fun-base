@@ -7,11 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { formatDate, formatDateTime } from "@/lib/utils"
-import { Search, Calendar, FileText, CheckSquare, Clock, Briefcase, ChevronRight } from "lucide-react"
+import { formatDate } from "@/lib/utils"
+import { Search, Calendar, FileText, CheckSquare, ChevronRight } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
-import { regularInterviews, dailySupportRecords } from "@/data/kintone-interviews"
+import { getRegularInterviews, getDailySupportRecords } from "@/lib/kintone-data"
 import type { Person, Visa, EnhancedActivityItem, TimelineActivityType } from "@/lib/models"
 import { cn } from "@/lib/utils"
 
@@ -23,7 +23,7 @@ const typeConfig: Record<TimelineActivityType, { icon: typeof Calendar; color: s
   daily_support: { icon: CheckSquare, color: "text-orange-600 bg-orange-100", label: "日々対応" },
 }
 
-// Timeline Item Component
+// Timeline Item Component - links to person detail page (not individual record detail)
 function TimelineItem({ item, isLast }: { item: EnhancedActivityItem; isLast: boolean }) {
   const config = typeConfig[item.type]
   const Icon = config.icon
@@ -38,7 +38,7 @@ function TimelineItem({ item, isLast }: { item: EnhancedActivityItem; isLast: bo
         {!isLast && <div className="w-px flex-1 bg-border mt-2 min-h-[2rem]" />}
       </div>
 
-      {/* Content */}
+      {/* Content - links to person detail page */}
       <Link href={item.link} className="flex-1 pb-6 group">
         <Card className="transition-colors hover:bg-muted/50">
           <CardContent className="p-4">
@@ -86,21 +86,97 @@ export default function TimelinePage() {
   const [dateFilter, setDateFilter] = useState<string>("all")
   const [people, setPeople] = useState<Person[]>([])
   const [visas, setVisas] = useState<Visa[]>([])
+  const [allActivities, setAllActivities] = useState<EnhancedActivityItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch data from Supabase
+  // Fetch data from Supabase and async data adapters
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true)
         setError(null)
-        const [peopleData, visasData] = await Promise.all([
+        
+        const [peopleData, visasData, regularInterviewsData, dailySupportData] = await Promise.all([
           getPeople(),
           getVisas(),
+          getRegularInterviews(),
+          getDailySupportRecords(),
         ])
+        
         setPeople(peopleData)
         setVisas(visasData)
+
+        // Build activities from all data sources
+        const activities: EnhancedActivityItem[] = []
+
+        // Add visa activities from status history dates
+        visasData.forEach((visa) => {
+          const person = peopleData.find((p) => p.id === visa.personId)
+          if (!person) return
+
+          const statusDates = [
+            { date: visa.documentPreparationDate, status: "書類準備中" },
+            { date: visa.documentCreationDate, status: "書類作成中" },
+            { date: visa.documentConfirmationDate, status: "書類確認中" },
+            { date: visa.applicationPreparationDate, status: "申請準備中" },
+            { date: visa.visaApplicationPreparationDate, status: "ビザ申請準備中" },
+            { date: visa.applicationDate, status: "申請中" },
+            { date: visa.additionalDocumentsDate, status: "追加書類" },
+            { date: visa.visaAcquiredDate, status: "ビザ取得済み" },
+          ]
+
+          statusDates.forEach(({ date, status }) => {
+            if (date) {
+              activities.push({
+                id: `visa-${visa.id}-${status}`,
+                type: "visa",
+                title: `ビザ ${visa.type}: ${status}`,
+                personId: person.id,
+                personName: person.name,
+                companyName: person.company,
+                datetime: date,
+                status,
+                link: `/people/${person.id}`, // Link to person detail
+              })
+            }
+          })
+        })
+
+        // Add regular interviews (定期面談)
+        regularInterviewsData.forEach((interview) => {
+          activities.push({
+            id: `interview-${interview.id}`,
+            type: "regular_interview",
+            title: `${interview.targetQuarter} 定期面談`,
+            personId: interview.personId,
+            personName: interview.personName,
+            companyName: interview.companyName,
+            datetime: interview.interviewDate,
+            status: interview.status,
+            link: `/people/${interview.personId}`, // Link to person detail
+          })
+        })
+
+        // Add daily support records (日々の面談)
+        dailySupportData.forEach((record) => {
+          const categories = record.dailyEntries.map((e) => e.shou).join(", ")
+          activities.push({
+            id: `support-${record.id}`,
+            type: "daily_support",
+            title: categories || "日々対応",
+            personId: record.personId,
+            personName: record.personName,
+            companyName: record.companyName,
+            datetime: record.supportDate,
+            status: record.status,
+            link: `/people/${record.personId}`, // Link to person detail
+          })
+        })
+
+        // Sort by datetime (newest first)
+        activities.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime())
+        setAllActivities(activities)
       } catch (err) {
         console.error("Error fetching timeline data:", err)
         setError(err instanceof Error ? err.message : "データの取得に失敗しました")
@@ -111,78 +187,6 @@ export default function TimelinePage() {
 
     fetchData()
   }, [])
-
-  // Generate full activity timeline with mixed activities
-  const allActivities = useMemo(() => {
-    const activities: EnhancedActivityItem[] = []
-
-    // Add visa activities from status history dates
-    visas.forEach((visa) => {
-      const person = people.find((p) => p.id === visa.personId)
-      if (!person) return
-
-      const statusDates = [
-        { date: visa.documentPreparationDate, status: "書類準備中" },
-        { date: visa.documentCreationDate, status: "書類作成中" },
-        { date: visa.documentConfirmationDate, status: "書類確認中" },
-        { date: visa.applicationPreparationDate, status: "申請準備中" },
-        { date: visa.visaApplicationPreparationDate, status: "ビザ申請準備中" },
-        { date: visa.applicationDate, status: "申請中" },
-        { date: visa.additionalDocumentsDate, status: "追加書類" },
-        { date: visa.visaAcquiredDate, status: "ビザ取得済み" },
-      ]
-
-      statusDates.forEach(({ date, status }) => {
-        if (date) {
-          activities.push({
-            id: `visa-${visa.id}-${status}`,
-            type: "visa",
-            title: `ビザ ${visa.type}: ${status}`,
-            personId: person.id,
-            personName: person.name,
-            companyName: person.company,
-            datetime: date,
-            status,
-            link: `/visas`,
-          })
-        }
-      })
-    })
-
-    // Add regular interviews (定期面談)
-    regularInterviews.forEach((interview) => {
-      activities.push({
-        id: `interview-${interview.id}`,
-        type: "regular_interview",
-        title: `${interview.targetQuarter} 定期面談`,
-        personId: interview.personId,
-        personName: interview.personName,
-        companyName: interview.companyName,
-        datetime: interview.interviewDate,
-        status: interview.status,
-        link: `/meetings`,
-      })
-    })
-
-    // Add daily support records (日々の面談)
-    dailySupportRecords.forEach((record) => {
-      const categories = record.dailyEntries.map((e) => e.shou).join(", ")
-      activities.push({
-        id: `support-${record.id}`,
-        type: "daily_support",
-        title: categories || "日々対応",
-        personId: record.personId,
-        personName: record.personName,
-        companyName: record.companyName,
-        datetime: record.supportDate,
-        status: record.status,
-        link: `/support`,
-      })
-    })
-
-    // Sort by datetime (newest first)
-    return activities.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime())
-  }, [people, visas])
 
   // Filter activities
   const filteredActivities = useMemo(() => {
@@ -339,7 +343,11 @@ export default function TimelinePage() {
             {filteredActivities.length === 0 ? (
               <Card>
                 <CardContent className="flex items-center justify-center py-8">
-                  <p className="text-muted-foreground">該当する活動がありません</p>
+                  <p className="text-muted-foreground">
+                    {allActivities.length === 0 
+                      ? "活動がありません" 
+                      : "該当する活動がありません"}
+                  </p>
                 </CardContent>
               </Card>
             ) : (

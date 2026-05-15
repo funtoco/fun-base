@@ -10,7 +10,7 @@ import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { getPersonById } from "@/lib/supabase/people-server"
 import { getVisasByPersonId } from "@/lib/supabase/visas-server"
 import { getPersonDocumentsByPersonId } from "@/lib/supabase/person-documents-server"
-import { getRegularInterviewsByPersonId, getDailySupportByPersonId } from "@/data/kintone-interviews"
+import { getRegularInterviewsByPersonId, getDailySupportRecordsByPersonId } from "@/lib/kintone-data"
 import { formatDate, formatDateTime } from "@/lib/utils"
 import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase } from "lucide-react"
 
@@ -28,9 +28,11 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
   const filteredVisas = personVisas.filter((item) => !excludedVisaStatuses.has(item.status))
   const visa = filteredVisas[0] // 最新のvisa (除外済み)
   
-  // Get Kintone interview data
-  const personRegularInterviews = getRegularInterviewsByPersonId(params.id)
-  const personDailySupportRecords = getDailySupportByPersonId(params.id)
+  // Get Kintone interview data (async data adapter)
+  const [personRegularInterviews, personDailySupportRecords] = await Promise.all([
+    getRegularInterviewsByPersonId(params.id),
+    getDailySupportRecordsByPersonId(params.id),
+  ])
 
   if (!person) {
     notFound()
@@ -112,6 +114,8 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
             personId={params.id}
             personVisas={personVisas}
             personDocuments={personDocuments}
+            regularInterviews={personRegularInterviews}
+            dailySupportRecords={personDailySupportRecords}
           />
         </div>
 
@@ -330,7 +334,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">取得日</span>
+                      <span className="text-sm text-muted-foreground">取得��</span>
                     </div>
                     <span className="text-sm">{formatDate(person.insuranceAcquiredDate)}</span>
                   </div>

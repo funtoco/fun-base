@@ -5,32 +5,34 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/ui/status-badge"
 import { Timeline } from "@/components/ui/timeline"
 import { formatDate } from "@/lib/utils"
 import type { Visa, PersonDocument, RegularInterview, DailySupportRecord } from "@/lib/models"
 import { PersonDocumentsTab } from "@/components/person-documents-tab"
-import { Calendar, Clock, MapPin, User, Building2, FileText, ExternalLink, ChevronDown, ChevronUp } from "lucide-react"
-import { getRegularInterviewsByPersonId, getDailySupportByPersonId } from "@/data/kintone-interviews"
+import { Calendar, Clock, MapPin, User, FileText, ExternalLink, ChevronDown, ChevronUp } from "lucide-react"
 
 interface PersonDetailTabsProps {
   personId: string
   personVisas: Visa[]
   personDocuments: PersonDocument[]
+  regularInterviews?: RegularInterview[]
+  dailySupportRecords?: DailySupportRecord[]
 }
 
-// Interview status color helper
+// Interview status color helper - aligned with Kintone App 98 statuses
 function getInterviewStatusColor(status: string): string {
   const statusColors: Record<string, string> = {
-    "下書き": "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
+    "Not started": "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
     "完了": "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
-    "確認待ち": "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
-    "承認済み": "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200",
+    "確認不要": "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200",
+    "クローズ": "bg-slate-200 text-slate-700 ring-1 ring-inset ring-slate-300",
+    "確認中": "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+    "差戻(確認事項あり)": "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200",
   }
   return statusColors[status] || "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"
 }
 
-// Category color helper for daily support
+// Category color helper for daily support (dai classification)
 function getCategoryColor(dai: string): string {
   const categoryColors: Record<string, string> = {
     "生活支援": "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200",
@@ -41,7 +43,7 @@ function getCategoryColor(dai: string): string {
   return categoryColors[dai] || "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"
 }
 
-// Regular Interview Card Component
+// Regular Interview Card Component - displays 企業提出用レポート as main content
 function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -138,7 +140,7 @@ function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
   )
 }
 
-// Daily Support Card Component
+// Daily Support Card Component - displays tableStorageDaily entries as main content
 function DailySupportCard({ record }: { record: DailySupportRecord }) {
   return (
     <Card>
@@ -188,7 +190,7 @@ function DailySupportCard({ record }: { record: DailySupportRecord }) {
         </div>
       </CardHeader>
       <CardContent>
-        {/* tableStorageDaily - Main Content */}
+        {/* tableStorageDaily - Main Content (dai/chu/shou categories) */}
         <div className="space-y-3">
           {record.dailyEntries.map((entry, index) => (
             <div
@@ -219,14 +221,16 @@ function DailySupportCard({ record }: { record: DailySupportRecord }) {
   )
 }
 
-export function PersonDetailTabs({ personId, personVisas, personDocuments }: PersonDetailTabsProps) {
+export function PersonDetailTabs({ 
+  personId, 
+  personVisas, 
+  personDocuments,
+  regularInterviews = [],
+  dailySupportRecords = [],
+}: PersonDetailTabsProps) {
   const [activeTab, setActiveTab] = useState("timeline")
 
-  // Get Kintone interview data for this person
-  const regularInterviews = getRegularInterviewsByPersonId(personId)
-  const dailySupportRecords = getDailySupportByPersonId(personId)
-
-  // Build timeline items
+  // Build timeline items from interviews and support records
   const baseTimelineItems = [
     ...regularInterviews.map((interview) => ({
       id: interview.id,

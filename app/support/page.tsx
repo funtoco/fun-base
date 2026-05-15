@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import { AuthGuard } from "@/components/auth-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { dailySupportRecords, getDailySupportCategories } from "@/data/kintone-interviews"
+import { getDailySupportRecords } from "@/lib/kintone-data"
 import { formatDate } from "@/lib/utils"
 import type { DailySupportRecord } from "@/lib/models"
 import { 
@@ -20,18 +20,20 @@ import {
   ExternalLink
 } from "lucide-react"
 
-// Interview status color helper
+// Interview status color helper - aligned with Kintone App 98 statuses
 function getInterviewStatusColor(status: string): string {
   const statusColors: Record<string, string> = {
-    "下書き": "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
+    "Not started": "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
     "完了": "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
-    "確認待ち": "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
-    "承認済み": "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200",
+    "確認不要": "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200",
+    "クローズ": "bg-slate-200 text-slate-700 ring-1 ring-inset ring-slate-300",
+    "確認中": "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+    "差戻(確認事項あり)": "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200",
   }
   return statusColors[status] || "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"
 }
 
-// Category color helper for daily support
+// Category color helper for daily support (dai classification from tableStorageDaily)
 function getCategoryColor(dai: string): string {
   const categoryColors: Record<string, string> = {
     "生活支援": "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200",
@@ -42,7 +44,7 @@ function getCategoryColor(dai: string): string {
   return categoryColors[dai] || "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"
 }
 
-// Support Record Card Component
+// Support Record Card Component - read-only, links to person detail or external Kintone
 function SupportRecordCard({ record }: { record: DailySupportRecord }) {
   return (
     <Card>
@@ -110,7 +112,7 @@ function SupportRecordCard({ record }: { record: DailySupportRecord }) {
         </div>
       </CardHeader>
       <CardContent>
-        {/* tableStorageDaily - Main Content */}
+        {/* tableStorageDaily - Main Content (dai/chu/shou categories) */}
         <div className="space-y-2">
           {record.dailyEntries.map((entry, index) => (
             <div
@@ -142,6 +144,8 @@ function SupportRecordCard({ record }: { record: DailySupportRecord }) {
 }
 
 export default function SupportPage() {
+  const [records, setRecords] = useState<DailySupportRecord[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [companyFilter, setCompanyFilter] = useState<string>("all")
   const [staffFilter, setStaffFilter] = useState<string>("all")
@@ -149,14 +153,30 @@ export default function SupportPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [dateFilter, setDateFilter] = useState<string>("all")
 
-  // Get unique filter options
+  // Fetch data from async data adapter
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true)
+        const data = await getDailySupportRecords()
+        setRecords(data)
+      } catch (err) {
+        console.error("Error fetching support records:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  // Get unique filter options from loaded data
   const filterOptions = useMemo(() => {
     const companies = new Set<string>()
     const staff = new Set<string>()
     const statuses = new Set<string>()
     const categories = new Set<string>()
 
-    dailySupportRecords.forEach((record) => {
+    records.forEach((record) => {
       if (record.companyName) companies.add(record.companyName)
       if (record.supportStaffName) staff.add(record.supportStaffName)
       statuses.add(record.status)
@@ -171,11 +191,11 @@ export default function SupportPage() {
       statuses: Array.from(statuses),
       categories: Array.from(categories).sort(),
     }
-  }, [])
+  }, [records])
 
   // Filter records
   const filteredRecords = useMemo(() => {
-    return dailySupportRecords.filter((record) => {
+    return records.filter((record) => {
       // Search filter
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase()
@@ -201,7 +221,7 @@ export default function SupportPage() {
       // Status filter
       if (statusFilter !== "all" && record.status !== statusFilter) return false
 
-      // Category filter
+      // Category filter (dai)
       if (categoryFilter !== "all") {
         const hasCategory = record.dailyEntries.some((entry) => entry.dai === categoryFilter)
         if (!hasCategory) return false
@@ -227,7 +247,7 @@ export default function SupportPage() {
 
       return true
     }).sort((a, b) => new Date(b.supportDate).getTime() - new Date(a.supportDate).getTime())
-  }, [searchTerm, companyFilter, staffFilter, statusFilter, categoryFilter, dateFilter])
+  }, [records, searchTerm, companyFilter, staffFilter, statusFilter, categoryFilter, dateFilter])
 
   // Statistics
   const stats = useMemo(() => {
@@ -349,10 +369,20 @@ export default function SupportPage() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Record List */}
           <div className="lg:col-span-3 space-y-4">
-            {filteredRecords.length === 0 ? (
+            {loading ? (
               <Card>
                 <CardContent className="flex items-center justify-center py-8">
-                  <p className="text-muted-foreground">該当するサポート記録がありません</p>
+                  <p className="text-muted-foreground">読み込み中...</p>
+                </CardContent>
+              </Card>
+            ) : filteredRecords.length === 0 ? (
+              <Card>
+                <CardContent className="flex items-center justify-center py-8">
+                  <p className="text-muted-foreground">
+                    {records.length === 0 
+                      ? "サポート記録がありません" 
+                      : "該当するサポート記録がありません"}
+                  </p>
                 </CardContent>
               </Card>
             ) : (
@@ -386,41 +416,45 @@ export default function SupportPage() {
             </Card>
 
             {/* Category Breakdown */}
-            <Card>
-              <CardHeader>
-                <CardTitle>カテゴリ別</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {Object.entries(stats.byCategory)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([category, count]) => (
-                    <div key={category} className="flex items-center justify-between text-sm">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(category)}`}>
-                        {category}
-                      </span>
-                      <Badge variant="outline">{count}</Badge>
-                    </div>
-                  ))}
-              </CardContent>
-            </Card>
+            {Object.keys(stats.byCategory).length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>カテゴリ別</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {Object.entries(stats.byCategory)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([category, count]) => (
+                      <div key={category} className="flex items-center justify-between text-sm">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(category)}`}>
+                          {category}
+                        </span>
+                        <Badge variant="outline">{count}</Badge>
+                      </div>
+                    ))}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Staff Breakdown */}
-            <Card>
-              <CardHeader>
-                <CardTitle>担当者別</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {Object.entries(stats.byStaff)
-                  .sort((a, b) => b[1] - a[1])
-                  .slice(0, 5)
-                  .map(([staff, count]) => (
-                    <div key={staff} className="flex items-center justify-between text-sm">
-                      <span>{staff}</span>
-                      <Badge variant="outline">{count}</Badge>
-                    </div>
-                  ))}
-              </CardContent>
-            </Card>
+            {Object.keys(stats.byStaff).length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>担当者別</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {Object.entries(stats.byStaff)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5)
+                    .map(([staff, count]) => (
+                      <div key={staff} className="flex items-center justify-between text-sm">
+                        <span>{staff}</span>
+                        <Badge variant="outline">{count}</Badge>
+                      </div>
+                    ))}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Quick Filters */}
             <Card>

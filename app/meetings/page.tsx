@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import { AuthGuard } from "@/components/auth-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { regularInterviews } from "@/data/kintone-interviews"
+import { getRegularInterviews } from "@/lib/kintone-data"
 import { formatDate } from "@/lib/utils"
 import type { RegularInterview } from "@/lib/models"
 import { 
@@ -24,18 +24,20 @@ import {
   ChevronUp
 } from "lucide-react"
 
-// Interview status color helper
+// Interview status color helper - aligned with Kintone App 98 statuses
 function getInterviewStatusColor(status: string): string {
   const statusColors: Record<string, string> = {
-    "下書き": "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
+    "Not started": "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
     "完了": "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
-    "確認待ち": "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
-    "承認済み": "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200",
+    "確認不要": "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200",
+    "クローズ": "bg-slate-200 text-slate-700 ring-1 ring-inset ring-slate-300",
+    "確認中": "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+    "差戻(確認事項あり)": "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200",
   }
   return statusColors[status] || "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"
 }
 
-// Interview Card Component
+// Interview Card Component - read-only, links to person detail or external Kintone
 function InterviewCard({ interview }: { interview: RegularInterview }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -112,7 +114,7 @@ function InterviewCard({ interview }: { interview: RegularInterview }) {
         </div>
       </CardHeader>
       <CardContent>
-        {/* 企業提出用レポート Preview */}
+        {/* 企業提出用レポート Preview - Main content for 定期面談 */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" />
@@ -146,6 +148,8 @@ function InterviewCard({ interview }: { interview: RegularInterview }) {
 }
 
 export default function MeetingsPage() {
+  const [interviews, setInterviews] = useState<RegularInterview[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [quarterFilter, setQuarterFilter] = useState<string>("all")
   const [companyFilter, setCompanyFilter] = useState<string>("all")
@@ -154,7 +158,23 @@ export default function MeetingsPage() {
   const [methodFilter, setMethodFilter] = useState<string>("all")
   const [dateFilter, setDateFilter] = useState<string>("all")
 
-  // Get unique filter options
+  // Fetch data from async data adapter
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true)
+        const data = await getRegularInterviews()
+        setInterviews(data)
+      } catch (err) {
+        console.error("Error fetching interviews:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  // Get unique filter options from loaded data
   const filterOptions = useMemo(() => {
     const quarters = new Set<string>()
     const companies = new Set<string>()
@@ -162,7 +182,7 @@ export default function MeetingsPage() {
     const statuses = new Set<string>()
     const methods = new Set<string>()
 
-    regularInterviews.forEach((interview) => {
+    interviews.forEach((interview) => {
       if (interview.targetQuarter) quarters.add(interview.targetQuarter)
       if (interview.companyName) companies.add(interview.companyName)
       if (interview.supportStaffName) staff.add(interview.supportStaffName)
@@ -177,11 +197,11 @@ export default function MeetingsPage() {
       statuses: Array.from(statuses),
       methods: Array.from(methods),
     }
-  }, [])
+  }, [interviews])
 
   // Filter interviews
   const filteredInterviews = useMemo(() => {
-    return regularInterviews.filter((interview) => {
+    return interviews.filter((interview) => {
       // Search filter
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase()
@@ -220,7 +240,7 @@ export default function MeetingsPage() {
 
       return true
     }).sort((a, b) => new Date(b.interviewDate).getTime() - new Date(a.interviewDate).getTime())
-  }, [searchTerm, quarterFilter, companyFilter, staffFilter, statusFilter, methodFilter, dateFilter])
+  }, [interviews, searchTerm, quarterFilter, companyFilter, staffFilter, statusFilter, methodFilter, dateFilter])
 
   // Statistics
   const stats = useMemo(() => {
@@ -308,7 +328,7 @@ export default function MeetingsPage() {
           </Select>
 
           <Select value={methodFilter} onValueChange={setMethodFilter}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-36">
               <SelectValue placeholder="面談方法" />
             </SelectTrigger>
             <SelectContent>
@@ -338,10 +358,20 @@ export default function MeetingsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Interview List */}
           <div className="lg:col-span-3 space-y-4">
-            {filteredInterviews.length === 0 ? (
+            {loading ? (
               <Card>
                 <CardContent className="flex items-center justify-center py-8">
-                  <p className="text-muted-foreground">該当する面談記録がありません</p>
+                  <p className="text-muted-foreground">読み込み中...</p>
+                </CardContent>
+              </Card>
+            ) : filteredInterviews.length === 0 ? (
+              <Card>
+                <CardContent className="flex items-center justify-center py-8">
+                  <p className="text-muted-foreground">
+                    {interviews.length === 0 
+                      ? "面談記録がありません" 
+                      : "該当する面談記録がありません"}
+                  </p>
                 </CardContent>
               </Card>
             ) : (
@@ -371,21 +401,23 @@ export default function MeetingsPage() {
             </Card>
 
             {/* Status Breakdown */}
-            <Card>
-              <CardHeader>
-                <CardTitle>ステータス別</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {Object.entries(stats.byStatus).map(([status, count]) => (
-                  <div key={status} className="flex items-center justify-between text-sm">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getInterviewStatusColor(status)}`}>
-                      {status}
-                    </span>
-                    <Badge variant="outline">{count}</Badge>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            {Object.keys(stats.byStatus).length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>ステータス別</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {Object.entries(stats.byStatus).map(([status, count]) => (
+                    <div key={status} className="flex items-center justify-between text-sm">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getInterviewStatusColor(status)}`}>
+                        {status}
+                      </span>
+                      <Badge variant="outline">{count}</Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Quick Filters */}
             <Card>
@@ -395,14 +427,14 @@ export default function MeetingsPage() {
               <CardContent className="space-y-2">
                 <button
                   onClick={() => {
-                    setStatusFilter("確認待ち")
+                    setStatusFilter("確認中")
                     setQuarterFilter("all")
                     setCompanyFilter("all")
                     setStaffFilter("all")
                   }}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
-                  確認待ちのみ表示
+                  確認中のみ表示
                 </button>
                 <button
                   onClick={() => {
