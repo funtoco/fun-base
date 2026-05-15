@@ -10,8 +10,7 @@ import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { getPersonById } from "@/lib/supabase/people-server"
 import { getVisasByPersonId } from "@/lib/supabase/visas-server"
 import { getPersonDocumentsByPersonId } from "@/lib/supabase/person-documents-server"
-import { allMeetings } from "@/data/meetings"
-import { supportActions } from "@/data/support-actions"
+import { getRegularInterviewsByPersonId, getDailySupportByPersonId } from "@/data/kintone-interviews"
 import { formatDate, formatDateTime } from "@/lib/utils"
 import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase } from "lucide-react"
 
@@ -28,8 +27,10 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
   const excludedVisaStatuses = new Set<string>(['内定[辞退•取消]•退職'])
   const filteredVisas = personVisas.filter((item) => !excludedVisaStatuses.has(item.status))
   const visa = filteredVisas[0] // 最新のvisa (除外済み)
-  const personMeetings = allMeetings.filter((m) => m.personId === params.id)
-  const personSupportActions = supportActions.filter((sa) => sa.personId === params.id)
+  
+  // Get Kintone interview data
+  const personRegularInterviews = getRegularInterviewsByPersonId(params.id)
+  const personDailySupportRecords = getDailySupportByPersonId(params.id)
 
   if (!person) {
     notFound()
@@ -109,8 +110,6 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
         <div className="lg:col-span-2">
           <PersonDetailTabs
             personId={params.id}
-            personMeetings={personMeetings}
-            personSupportActions={personSupportActions}
             personVisas={personVisas}
             personDocuments={personDocuments}
           />
@@ -402,12 +401,12 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">面談回数</span>
-                <Badge variant="secondary">{personMeetings.length}</Badge>
+                <span className="text-sm text-muted-foreground">定期面談回数</span>
+                <Badge variant="secondary">{personRegularInterviews.length}</Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Support件数</span>
-                <Badge variant="secondary">{personSupportActions.length}</Badge>
+                <span className="text-sm text-muted-foreground">サポート記録</span>
+                <Badge variant="secondary">{personDailySupportRecords.length}</Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">登録日</span>

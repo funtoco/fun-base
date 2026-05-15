@@ -23,25 +23,25 @@ const navigation = [
     icon: FileText,
   },
   {
+    name: "面談一覧",
+    href: "/meetings",
+    icon: Calendar,
+  },
+  {
+    name: "サポート記録",
+    href: "/support",
+    icon: CheckSquare,
+  },
+  {
+    name: "タイムライン",
+    href: "/timeline",
+    icon: Clock,
+  },
+  {
     name: "書類管理",
     href: "/documents",
     icon: FolderOpen,
   },
-  // {
-  //   name: "面談記録",
-  //   href: "/meetings",
-  //   icon: Calendar,
-  // },
-  // {
-  //   name: "タイムライン",
-  //   href: "/timeline",
-  //   icon: Clock,
-  // },
-  // {
-  //   name: "サポート記録",
-  //   href: "/actions",
-  //   icon: CheckSquare,
-  // },
 ]
 
 export function Sidebar() {
