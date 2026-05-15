@@ -1,14 +1,20 @@
 /**
  * Kintone App 98 Data Adapter
- * 
+ *
  * This module provides typed data adapter functions for Kintone App 98 (就労_面談記録).
  * These functions have the same shape as future Supabase/Kintone data fetching functions.
- * 
+ *
  * For MVP, these return empty arrays. When real data integration is added,
  * only the implementation needs to change - the interface stays the same.
  */
 
-import type { RegularInterview, DailySupportRecord, DailySupportEntry } from "@/lib/models"
+import type { CompanyConfirmationStatus, RegularInterview, DailySupportRecord, DailySupportEntry } from "@/lib/models"
+import {
+  DEFAULT_COMPANY_CONFIRMATION_STATUS,
+  ELIGIBLE_REGULAR_INTERVIEW_KINTONE_STATUS,
+  formatLocalDate,
+  formatLocalDateTime,
+} from "@/lib/interview-records"
 
 // ============================================================================
 // DATA ADAPTER FUNCTIONS
@@ -136,7 +142,7 @@ const sampleNotes = [
 /**
  * Generate sample regular interviews for a specific person
  * USE ONLY FOR DEVELOPMENT/TESTING
- * 
+ *
  * @param personId - The person's ID
  * @param personName - The person's name
  * @param companyName - Optional company name
@@ -148,7 +154,7 @@ export function generateSampleRegularInterviews(
   companyName?: string,
   count: number = 3
 ): RegularInterview[] {
-  const statuses: RegularInterview["status"][] = ["完了", "確認中", "Not started"]
+  const confirmationStatuses: CompanyConfirmationStatus[] = [DEFAULT_COMPANY_CONFIRMATION_STATUS, "確認完了"]
   const methods: RegularInterview["interviewMethod"][] = ["オンラインMTG", "対面", "電話", "メール"]
   const quarters = ["2025年Q2", "2025年Q1", "2024年Q4"]
   const supportStaff = ["田中", "佐藤", "鈴木"]
@@ -161,7 +167,7 @@ export function generateSampleRegularInterviews(
       personId,
       personName,
       companyName,
-      interviewDate: interviewDate.toISOString().split("T")[0],
+      interviewDate: formatLocalDate(interviewDate),
       startTime: "10:00",
       endTime: "11:00",
       targetQuarter: quarters[i % quarters.length],
@@ -169,10 +175,11 @@ export function generateSampleRegularInterviews(
       interviewMethod: methods[i % methods.length],
       interviewPlace: i % 2 === 0 ? "本社会議室" : "オンライン",
       supportStaffName: supportStaff[i % supportStaff.length],
-      status: statuses[i % statuses.length],
+      kintoneStatus: ELIGIBLE_REGULAR_INTERVIEW_KINTONE_STATUS,
+      companyConfirmationStatus: confirmationStatuses[i % confirmationStatuses.length],
       companyReport: sampleCompanyReports[i % sampleCompanyReports.length],
-      createdAt: interviewDate.toISOString(),
-      updatedAt: interviewDate.toISOString(),
+      createdAt: formatLocalDateTime(interviewDate),
+      updatedAt: formatLocalDateTime(interviewDate),
     }
   })
 }
@@ -180,7 +187,7 @@ export function generateSampleRegularInterviews(
 /**
  * Generate sample daily support records for a specific person
  * USE ONLY FOR DEVELOPMENT/TESTING
- * 
+ *
  * @param personId - The person's ID
  * @param personName - The person's name
  * @param companyName - Optional company name
@@ -192,12 +199,12 @@ export function generateSampleDailySupportRecords(
   companyName?: string,
   count: number = 5
 ): DailySupportRecord[] {
-  const statuses: DailySupportRecord["status"][] = ["完了", "確認中", "Not started"]
+  const confirmationStatuses: CompanyConfirmationStatus[] = [DEFAULT_COMPANY_CONFIRMATION_STATUS, "確認完了"]
   const supportStaff = ["田中", "佐藤", "鈴木", "高橋"]
 
   return Array.from({ length: Math.min(count, 5) }, (_, i) => {
     const supportDate = new Date(2025, 5, 15 - i * 2)
-    
+
     // Generate 1-3 daily entries per record
     const entryCount = 1 + (i % 3)
     const dailyEntries: DailySupportEntry[] = Array.from({ length: entryCount }, (_, j) => {
@@ -216,14 +223,15 @@ export function generateSampleDailySupportRecords(
       personId,
       personName,
       companyName,
-      supportDate: supportDate.toISOString().split("T")[0],
+      supportDate: formatLocalDate(supportDate),
       startTime: `${9 + (i % 8)}:00`,
       endTime: `${10 + (i % 8)}:00`,
       supportStaffName: supportStaff[i % supportStaff.length],
-      status: statuses[i % statuses.length],
+      kintoneStatus: ELIGIBLE_REGULAR_INTERVIEW_KINTONE_STATUS,
+      companyConfirmationStatus: confirmationStatuses[i % confirmationStatuses.length],
       dailyEntries,
-      createdAt: supportDate.toISOString(),
-      updatedAt: supportDate.toISOString(),
+      createdAt: formatLocalDateTime(supportDate),
+      updatedAt: formatLocalDateTime(supportDate),
     }
   })
 }

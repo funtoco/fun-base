@@ -18,7 +18,6 @@ import { cn } from "@/lib/utils"
 // Type icons and colors
 const typeConfig: Record<TimelineActivityType, { icon: typeof Calendar; color: string; label: string }> = {
   visa: { icon: FileText, color: "text-emerald-600 bg-emerald-100", label: "ビザ" },
-  meeting: { icon: Calendar, color: "text-blue-600 bg-blue-100", label: "定期面談" },
   regular_interview: { icon: Calendar, color: "text-blue-600 bg-blue-100", label: "定期面談" },
   daily_support: { icon: CheckSquare, color: "text-orange-600 bg-orange-100", label: "日々対応" },
 }
@@ -96,14 +95,14 @@ export default function TimelinePage() {
       try {
         setLoading(true)
         setError(null)
-        
+
         const [peopleData, visasData, regularInterviewsData, dailySupportData] = await Promise.all([
           getPeople(),
           getVisas(),
           getRegularInterviews(),
           getDailySupportRecords(),
         ])
-        
+
         setPeople(peopleData)
         setVisas(visasData)
 
@@ -153,7 +152,7 @@ export default function TimelinePage() {
             personName: interview.personName,
             companyName: interview.companyName,
             datetime: interview.interviewDate,
-            status: interview.status,
+            status: interview.companyConfirmationStatus,
             link: `/people/${interview.personId}`, // Link to person detail
           })
         })
@@ -169,7 +168,7 @@ export default function TimelinePage() {
             personName: record.personName,
             companyName: record.companyName,
             datetime: record.supportDate,
-            status: record.status,
+            status: record.companyConfirmationStatus,
             link: `/people/${record.personId}`, // Link to person detail
           })
         })
@@ -203,9 +202,7 @@ export default function TimelinePage() {
 
       // Type filter
       if (typeFilter !== "all") {
-        if (typeFilter === "meeting" && activity.type !== "regular_interview") return false
-        if (typeFilter === "support" && activity.type !== "daily_support") return false
-        if (typeFilter === "visa" && activity.type !== "visa") return false
+        if (activity.type !== typeFilter) return false
       }
 
       // Person filter
@@ -237,9 +234,9 @@ export default function TimelinePage() {
 
   // Activity type counts
   const typeCounts = useMemo(() => ({
-    meeting: filteredActivities.filter((a) => a.type === "regular_interview").length,
+    regularInterview: filteredActivities.filter((a) => a.type === "regular_interview").length,
     visa: filteredActivities.filter((a) => a.type === "visa").length,
-    support: filteredActivities.filter((a) => a.type === "daily_support").length,
+    dailySupport: filteredActivities.filter((a) => a.type === "daily_support").length,
   }), [filteredActivities])
 
   if (loading) {
@@ -301,8 +298,8 @@ export default function TimelinePage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">すべて</SelectItem>
-              <SelectItem value="meeting">定期面談</SelectItem>
-              <SelectItem value="support">日々対応</SelectItem>
+              <SelectItem value="regular_interview">定期面談</SelectItem>
+              <SelectItem value="daily_support">日々対応</SelectItem>
               <SelectItem value="visa">ビザ</SelectItem>
             </SelectContent>
           </Select>
@@ -344,8 +341,8 @@ export default function TimelinePage() {
               <Card>
                 <CardContent className="flex items-center justify-center py-8">
                   <p className="text-muted-foreground">
-                    {allActivities.length === 0 
-                      ? "活動がありません" 
+                    {allActivities.length === 0
+                      ? "活動がありません"
                       : "該当する活動がありません"}
                   </p>
                 </CardContent>
@@ -381,14 +378,14 @@ export default function TimelinePage() {
                     <Calendar className="h-4 w-4 text-blue-600" />
                     <span className="text-sm">定期面談</span>
                   </div>
-                  <Badge variant="secondary">{typeCounts.meeting}</Badge>
+                  <Badge variant="secondary">{typeCounts.regularInterview}</Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CheckSquare className="h-4 w-4 text-orange-600" />
                     <span className="text-sm">日々対応</span>
                   </div>
-                  <Badge variant="secondary">{typeCounts.support}</Badge>
+                  <Badge variant="secondary">{typeCounts.dailySupport}</Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -441,13 +438,13 @@ export default function TimelinePage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <button
-                  onClick={() => setTypeFilter("meeting")}
+                  onClick={() => setTypeFilter("regular_interview")}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
                   定期面談のみ表示
                 </button>
                 <button
-                  onClick={() => setTypeFilter("support")}
+                  onClick={() => setTypeFilter("daily_support")}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
                   日々対応のみ表示

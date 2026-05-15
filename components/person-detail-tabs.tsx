@@ -6,6 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Timeline } from "@/components/ui/timeline"
+import {
+  getCategoryColor,
+  getCompanyConfirmationStatusColor,
+  getKintoneInterviewRecordUrl,
+} from "@/lib/interview-records"
 import { formatDate } from "@/lib/utils"
 import type { Visa, PersonDocument, RegularInterview, DailySupportRecord } from "@/lib/models"
 import { PersonDocumentsTab } from "@/components/person-documents-tab"
@@ -17,30 +22,6 @@ interface PersonDetailTabsProps {
   personDocuments: PersonDocument[]
   regularInterviews?: RegularInterview[]
   dailySupportRecords?: DailySupportRecord[]
-}
-
-// Interview status color helper - aligned with Kintone App 98 statuses
-function getInterviewStatusColor(status: string): string {
-  const statusColors: Record<string, string> = {
-    "Not started": "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
-    "完了": "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
-    "確認不要": "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200",
-    "クローズ": "bg-slate-200 text-slate-700 ring-1 ring-inset ring-slate-300",
-    "確認中": "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
-    "差戻(確認事項あり)": "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200",
-  }
-  return statusColors[status] || "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"
-}
-
-// Category color helper for daily support (dai classification)
-function getCategoryColor(dai: string): string {
-  const categoryColors: Record<string, string> = {
-    "生活支援": "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200",
-    "就労支援": "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200",
-    "ビザ関連": "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
-    "その他": "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
-  }
-  return categoryColors[dai] || "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"
 }
 
 // Regular Interview Card Component - displays 企業提出用レポート as main content
@@ -56,8 +37,8 @@ function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
               <CardTitle className="text-base">
                 {interview.targetQuarter} 定期面談
               </CardTitle>
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getInterviewStatusColor(interview.status)}`}>
-                {interview.status}
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getCompanyConfirmationStatusColor(interview.companyConfirmationStatus)}`}>
+                {interview.companyConfirmationStatus}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
@@ -93,7 +74,7 @@ function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
               asChild
             >
               <a
-                href={`https://funtoco.cybozu.com/k/98/show#record=${interview.kintoneRecordId}`}
+                href={getKintoneInterviewRecordUrl(interview.kintoneRecordId)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -114,26 +95,24 @@ function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
           <div className={`bg-muted/30 rounded-lg p-4 text-sm whitespace-pre-wrap ${!expanded ? "line-clamp-6" : ""}`}>
             {interview.companyReport}
           </div>
-          {interview.companyReport.split("\n").length > 6 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setExpanded(!expanded)}
-              className="w-full"
-            >
-              {expanded ? (
-                <>
-                  <ChevronUp className="h-4 w-4 mr-1" />
-                  閉じる
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="h-4 w-4 mr-1" />
-                  全文を表示
-                </>
-              )}
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setExpanded(!expanded)}
+            className="w-full"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="h-4 w-4 mr-1" />
+                閉じる
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-4 w-4 mr-1" />
+                全文を表示
+              </>
+            )}
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -151,8 +130,8 @@ function DailySupportCard({ record }: { record: DailySupportRecord }) {
               <CardTitle className="text-base">
                 {formatDate(record.supportDate)} の対応
               </CardTitle>
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getInterviewStatusColor(record.status)}`}>
-                {record.status}
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getCompanyConfirmationStatusColor(record.companyConfirmationStatus)}`}>
+                {record.companyConfirmationStatus}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
@@ -178,7 +157,7 @@ function DailySupportCard({ record }: { record: DailySupportRecord }) {
               asChild
             >
               <a
-                href={`https://funtoco.cybozu.com/k/98/show#record=${record.kintoneRecordId}`}
+                href={getKintoneInterviewRecordUrl(record.kintoneRecordId)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -221,9 +200,9 @@ function DailySupportCard({ record }: { record: DailySupportRecord }) {
   )
 }
 
-export function PersonDetailTabs({ 
-  personId, 
-  personVisas, 
+export function PersonDetailTabs({
+  personId,
+  personVisas,
   personDocuments,
   regularInterviews = [],
   dailySupportRecords = [],
@@ -237,14 +216,14 @@ export function PersonDetailTabs({
       type: "meeting" as const,
       title: `${interview.targetQuarter} 定期面談`,
       datetime: interview.interviewDate,
-      status: interview.status,
+      status: interview.companyConfirmationStatus,
     })),
     ...dailySupportRecords.map((record) => ({
       id: record.id,
       type: "support" as const,
       title: `日々対応: ${record.dailyEntries.map(e => e.shou).join(", ")}`,
       datetime: record.supportDate,
-      status: record.status,
+      status: record.companyConfirmationStatus,
     })),
   ].sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime())
 

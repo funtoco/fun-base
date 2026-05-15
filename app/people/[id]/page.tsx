@@ -27,7 +27,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
   const excludedVisaStatuses = new Set<string>(['内定[辞退•取消]•退職'])
   const filteredVisas = personVisas.filter((item) => !excludedVisaStatuses.has(item.status))
   const visa = filteredVisas[0] // 最新のvisa (除外済み)
-  
+
   // Get Kintone interview data (async data adapter)
   const [personRegularInterviews, personDailySupportRecords] = await Promise.all([
     getRegularInterviewsByPersonId(params.id),
@@ -56,8 +56,8 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
       <Card>
         <CardContent className="p-6">
           <div className="flex items-start gap-6">
-            <PersonAvatar 
-              name={person.name} 
+            <PersonAvatar
+              name={person.name}
               imagePath={person.imagePath}
               size="xl"
             />

@@ -154,7 +154,7 @@ export function generateActivityTimeline(
         personName: person.name,
         datetime: action.updatedAt,
         status: action.status,
-        link: `/actions`,
+        link: `/support`,
       })
     }
   })

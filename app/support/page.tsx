@@ -9,40 +9,21 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getDailySupportRecords } from "@/lib/kintone-data"
+import {
+  getCategoryColor,
+  getCompanyConfirmationStatusColor,
+  getKintoneInterviewRecordUrl,
+} from "@/lib/interview-records"
 import { formatDate } from "@/lib/utils"
 import type { DailySupportRecord } from "@/lib/models"
-import { 
-  Search, 
-  Calendar, 
-  Clock, 
-  User, 
-  Building2, 
+import {
+  Search,
+  Calendar,
+  Clock,
+  User,
+  Building2,
   ExternalLink
 } from "lucide-react"
-
-// Interview status color helper - aligned with Kintone App 98 statuses
-function getInterviewStatusColor(status: string): string {
-  const statusColors: Record<string, string> = {
-    "Not started": "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
-    "完了": "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
-    "確認不要": "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200",
-    "クローズ": "bg-slate-200 text-slate-700 ring-1 ring-inset ring-slate-300",
-    "確認中": "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
-    "差戻(確認事項あり)": "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200",
-  }
-  return statusColors[status] || "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"
-}
-
-// Category color helper for daily support (dai classification from tableStorageDaily)
-function getCategoryColor(dai: string): string {
-  const categoryColors: Record<string, string> = {
-    "生活支援": "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200",
-    "就労支援": "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200",
-    "ビザ関連": "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
-    "その他": "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
-  }
-  return categoryColors[dai] || "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"
-}
 
 // Support Record Card Component - read-only, links to person detail or external Kintone
 function SupportRecordCard({ record }: { record: DailySupportRecord }) {
@@ -52,7 +33,7 @@ function SupportRecordCard({ record }: { record: DailySupportRecord }) {
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <Link 
+              <Link
                 href={`/people/${record.personId}`}
                 className="font-semibold text-base hover:text-primary hover:underline"
               >
@@ -61,8 +42,8 @@ function SupportRecordCard({ record }: { record: DailySupportRecord }) {
               {record.nickName && (
                 <span className="text-sm text-muted-foreground">({record.nickName})</span>
               )}
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getInterviewStatusColor(record.status)}`}>
-                {record.status}
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getCompanyConfirmationStatusColor(record.companyConfirmationStatus)}`}>
+                {record.companyConfirmationStatus}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
@@ -99,7 +80,7 @@ function SupportRecordCard({ record }: { record: DailySupportRecord }) {
                 asChild
               >
                 <a
-                  href={`https://funtoco.cybozu.com/k/98/show#record=${record.kintoneRecordId}`}
+                  href={getKintoneInterviewRecordUrl(record.kintoneRecordId)}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -149,7 +130,7 @@ export default function SupportPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [companyFilter, setCompanyFilter] = useState<string>("all")
   const [staffFilter, setStaffFilter] = useState<string>("all")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [confirmationStatusFilter, setConfirmationStatusFilter] = useState<string>("all")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [dateFilter, setDateFilter] = useState<string>("all")
 
@@ -173,13 +154,13 @@ export default function SupportPage() {
   const filterOptions = useMemo(() => {
     const companies = new Set<string>()
     const staff = new Set<string>()
-    const statuses = new Set<string>()
+    const confirmationStatuses = new Set<string>()
     const categories = new Set<string>()
 
     records.forEach((record) => {
       if (record.companyName) companies.add(record.companyName)
       if (record.supportStaffName) staff.add(record.supportStaffName)
-      statuses.add(record.status)
+      confirmationStatuses.add(record.companyConfirmationStatus)
       record.dailyEntries.forEach((entry) => {
         categories.add(entry.dai)
       })
@@ -188,7 +169,7 @@ export default function SupportPage() {
     return {
       companies: Array.from(companies).sort(),
       staff: Array.from(staff).sort(),
-      statuses: Array.from(statuses),
+      confirmationStatuses: Array.from(confirmationStatuses),
       categories: Array.from(categories).sort(),
     }
   }, [records])
@@ -203,7 +184,7 @@ export default function SupportPage() {
           record.personName.toLowerCase().includes(searchLower) ||
           (record.nickName?.toLowerCase().includes(searchLower)) ||
           (record.companyName?.toLowerCase().includes(searchLower)) ||
-          record.dailyEntries.some((entry) => 
+          record.dailyEntries.some((entry) =>
             entry.dai.toLowerCase().includes(searchLower) ||
             entry.chu.toLowerCase().includes(searchLower) ||
             entry.shou.toLowerCase().includes(searchLower) ||
@@ -218,8 +199,8 @@ export default function SupportPage() {
       // Staff filter
       if (staffFilter !== "all" && record.supportStaffName !== staffFilter) return false
 
-      // Status filter
-      if (statusFilter !== "all" && record.status !== statusFilter) return false
+      // Company confirmation status filter
+      if (confirmationStatusFilter !== "all" && record.companyConfirmationStatus !== confirmationStatusFilter) return false
 
       // Category filter (dai)
       if (categoryFilter !== "all") {
@@ -231,23 +212,25 @@ export default function SupportPage() {
       if (dateFilter !== "all") {
         const supportDate = new Date(record.supportDate)
         const now = new Date()
-        
+
+        const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+
         if (dateFilter === "today") {
           const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-          if (supportDate < today) return false
+          if (supportDate < today || supportDate >= tomorrow) return false
         } else if (dateFilter === "week") {
           const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-          if (supportDate < weekAgo) return false
+          if (supportDate < weekAgo || supportDate >= tomorrow) return false
         } else {
           const daysAgo = Number.parseInt(dateFilter)
           const filterDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
-          if (supportDate < filterDate) return false
+          if (supportDate < filterDate || supportDate >= tomorrow) return false
         }
       }
 
       return true
     }).sort((a, b) => new Date(b.supportDate).getTime() - new Date(a.supportDate).getTime())
-  }, [records, searchTerm, companyFilter, staffFilter, statusFilter, categoryFilter, dateFilter])
+  }, [records, searchTerm, companyFilter, staffFilter, confirmationStatusFilter, categoryFilter, dateFilter])
 
   // Statistics
   const stats = useMemo(() => {
@@ -350,13 +333,13 @@ export default function SupportPage() {
             </SelectContent>
           </Select>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={confirmationStatusFilter} onValueChange={setConfirmationStatusFilter}>
             <SelectTrigger className="w-32">
-              <SelectValue placeholder="Status" />
+              <SelectValue placeholder="企業確認" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">すべて</SelectItem>
-              {filterOptions.statuses.map((status) => (
+              {filterOptions.confirmationStatuses.map((status) => (
                 <SelectItem key={status} value={status}>{status}</SelectItem>
               ))}
             </SelectContent>
@@ -379,8 +362,8 @@ export default function SupportPage() {
               <Card>
                 <CardContent className="flex items-center justify-center py-8">
                   <p className="text-muted-foreground">
-                    {records.length === 0 
-                      ? "サポート記録がありません" 
+                    {records.length === 0
+                      ? "サポート記録がありません"
                       : "該当するサポート記録がありません"}
                   </p>
                 </CardContent>
@@ -498,7 +481,7 @@ export default function SupportPage() {
                     setSearchTerm("")
                     setCompanyFilter("all")
                     setStaffFilter("all")
-                    setStatusFilter("all")
+                    setConfirmationStatusFilter("all")
                     setCategoryFilter("all")
                     setDateFilter("all")
                   }}

@@ -48,7 +48,7 @@ export function Timeline({ items, className }: TimelineProps) {
         router.push("/visas")
         break
       case "support":
-        router.push("/actions")
+        router.push("/support")
         break
       default:
         router.push("/timeline")
