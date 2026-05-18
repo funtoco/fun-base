@@ -13,6 +13,13 @@ import { SyncLogger, createSyncLogger } from './sync-logger'
 import { getUpdateKeysByConnector, buildConflictColumns, buildUpdateCondition, getKintoneRecordValue } from './update-key-utils'
 import { uploadFileToStorage } from '@/lib/storage/file-uploader'
 import { getDataMappings, mapFieldValues, type DataMapping } from '@/lib/mappings/value-mapper'
+import {
+  buildInterviewRecordsQuery,
+  getInterviewRecordSourcePersonId,
+  getInterviewRecordSourceRecordId,
+  isImportableInterviewRecord,
+  transformInterviewRecord,
+} from './interview-record-transformer'
 // import { getKintoneMapping, type KintoneMapping } from './mapping-loader'
 
 // Types for field mappings
@@ -176,6 +183,30 @@ export function combineKintoneQueries(...queries: Array<string | null | undefine
     .map((query) => query?.trim())
     .filter((query): query is string => !!query)
     .join(' and ')
+}
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: any[] = []
+  let index = 0
+  const runners: Promise<void>[] = []
+  const runNext = async (): Promise<void> => {
+    if (index >= items.length) return
+    const current = index++
+    try {
+      const res = await worker(items[current])
+      results[current] = res
+    } finally {
+      await runNext()
+    }
+  }
+  const size = Math.min(limit, items.length)
+  for (let i = 0; i < size; i++) runners.push(runNext())
+  await Promise.all(runners)
+  return results as R[]
 }
 
 /**
@@ -444,7 +475,7 @@ export class KintoneDataSync {
   /**
    * Build Kintone query from filter conditions
    */
-  private async buildFilterQuery(appType: 'people' | 'visas', appMappingId?: string): Promise<string> {
+  private async buildFilterQuery(appType: string, appMappingId?: string): Promise<string> {
     try {
       let mappingId: string
 
@@ -684,31 +715,14 @@ export class KintoneDataSync {
       
       let totalSyncedCount = 0
 
-      // Simple concurrency limiter (promise pool)
-      const runWithConcurrency = async <T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> => {
-        const results: any[] = []
-        let index = 0
-        const runners: Promise<void>[] = []
-        const runNext = async (): Promise<void> => {
-          if (index >= items.length) return
-          const current = index++
-          try {
-            const res = await worker(items[current])
-            results[current] = res
-          } finally {
-            await runNext()
-          }
-        }
-        const size = Math.min(limit, items.length)
-        for (let i = 0; i < size; i++) runners.push(runNext())
-        await Promise.all(runners)
-        return results as R[]
+      if (targetAppType === 'interview_records') {
+        return this.syncInterviewRecords(appMappings, options)
       }
       
       // Process each mapping
       for (const appMapping of appMappings) {
         // Build query using only database filter conditions
-        const filterQuery = await this.buildFilterQuery(targetAppType as 'people' | 'visas', appMappingId)
+        const filterQuery = await this.buildFilterQuery(targetAppType, appMappingId)
         const recordIdQuery = buildRecordIdQuery(options)
         const query = combineKintoneQueries(filterQuery, recordIdQuery)
         console.log('[sync] kintone-query', {
@@ -882,6 +896,131 @@ export class KintoneDataSync {
     }
   }
 
+  private async syncInterviewRecords(
+    appMappings: AppMapping[],
+    options: KintoneSyncOptions = {}
+  ): Promise<number> {
+    let totalSyncedCount = 0
+
+    for (const appMapping of appMappings) {
+      const filterQuery = buildInterviewRecordsQuery(
+        await this.buildFilterQuery('interview_records', appMapping.id)
+      )
+      const recordIdQuery = buildRecordIdQuery(options)
+      const query = combineKintoneQueries(filterQuery, recordIdQuery)
+
+      console.log('[sync] interview-records:kintone-query', {
+        sourceAppId: appMapping.source_app_id,
+        appMappingId: appMapping.id,
+        query,
+      })
+
+      const records = await this.kintoneClient.getRecords(appMapping.source_app_id, query, [])
+      const CONCURRENCY_LIMIT = Number(process.env.SYNC_CONCURRENCY || 6)
+      let syncedCount = 0
+      let skippedNotImportable = 0
+      let skippedUnlinked = 0
+      let skippedAmbiguousPerson = 0
+
+      await runWithConcurrency(records, CONCURRENCY_LIMIT, async (record) => {
+        const sourceRecordId = getInterviewRecordSourceRecordId(record) || 'unknown'
+
+        if (!isImportableInterviewRecord(record)) {
+          skippedNotImportable++
+          console.log('[sync] interview-records:skip', {
+            sourceRecordId,
+            reason: 'not-importable',
+          })
+          return
+        }
+
+        const sourcePersonId = getInterviewRecordSourcePersonId(record)
+        if (!sourcePersonId) {
+          skippedUnlinked++
+          console.warn('[sync] interview-records:skip', {
+            sourceRecordId,
+            reason: 'missing-source-person-id',
+          })
+          return
+        }
+
+        const { data: people, error: personError } = await this.supabase
+          .from('people')
+          .select('id')
+          .eq('tenant_id', this.tenantId)
+          .eq('external_id', sourcePersonId)
+          .limit(2)
+
+        if (personError) {
+          console.error('[sync] interview-records:person-lookup-error', {
+            sourceRecordId,
+            error: personError.message,
+          })
+          throw personError
+        }
+
+        if (!people || people.length === 0) {
+          skippedUnlinked++
+          console.warn('[sync] interview-records:skip', {
+            sourceRecordId,
+            reason: 'person-not-found',
+          })
+          return
+        }
+
+        if (people.length > 1) {
+          skippedAmbiguousPerson++
+          console.warn('[sync] interview-records:skip', {
+            sourceRecordId,
+            reason: 'ambiguous-person',
+          })
+          return
+        }
+
+        const now = new Date().toISOString()
+        const payload = transformInterviewRecord(record, {
+          tenantId: this.tenantId,
+          personId: people[0].id,
+          sourceAppId: appMapping.source_app_id,
+        })
+
+        const { error: upsertError } = await this.supabase
+          .from('interview_records')
+          .upsert(
+            {
+              ...payload,
+              synced_at: now,
+              updated_at: now,
+            },
+            { onConflict: 'tenant_id,source_system,source_app_id,source_record_id' }
+          )
+
+        if (upsertError) {
+          console.error('[sync] interview-records:db-error', {
+            sourceRecordId,
+            error: upsertError.message,
+          })
+          throw upsertError
+        }
+
+        syncedCount++
+      })
+
+      console.log('[sync] interview-records:summary', {
+        appMappingId: appMapping.id,
+        fetched: records.length,
+        synced: syncedCount,
+        skippedNotImportable,
+        skippedUnlinked,
+        skippedAmbiguousPerson,
+      })
+
+      totalSyncedCount += syncedCount
+    }
+
+    return totalSyncedCount
+  }
+
   /**
    * Get target table name for app type
    */
@@ -890,7 +1029,8 @@ export class KintoneDataSync {
       'people': 'people',
       'people_image': 'people',
       'visas': 'visas',
-      'meetings': 'meetings'
+      'meetings': 'meetings',
+      'interview_records': 'interview_records'
     }
     return tableMap[targetAppType] || null
   }

@@ -15,7 +15,7 @@ export async function GET(
 ) {
   try {
     const appKey = params.app
-    const allow = new Set(['people', 'people_image', 'visas', 'meetings'])
+    const allow = new Set(['people', 'people_image', 'visas', 'meetings', 'interview_records'])
     if (!allow.has(appKey)) {
       return NextResponse.json({ error: 'Table not allowed' }, { status: 400 })
     }
@@ -53,4 +53,3 @@ export async function GET(
     return NextResponse.json({ error: 'Failed to fetch schema' }, { status: 500 })
   }
 }
-

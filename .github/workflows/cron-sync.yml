@@ -14,6 +14,7 @@ on:
         options:
           - people
           - visas
+          - interview_records
           - both
 
 jobs:
@@ -72,3 +73,31 @@ jobs:
         run: |
           echo "🕐 Starting visas sync at $(date)"
           pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type visas
+
+  sync-interview-records:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.sync_type == 'interview_records'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    environment: Production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync Interview Records
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          echo "🕐 Starting interview_records sync at $(date)"
+          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type interview_records
