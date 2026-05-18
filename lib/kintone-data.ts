@@ -2,44 +2,78 @@
  * Kintone App 98 Data Adapter
  *
  * This module provides typed data adapter functions for Kintone App 98 (就労_面談記録).
- * These functions have the same shape as future Supabase/Kintone data fetching functions.
- *
- * For MVP, these return empty arrays. When real data integration is added,
- * only the implementation needs to change - the interface stays the same.
+ * It reads normalized records from the FunBase `interview_records` table.
  */
 
 import type { CompanyConfirmationStatus, RegularInterview, DailySupportRecord, DailySupportEntry } from "@/lib/models"
+import { createClient } from "@/lib/supabase/client"
 import {
   DEFAULT_COMPANY_CONFIRMATION_STATUS,
   ELIGIBLE_REGULAR_INTERVIEW_KINTONE_STATUS,
   formatLocalDate,
   formatLocalDateTime,
 } from "@/lib/interview-records"
+import {
+  isMissingInterviewRecordsTableError,
+  mapInterviewRecordToDailySupportRecord,
+  mapInterviewRecordToRegularInterview,
+  type InterviewRecordRow,
+} from "@/lib/interview-record-mapper"
 
 // ============================================================================
 // DATA ADAPTER FUNCTIONS
-// These functions define the interface for fetching Kintone interview data.
-// Currently return empty arrays - will be replaced with real data fetching.
+// These functions define the interface for fetching normalized interview data.
 // ============================================================================
+
+function handleInterviewRecordsFetchError<T>(context: string, error: { code?: string; message?: string }): T[] {
+  if (isMissingInterviewRecordsTableError(error)) {
+    console.warn(`[interview-records] ${context}: interview_records table is not ready yet`)
+    return []
+  }
+
+  console.error(`[interview-records] ${context}:`, error)
+  throw error
+}
 
 /**
  * Get all regular interview records (定期面談)
  * Main content: 企業提出用レポート (companyReport)
  */
 export async function getRegularInterviews(): Promise<RegularInterview[]> {
-  // TODO: Replace with real Kintone/Supabase data fetching
-  // Example: return await supabase.from('regular_interviews').select('*')
-  return []
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("interview_records")
+    .select("*, person:people(id, name, kana)")
+    .eq("record_type", "regular_interview")
+    .order("interview_date", { ascending: false })
+    .order("source_record_id", { ascending: false })
+
+  if (error) {
+    return handleInterviewRecordsFetchError("fetch regular interviews", error)
+  }
+
+  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToRegularInterview)
 }
 
 /**
  * Get regular interview records for a specific person
- * @param personId - The HRID from Kintone
+ * @param personId - The FunBase people.id
  */
 export async function getRegularInterviewsByPersonId(personId: string): Promise<RegularInterview[]> {
-  // TODO: Replace with real Kintone/Supabase data fetching
-  // Example: return await supabase.from('regular_interviews').select('*').eq('person_id', personId)
-  return []
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("interview_records")
+    .select("*")
+    .eq("record_type", "regular_interview")
+    .eq("person_id", personId)
+    .order("interview_date", { ascending: false })
+    .order("source_record_id", { ascending: false })
+
+  if (error) {
+    return handleInterviewRecordsFetchError("fetch regular interviews by person", error)
+  }
+
+  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToRegularInterview)
 }
 
 /**
@@ -47,17 +81,40 @@ export async function getRegularInterviewsByPersonId(personId: string): Promise<
  * Main content: tableStorageDaily entries (dailyEntries)
  */
 export async function getDailySupportRecords(): Promise<DailySupportRecord[]> {
-  // TODO: Replace with real Kintone/Supabase data fetching
-  return []
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("interview_records")
+    .select("*, person:people(id, name, kana)")
+    .eq("record_type", "daily_support")
+    .order("interview_date", { ascending: false })
+    .order("source_record_id", { ascending: false })
+
+  if (error) {
+    return handleInterviewRecordsFetchError("fetch daily support records", error)
+  }
+
+  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToDailySupportRecord)
 }
 
 /**
  * Get daily support records for a specific person
- * @param personId - The HRID from Kintone
+ * @param personId - The FunBase people.id
  */
 export async function getDailySupportRecordsByPersonId(personId: string): Promise<DailySupportRecord[]> {
-  // TODO: Replace with real Kintone/Supabase data fetching
-  return []
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("interview_records")
+    .select("*")
+    .eq("record_type", "daily_support")
+    .eq("person_id", personId)
+    .order("interview_date", { ascending: false })
+    .order("source_record_id", { ascending: false })
+
+  if (error) {
+    return handleInterviewRecordsFetchError("fetch daily support records by person", error)
+  }
+
+  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToDailySupportRecord)
 }
 
 /**
@@ -65,8 +122,17 @@ export async function getDailySupportRecordsByPersonId(personId: string): Promis
  * Used for filter options in the UI
  */
 export async function getDailySupportCategories(): Promise<{ dai: string; chu: string; shou: string }[]> {
-  // TODO: Replace with real data fetching or static category list from Kintone
-  return []
+  const records = await getDailySupportRecords()
+  const categories = new Map<string, { dai: string; chu: string; shou: string }>()
+
+  records.forEach((record) => {
+    record.dailyEntries.forEach((entry) => {
+      const key = `${entry.dai}:${entry.chu}:${entry.shou}`
+      categories.set(key, { dai: entry.dai, chu: entry.chu, shou: entry.shou })
+    })
+  })
+
+  return Array.from(categories.values())
 }
 
 // ============================================================================

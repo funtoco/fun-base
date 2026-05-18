@@ -10,7 +10,7 @@ import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { getPersonById } from "@/lib/supabase/people-server"
 import { getVisasByPersonId } from "@/lib/supabase/visas-server"
 import { getPersonDocumentsByPersonId } from "@/lib/supabase/person-documents-server"
-import { getRegularInterviewsByPersonId, getDailySupportRecordsByPersonId } from "@/lib/kintone-data"
+import { getRegularInterviewsByPersonId, getDailySupportRecordsByPersonId } from "@/lib/kintone-data-server"
 import { formatDate, formatDateTime } from "@/lib/utils"
 import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase } from "lucide-react"
 
