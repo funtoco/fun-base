@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { getDailySupportRecords } from "@/lib/kintone-data"
 import {
   getCategoryColor,
-  getCompanyConfirmationStatusColor,
   getKintoneInterviewRecordUrl,
 } from "@/lib/interview-records"
 import { formatDate } from "@/lib/utils"
@@ -42,9 +41,6 @@ function SupportRecordCard({ record }: { record: DailySupportRecord }) {
               {record.nickName && (
                 <span className="text-sm text-muted-foreground">({record.nickName})</span>
               )}
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getCompanyConfirmationStatusColor(record.companyConfirmationStatus)}`}>
-                {record.companyConfirmationStatus}
-              </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
@@ -131,7 +127,6 @@ export default function SupportPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [companyFilter, setCompanyFilter] = useState<string>("all")
   const [staffFilter, setStaffFilter] = useState<string>("all")
-  const [confirmationStatusFilter, setConfirmationStatusFilter] = useState<string>("all")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [dateFilter, setDateFilter] = useState<string>("all")
 
@@ -157,13 +152,11 @@ export default function SupportPage() {
   const filterOptions = useMemo(() => {
     const companies = new Set<string>()
     const staff = new Set<string>()
-    const confirmationStatuses = new Set<string>()
     const categories = new Set<string>()
 
     records.forEach((record) => {
       if (record.companyName) companies.add(record.companyName)
       if (record.supportStaffName) staff.add(record.supportStaffName)
-      confirmationStatuses.add(record.companyConfirmationStatus)
       record.dailyEntries.forEach((entry) => {
         categories.add(entry.dai)
       })
@@ -172,7 +165,6 @@ export default function SupportPage() {
     return {
       companies: Array.from(companies).sort(),
       staff: Array.from(staff).sort(),
-      confirmationStatuses: Array.from(confirmationStatuses),
       categories: Array.from(categories).sort(),
     }
   }, [records])
@@ -202,9 +194,6 @@ export default function SupportPage() {
       // Staff filter
       if (staffFilter !== "all" && record.supportStaffName !== staffFilter) return false
 
-      // Company confirmation status filter
-      if (confirmationStatusFilter !== "all" && record.companyConfirmationStatus !== confirmationStatusFilter) return false
-
       // Category filter (dai)
       if (categoryFilter !== "all") {
         const hasCategory = record.dailyEntries.some((entry) => entry.dai === categoryFilter)
@@ -233,7 +222,7 @@ export default function SupportPage() {
 
       return true
     }).sort((a, b) => new Date(b.supportDate).getTime() - new Date(a.supportDate).getTime())
-  }, [records, searchTerm, companyFilter, staffFilter, confirmationStatusFilter, categoryFilter, dateFilter])
+  }, [records, searchTerm, companyFilter, staffFilter, categoryFilter, dateFilter])
 
   // Statistics
   const stats = useMemo(() => {
@@ -332,18 +321,6 @@ export default function SupportPage() {
               <SelectItem value="all">すべて</SelectItem>
               {filterOptions.categories.map((category) => (
                 <SelectItem key={category} value={category}>{category}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={confirmationStatusFilter} onValueChange={setConfirmationStatusFilter}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="企業確認" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {filterOptions.confirmationStatuses.map((status) => (
-                <SelectItem key={status} value={status}>{status}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -490,7 +467,6 @@ export default function SupportPage() {
                     setSearchTerm("")
                     setCompanyFilter("all")
                     setStaffFilter("all")
-                    setConfirmationStatusFilter("all")
                     setCategoryFilter("all")
                     setDateFilter("all")
                   }}

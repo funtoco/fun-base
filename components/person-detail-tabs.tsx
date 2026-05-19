@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Timeline } from "@/components/ui/timeline"
 import {
   getCategoryColor,
-  getCompanyConfirmationStatusColor,
   getKintoneInterviewRecordUrl,
 } from "@/lib/interview-records"
 import { formatDate } from "@/lib/utils"
@@ -48,9 +47,6 @@ function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
               <CardTitle className="text-base">
                 {interview.targetQuarter} 定期面談
               </CardTitle>
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getCompanyConfirmationStatusColor(interview.companyConfirmationStatus)}`}>
-                {interview.companyConfirmationStatus}
-              </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
@@ -141,9 +137,6 @@ function DailySupportCard({ record }: { record: DailySupportRecord }) {
               <CardTitle className="text-base">
                 {formatDate(record.supportDate)} の対応
               </CardTitle>
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getCompanyConfirmationStatusColor(record.companyConfirmationStatus)}`}>
-                {record.companyConfirmationStatus}
-              </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
               {record.startTime && record.endTime && (
@@ -227,14 +220,12 @@ export function PersonDetailTabs({
       type: "meeting" as const,
       title: `${interview.targetQuarter} 定期面談`,
       datetime: interview.interviewDate,
-      status: interview.companyConfirmationStatus,
     })),
     ...dailySupportRecords.map((record) => ({
       id: record.id,
       type: "support" as const,
       title: getDailySupportTimelineTitle(record),
       datetime: record.supportDate,
-      status: record.companyConfirmationStatus,
     })),
   ].sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime())
 

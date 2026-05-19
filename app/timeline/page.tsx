@@ -152,7 +152,6 @@ export default function TimelinePage() {
             personName: interview.personName,
             companyName: interview.companyName,
             datetime: interview.interviewDate,
-            status: interview.companyConfirmationStatus,
             link: `/people/${interview.personId}`, // Link to person detail
           })
         })
@@ -168,7 +167,6 @@ export default function TimelinePage() {
             personName: record.personName,
             companyName: record.companyName,
             datetime: record.supportDate,
-            status: record.companyConfirmationStatus,
             link: `/people/${record.personId}`, // Link to person detail
           })
         })

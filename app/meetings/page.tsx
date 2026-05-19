@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getRegularInterviews } from "@/lib/kintone-data"
-import { getCompanyConfirmationStatusColor, getKintoneInterviewRecordUrl } from "@/lib/interview-records"
+import { getKintoneInterviewRecordUrl } from "@/lib/interview-records"
 import { formatDate } from "@/lib/utils"
 import type { RegularInterview } from "@/lib/models"
 import {
@@ -45,9 +45,6 @@ function InterviewCard({ interview }: { interview: RegularInterview }) {
                 <span className="text-sm text-muted-foreground">({interview.nickName})</span>
               )}
               <Badge variant="outline">{interview.targetQuarter}</Badge>
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getCompanyConfirmationStatusColor(interview.companyConfirmationStatus)}`}>
-                {interview.companyConfirmationStatus}
-              </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
@@ -142,7 +139,6 @@ export default function MeetingsPage() {
   const [quarterFilter, setQuarterFilter] = useState<string>("all")
   const [companyFilter, setCompanyFilter] = useState<string>("all")
   const [staffFilter, setStaffFilter] = useState<string>("all")
-  const [confirmationStatusFilter, setConfirmationStatusFilter] = useState<string>("all")
   const [methodFilter, setMethodFilter] = useState<string>("all")
   const [dateFilter, setDateFilter] = useState<string>("all")
 
@@ -167,14 +163,12 @@ export default function MeetingsPage() {
     const quarters = new Set<string>()
     const companies = new Set<string>()
     const staff = new Set<string>()
-    const confirmationStatuses = new Set<string>()
     const methods = new Set<string>()
 
     interviews.forEach((interview) => {
       if (interview.targetQuarter) quarters.add(interview.targetQuarter)
       if (interview.companyName) companies.add(interview.companyName)
       if (interview.supportStaffName) staff.add(interview.supportStaffName)
-      confirmationStatuses.add(interview.companyConfirmationStatus)
       if (interview.interviewMethod) methods.add(interview.interviewMethod)
     })
 
@@ -182,7 +176,6 @@ export default function MeetingsPage() {
       quarters: Array.from(quarters).sort().reverse(),
       companies: Array.from(companies).sort(),
       staff: Array.from(staff).sort(),
-      confirmationStatuses: Array.from(confirmationStatuses),
       methods: Array.from(methods),
     }
   }, [interviews])
@@ -211,9 +204,6 @@ export default function MeetingsPage() {
       // Staff filter
       if (staffFilter !== "all" && interview.supportStaffName !== staffFilter) return false
 
-      // Company confirmation status filter
-      if (confirmationStatusFilter !== "all" && interview.companyConfirmationStatus !== confirmationStatusFilter) return false
-
       // Method filter
       if (methodFilter !== "all" && interview.interviewMethod !== methodFilter) return false
 
@@ -228,7 +218,7 @@ export default function MeetingsPage() {
 
       return true
     }).sort((a, b) => new Date(b.interviewDate).getTime() - new Date(a.interviewDate).getTime())
-  }, [interviews, searchTerm, quarterFilter, companyFilter, staffFilter, confirmationStatusFilter, methodFilter, dateFilter])
+  }, [interviews, searchTerm, quarterFilter, companyFilter, staffFilter, methodFilter, dateFilter])
 
   // Statistics
   const stats = useMemo(() => {
@@ -238,12 +228,7 @@ export default function MeetingsPage() {
       return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
     }).length
 
-    const byConfirmationStatus = filteredInterviews.reduce((acc, i) => {
-      acc[i.companyConfirmationStatus] = (acc[i.companyConfirmationStatus] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-
-    return { thisMonth, byConfirmationStatus }
+    return { thisMonth }
   }, [filteredInterviews])
 
   return (
@@ -299,18 +284,6 @@ export default function MeetingsPage() {
               <SelectItem value="all">すべて</SelectItem>
               {filterOptions.staff.map((staff) => (
                 <SelectItem key={staff} value={staff}>{staff}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={confirmationStatusFilter} onValueChange={setConfirmationStatusFilter}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="企業確認" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {filterOptions.confirmationStatuses.map((status) => (
-                <SelectItem key={status} value={status}>{status}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -388,25 +361,6 @@ export default function MeetingsPage() {
               </CardContent>
             </Card>
 
-            {/* Company Confirmation Breakdown */}
-            {Object.keys(stats.byConfirmationStatus).length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>企業確認別</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {Object.entries(stats.byConfirmationStatus).map(([status, count]) => (
-                    <div key={status} className="flex items-center justify-between text-sm">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCompanyConfirmationStatusColor(status)}`}>
-                        {status}
-                      </span>
-                      <Badge variant="outline">{count}</Badge>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
             {/* Quick Filters */}
             <Card>
               <CardHeader>
@@ -415,21 +369,9 @@ export default function MeetingsPage() {
               <CardContent className="space-y-2">
                 <button
                   onClick={() => {
-                    setConfirmationStatusFilter("確認待ち")
-                    setQuarterFilter("all")
-                    setCompanyFilter("all")
-                    setStaffFilter("all")
-                  }}
-                  className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
-                >
-                  確認待ちのみ表示
-                </button>
-                <button
-                  onClick={() => {
                     const now = new Date()
                     const currentQuarter = `${now.getFullYear()}年Q${Math.ceil((now.getMonth() + 1) / 3)}`
                     setQuarterFilter(currentQuarter)
-                    setConfirmationStatusFilter("all")
                   }}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
@@ -441,7 +383,6 @@ export default function MeetingsPage() {
                     setQuarterFilter("all")
                     setCompanyFilter("all")
                     setStaffFilter("all")
-                    setConfirmationStatusFilter("all")
                     setMethodFilter("all")
                     setDateFilter("all")
                   }}
