@@ -4,7 +4,7 @@ export const DEFAULT_EXTERNAL_CONFIRMATION_STATUS = '確認待ち'
 export const IMPORTABLE_INTERVIEW_STATUS = '完了'
 export const KINTONE_INTERVIEW_SOURCE_SYSTEM = 'kintone'
 const KINTONE_INTERVIEW_RECORD_TYPE_QUERY =
-  '(timeInterview = "定期面談" or timeInterview = "日々の面談")'
+  'timeInterview in ("定期面談", "日々の面談")'
 
 type RecordType = 'regular_interview' | 'daily_support'
 
@@ -128,8 +128,9 @@ function recordTypeValue(record: KintoneRecord): any {
 
 function hasRecordTypeFilter(query: string): boolean {
   return (
-    /\btimeInterview\s*=\s*"定期面談"/.test(query) &&
-    /\btimeInterview\s*=\s*"日々の面談"/.test(query)
+    /\btimeInterview\s+in\s*\([^)]*"定期面談"[^)]*"日々の面談"[^)]*\)/.test(query) ||
+    (/\btimeInterview\s*=\s*"定期面談"/.test(query) &&
+      /\btimeInterview\s*=\s*"日々の面談"/.test(query))
   )
 }
 
