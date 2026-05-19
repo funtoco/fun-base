@@ -143,15 +143,44 @@ function pickSubtableValue(row: Record<string, any>, fieldCodes: string[]): any 
 }
 
 export function parseActivityEntries(tableStorageDaily: any): ActivityEntry[] {
-  const rows = Array.isArray(tableStorageDaily?.value) ? tableStorageDaily.value : []
+  const rawValue = tableStorageDaily?.value ?? tableStorageDaily
+
+  if (typeof rawValue === 'string' && rawValue.trim()) {
+    try {
+      const parsed = JSON.parse(rawValue)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((row: any) => {
+            const dai = toStringOrNull(row?.dai)
+            const chu = toStringOrNull(row?.chu)
+            const shou = toStringOrNull(row?.shou)
+            const notes = toStringOrNull(row?.notes)
+
+            if (!dai && !chu && !shou && !notes) return null
+
+            return {
+              dai: dai || '',
+              chu: chu || '',
+              shou: shou || '',
+              ...(notes ? { notes } : {}),
+            }
+          })
+          .filter((entry): entry is ActivityEntry => entry !== null)
+      }
+    } catch {
+      return []
+    }
+  }
+
+  const rows = Array.isArray(rawValue) ? rawValue : []
 
   return rows
     .map((row: any) => {
       const values = row?.value || {}
-      const dai = toStringOrNull(pickSubtableValue(values, ['dai', '大分類']))
-      const chu = toStringOrNull(pickSubtableValue(values, ['chu', '中分類']))
-      const shou = toStringOrNull(pickSubtableValue(values, ['shou', '小分類']))
-      const notes = toStringOrNull(pickSubtableValue(values, ['notes', 'note', '備考', '対応内容']))
+      const dai = toStringOrNull(pickSubtableValue(values, ['dai', 'tableStorageDaily_大項目', '大分類']))
+      const chu = toStringOrNull(pickSubtableValue(values, ['chu', 'tableStorageDaily_中項目', '中分類']))
+      const shou = toStringOrNull(pickSubtableValue(values, ['shou', 'tableStorageDaily_小項目', '小分類']))
+      const notes = toStringOrNull(pickSubtableValue(values, ['notes', 'tableStorageDaily_内容', 'note', '備考', '対応内容']))
 
       if (!dai && !chu && !shou && !notes) return null
 

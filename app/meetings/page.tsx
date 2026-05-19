@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getRegularInterviews } from "@/lib/kintone-data"
-import { getKintoneInterviewRecordUrl } from "@/lib/interview-records"
 import { formatDate } from "@/lib/utils"
 import type { RegularInterview } from "@/lib/models"
 import {
@@ -19,13 +18,12 @@ import {
   User,
   Building2,
   MapPin,
-  ExternalLink,
   FileText,
   ChevronDown,
   ChevronUp
 } from "lucide-react"
 
-// Interview Card Component - read-only, links to person detail or external Kintone
+// Interview Card Component - read-only, links to person detail
 function InterviewCard({ interview }: { interview: RegularInterview }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -76,25 +74,6 @@ function InterviewCard({ interview }: { interview: RegularInterview }) {
                 </span>
               )}
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {interview.kintoneRecordId && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground"
-                asChild
-              >
-                <a
-                  href={getKintoneInterviewRecordUrl(interview.kintoneRecordId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  <span className="sr-only">Kintoneで開く</span>
-                </a>
-              </Button>
-            )}
           </div>
         </div>
       </CardHeader>

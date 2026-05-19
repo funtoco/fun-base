@@ -4,15 +4,11 @@ import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import { AuthGuard } from "@/components/auth-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getDailySupportRecords } from "@/lib/kintone-data"
-import {
-  getCategoryColor,
-  getKintoneInterviewRecordUrl,
-} from "@/lib/interview-records"
+import { getCategoryColor } from "@/lib/interview-records"
 import { formatDate } from "@/lib/utils"
 import type { DailySupportRecord } from "@/lib/models"
 import {
@@ -20,11 +16,10 @@ import {
   Calendar,
   Clock,
   User,
-  Building2,
-  ExternalLink
+  Building2
 } from "lucide-react"
 
-// Support Record Card Component - read-only, links to person detail or external Kintone
+// Support Record Card Component - read-only, links to person detail
 function SupportRecordCard({ record }: { record: DailySupportRecord }) {
   return (
     <Card>
@@ -66,25 +61,6 @@ function SupportRecordCard({ record }: { record: DailySupportRecord }) {
                 </span>
               )}
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {record.kintoneRecordId && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground"
-                asChild
-              >
-                <a
-                  href={getKintoneInterviewRecordUrl(record.kintoneRecordId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  <span className="sr-only">Kintoneで開く</span>
-                </a>
-              </Button>
-            )}
           </div>
         </div>
       </CardHeader>

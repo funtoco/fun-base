@@ -6,14 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Timeline } from "@/components/ui/timeline"
-import {
-  getCategoryColor,
-  getKintoneInterviewRecordUrl,
-} from "@/lib/interview-records"
+import { getCategoryColor } from "@/lib/interview-records"
 import { formatDate } from "@/lib/utils"
 import type { Visa, PersonDocument, RegularInterview, DailySupportRecord } from "@/lib/models"
 import { PersonDocumentsTab } from "@/components/person-documents-tab"
-import { Calendar, Clock, MapPin, User, FileText, ExternalLink, ChevronDown, ChevronUp } from "lucide-react"
+import { Calendar, Clock, MapPin, User, FileText, ChevronDown, ChevronUp } from "lucide-react"
 
 interface PersonDetailTabsProps {
   personId: string
@@ -73,23 +70,6 @@ function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
               )}
             </div>
           </div>
-          {interview.kintoneRecordId && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-foreground"
-              asChild
-            >
-              <a
-                href={getKintoneInterviewRecordUrl(interview.kintoneRecordId)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink className="h-4 w-4" />
-                <span className="sr-only">Kintoneで開く</span>
-              </a>
-            </Button>
-          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -153,23 +133,6 @@ function DailySupportCard({ record }: { record: DailySupportRecord }) {
               )}
             </div>
           </div>
-          {record.kintoneRecordId && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-foreground"
-              asChild
-            >
-              <a
-                href={getKintoneInterviewRecordUrl(record.kintoneRecordId)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink className="h-4 w-4" />
-                <span className="sr-only">Kintoneで開く</span>
-              </a>
-            </Button>
-          )}
         </div>
       </CardHeader>
       <CardContent>

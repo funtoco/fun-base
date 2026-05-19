@@ -120,3 +120,25 @@ test('parseActivityEntries normalizes Kintone subtable rows for daily support', 
     },
   ])
 })
+
+test('parseActivityEntries normalizes serialized tableStorageDaily values', () => {
+  const entries = parseActivityEntries({
+    value: JSON.stringify([
+      {
+        dai: '日々の対応報告',
+        chu: 'ビザ更新対応',
+        shou: ['申請に必要な公的書類の案内（課税証明等）', '健康診断の受診案内'],
+        notes: '健康診断の有効性と申請について必要な書類についての案内をしました。',
+      },
+    ]),
+  })
+
+  assert.deepEqual(entries, [
+    {
+      dai: '日々の対応報告',
+      chu: 'ビザ更新対応',
+      shou: '申請に必要な公的書類の案内（課税証明等）, 健康診断の受診案内',
+      notes: '健康診断の有効性と申請について必要な書類についての案内をしました。',
+    },
+  ])
+})
