@@ -125,8 +125,16 @@ export function isImportableInterviewRecord(record: KintoneRecord): boolean {
   )
 }
 
-export function getInterviewRecordSourcePersonId(record: KintoneRecord): string | null {
+export function getInterviewRecordSourceWorkId(record: KintoneRecord): string | null {
+  return toStringOrNull(fieldValue(record, 'WOID'))
+}
+
+export function getInterviewRecordSourceHumanResourceId(record: KintoneRecord): string | null {
   return toStringOrNull(fieldValue(record, 'HRID'))
+}
+
+export function getInterviewRecordSourcePersonId(record: KintoneRecord): string | null {
+  return getInterviewRecordSourceWorkId(record) ?? getInterviewRecordSourceHumanResourceId(record)
 }
 
 export function getInterviewRecordSourceRecordId(record: KintoneRecord): string | null {
@@ -162,7 +170,7 @@ export function parseActivityEntries(tableStorageDaily: any): ActivityEntry[] {
         ...(notes ? { notes } : {}),
       }
     })
-    .filter((entry): entry is ActivityEntry => entry !== null)
+    .filter((entry: ActivityEntry | null): entry is ActivityEntry => entry !== null)
 }
 
 function toRawRecordJson(record: KintoneRecord): Record<string, unknown> {
@@ -194,7 +202,7 @@ export function transformInterviewRecord(
   return {
     tenant_id: context.tenantId,
     person_id: context.personId,
-    source_person_id: toStringOrNull(fieldValue(record, 'HRID')),
+    source_person_id: getInterviewRecordSourcePersonId(record),
     source_system: KINTONE_INTERVIEW_SOURCE_SYSTEM,
     source_app_id: context.sourceAppId,
     source_record_id: sourceRecordId,
