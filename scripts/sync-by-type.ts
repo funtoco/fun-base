@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createSyncService } from '@/lib/sync/kintone-sync'
 
-type SyncTargetType = 'people' | 'visas'
+type SyncTargetType = 'people' | 'visas' | 'interview_records'
 type CliSyncType = SyncTargetType | 'both'
 
 function getArgValue(flag: string): string | undefined {
@@ -17,11 +17,11 @@ function parseSyncType(): CliSyncType {
   const rawType = getArgValue('--type') || process.env.SYNC_TYPE
 
   if (!rawType) {
-    throw new Error('Missing sync type. Use --type people|visas|both')
+    throw new Error('Missing sync type. Use --type people|visas|interview_records|both')
   }
 
-  if (rawType !== 'people' && rawType !== 'visas' && rawType !== 'both') {
-    throw new Error(`Invalid sync type "${rawType}". Use people, visas, or both`)
+  if (rawType !== 'people' && rawType !== 'visas' && rawType !== 'interview_records' && rawType !== 'both') {
+    throw new Error(`Invalid sync type "${rawType}". Use people, visas, interview_records, or both`)
   }
 
   return rawType
