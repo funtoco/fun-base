@@ -133,13 +133,17 @@ function hasRecordTypeFilter(query: string): boolean {
   )
 }
 
+function parenthesizeQuery(query: string): string {
+  return query.startsWith('(') && query.endsWith(')') ? query : `(${query})`
+}
+
 export function buildInterviewRecordsQuery(baseQuery = ''): string {
   const trimmed = baseQuery.trim()
 
   if (!trimmed) return KINTONE_INTERVIEW_RECORD_TYPE_QUERY
   if (hasRecordTypeFilter(trimmed)) return trimmed
 
-  return `${trimmed} and ${KINTONE_INTERVIEW_RECORD_TYPE_QUERY}`
+  return `${parenthesizeQuery(trimmed)} and ${KINTONE_INTERVIEW_RECORD_TYPE_QUERY}`
 }
 
 export function isImportableInterviewRecord(record: KintoneRecord): boolean {

@@ -62,7 +62,17 @@ test('isImportableInterviewRecord only requires completed status for regular int
 test('buildInterviewRecordsQuery keeps connector filters and limits record categories', () => {
   assert.equal(
     buildInterviewRecordsQuery('COID = "3222"'),
-    'COID = "3222" and (timeInterview = "定期面談" or timeInterview = "日々の面談")'
+    '(COID = "3222") and (timeInterview = "定期面談" or timeInterview = "日々の面談")'
+  )
+
+  assert.equal(
+    buildInterviewRecordsQuery('COID = "3222" or Status = "確認不要"'),
+    '(COID = "3222" or Status = "確認不要") and (timeInterview = "定期面談" or timeInterview = "日々の面談")'
+  )
+
+  assert.equal(
+    buildInterviewRecordsQuery('(COID = "3222" or Status = "確認不要")'),
+    '(COID = "3222" or Status = "確認不要") and (timeInterview = "定期面談" or timeInterview = "日々の面談")'
   )
 
   assert.equal(
