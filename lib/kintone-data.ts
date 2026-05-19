@@ -56,6 +56,26 @@ export async function getRegularInterviews(): Promise<RegularInterview[]> {
 }
 
 /**
+ * Get latest regular interviews for compact dashboard widgets.
+ */
+export async function getLatestRegularInterviews(limit = 5): Promise<RegularInterview[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("interview_records")
+    .select("*, person:people(id, name, kana)")
+    .eq("record_type", "regular_interview")
+    .order("interview_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    return handleInterviewRecordsFetchError("fetch latest regular interviews", error)
+  }
+
+  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToRegularInterview)
+}
+
+/**
  * Get regular interview records for a specific person
  * @param personId - The FunBase people.id
  */
@@ -91,6 +111,26 @@ export async function getDailySupportRecords(): Promise<DailySupportRecord[]> {
 
   if (error) {
     return handleInterviewRecordsFetchError("fetch daily support records", error)
+  }
+
+  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToDailySupportRecord)
+}
+
+/**
+ * Get latest daily support records for compact dashboard widgets.
+ */
+export async function getLatestDailySupportRecords(limit = 5): Promise<DailySupportRecord[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("interview_records")
+    .select("*, person:people(id, name, kana)")
+    .eq("record_type", "daily_support")
+    .order("interview_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    return handleInterviewRecordsFetchError("fetch latest daily support records", error)
   }
 
   return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToDailySupportRecord)

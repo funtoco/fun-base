@@ -1,4 +1,4 @@
-import type { Announcement, Meeting, Person, SupportAction, Visa, VisaStatus } from "@/lib/models"
+import type { Announcement, DailySupportRecord, Person, RegularInterview, Visa, VisaStatus } from "@/lib/models"
 
 export const VISA_STATUS_ORDER: VisaStatus[] = [
   "書類準備中",
@@ -24,8 +24,8 @@ export type DashboardViewModel = {
     expiringCount: number
   }
   visaStatusCounts: Array<{ status: VisaStatus; count: number }>
-  latestMeetings: Array<Meeting & { person?: Person }>
-  supportActions: Array<SupportAction & { person?: Person }>
+  latestRegularInterviews: Array<RegularInterview & { person?: Person }>
+  latestDailySupportRecords: Array<DailySupportRecord & { person?: Person }>
   announcements: Array<Announcement & { isUnread: boolean }>
   nationalities: Array<{ nationality: string; count: number; percentage: number }>
   otherNationalityCount: number
@@ -38,8 +38,8 @@ export type DashboardViewModel = {
 type BuildDashboardViewModelInput = {
   people: Person[]
   visas: Visa[]
-  meetings: Meeting[]
-  supportActions: SupportAction[]
+  regularInterviews: RegularInterview[]
+  dailySupportRecords: DailySupportRecord[]
   announcements: Announcement[]
   readAnnouncementIds: string[]
   now?: Date
@@ -72,8 +72,8 @@ function isWithinDays(date: string | undefined, days: number, now: Date): boolea
 export function buildDashboardViewModel({
   people,
   visas,
-  meetings,
-  supportActions,
+  regularInterviews,
+  dailySupportRecords,
   announcements,
   readAnnouncementIds,
   now = new Date(),
@@ -97,27 +97,15 @@ export function buildDashboardViewModel({
     count: visas.filter((visa) => visa.status === status).length,
   }))
 
-  const latestMeetings = [...meetings]
-    .sort((a, b) => parseDashboardDate(b.datetime).getTime() - parseDashboardDate(a.datetime).getTime())
+  const latestRegularInterviews = [...regularInterviews]
+    .sort((a, b) => parseDashboardDate(b.interviewDate).getTime() - parseDashboardDate(a.interviewDate).getTime())
     .slice(0, 5)
-    .map((meeting) => ({ ...meeting, person: personMap.get(meeting.personId) }))
+    .map((interview) => ({ ...interview, person: personMap.get(interview.personId) }))
 
-  const supportActionStatusOrder: Record<SupportAction["status"], number> = {
-    open: 0,
-    in_progress: 1,
-    done: 2,
-  }
-  const sortedSupportActions = [...supportActions]
-    .sort((a, b) => {
-      const statusDiff = supportActionStatusOrder[a.status] - supportActionStatusOrder[b.status]
-      if (statusDiff !== 0) return statusDiff
-      if (a.due && b.due) return parseDashboardDate(a.due).getTime() - parseDashboardDate(b.due).getTime()
-      if (a.due) return -1
-      if (b.due) return 1
-      return parseDashboardDate(b.createdAt).getTime() - parseDashboardDate(a.createdAt).getTime()
-    })
+  const latestDailySupportRecords = [...dailySupportRecords]
+    .sort((a, b) => parseDashboardDate(b.supportDate).getTime() - parseDashboardDate(a.supportDate).getTime())
     .slice(0, 5)
-    .map((action) => ({ ...action, person: personMap.get(action.personId) }))
+    .map((record) => ({ ...record, person: personMap.get(record.personId) }))
 
   const latestAnnouncements = [...announcements]
     .sort((a, b) => parseDashboardDate(b.createdAt).getTime() - parseDashboardDate(a.createdAt).getTime())
@@ -165,8 +153,8 @@ export function buildDashboardViewModel({
       expiringCount: expiringPersonIds.size,
     },
     visaStatusCounts,
-    latestMeetings,
-    supportActions: sortedSupportActions,
+    latestRegularInterviews,
+    latestDailySupportRecords,
     announcements: latestAnnouncements,
     nationalities: topNationalities,
     otherNationalityCount,

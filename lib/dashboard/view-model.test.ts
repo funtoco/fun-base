@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { Announcement, Meeting, Person, SupportAction, Visa } from "@/lib/models"
+import type { Announcement, DailySupportRecord, Person, RegularInterview, Visa } from "@/lib/models"
 
 import { buildDashboardViewModel } from "./view-model"
 
@@ -20,24 +20,25 @@ const baseVisa = (overrides: Partial<Visa>): Visa => ({
   ...overrides,
 })
 
-const baseMeeting = (overrides: Partial<Meeting>): Meeting => ({
-  id: "meeting-1",
+const baseRegularInterview = (overrides: Partial<RegularInterview>): RegularInterview => ({
+  id: "interview-1",
   personId: "person-1",
-  kind: "仕事",
-  title: "定期面談",
-  datetime: "2026-05-10T00:00:00.000Z",
-  notes: [],
+  personName: "Test Person",
+  interviewDate: "2026-05-10",
+  companyConfirmationStatus: "確認待ち",
+  companyReport: "report",
   createdAt: "2026-05-10T00:00:00.000Z",
   updatedAt: "2026-05-10T00:00:00.000Z",
   ...overrides,
 })
 
-const baseSupportAction = (overrides: Partial<SupportAction>): SupportAction => ({
-  id: "support-1",
+const baseDailySupportRecord = (overrides: Partial<DailySupportRecord>): DailySupportRecord => ({
+  id: "daily-1",
   personId: "person-1",
-  category: "住居",
-  title: "住所確認",
-  status: "open",
+  personName: "Test Person",
+  supportDate: "2026-05-09",
+  companyConfirmationStatus: "確認待ち",
+  dailyEntries: [],
   createdAt: "2026-05-09T00:00:00.000Z",
   updatedAt: "2026-05-09T00:00:00.000Z",
   ...overrides,
@@ -94,13 +95,13 @@ describe("buildDashboardViewModel", () => {
           expiryDate: "2026-08-01T00:00:00.000Z",
         }),
       ],
-      meetings: [
-        baseMeeting({ id: "recent-meeting", personId: "person-1", datetime: "2026-05-12T00:00:00.000Z" }),
-        baseMeeting({ id: "future-meeting", personId: "person-2", datetime: "2026-05-20T00:00:00.000Z" }),
+      regularInterviews: [
+        baseRegularInterview({ id: "recent-interview", personId: "person-1", interviewDate: "2026-05-12" }),
+        baseRegularInterview({ id: "future-interview", personId: "person-2", interviewDate: "2026-05-20" }),
       ],
-      supportActions: [
-        baseSupportAction({ id: "support-done", personId: "person-2", status: "done" }),
-        baseSupportAction({ id: "support-open", personId: "person-1", status: "open", due: "2026-05-14" }),
+      dailySupportRecords: [
+        baseDailySupportRecord({ id: "daily-old", personId: "person-2", supportDate: "2026-05-09" }),
+        baseDailySupportRecord({ id: "daily-recent", personId: "person-1", supportDate: "2026-05-14" }),
       ],
       announcements: [
         baseAnnouncement({ id: "read-announcement", createdAt: "2026-05-10T00:00:00.000Z" }),
@@ -118,8 +119,8 @@ describe("buildDashboardViewModel", () => {
       expiringCount: 1,
     })
     expect(viewModel.visaStatusCounts.find((item) => item.status === "申請中")?.count).toBe(1)
-    expect(viewModel.latestMeetings.map((item) => item.id)).toEqual(["future-meeting", "recent-meeting"])
-    expect(viewModel.supportActions.map((item) => item.id)).toEqual(["support-open", "support-done"])
+    expect(viewModel.latestRegularInterviews.map((item) => item.id)).toEqual(["future-interview", "recent-interview"])
+    expect(viewModel.latestDailySupportRecords.map((item) => item.id)).toEqual(["daily-recent", "daily-old"])
     expect(viewModel.announcements[0]).toMatchObject({ id: "unread-announcement", isUnread: true })
     expect(viewModel.nationalities[0]).toMatchObject({
       nationality: "ベトナム",
@@ -140,8 +141,8 @@ describe("buildDashboardViewModel", () => {
         basePerson({ id: "person-4", name: "D" }),
       ],
       visas: [],
-      meetings: [],
-      supportActions: [],
+      regularInterviews: [],
+      dailySupportRecords: [],
       announcements: [],
       readAnnouncementIds: [],
       now: new Date("2026-05-13T00:00:00.000Z"),
@@ -177,8 +178,8 @@ describe("buildDashboardViewModel", () => {
           expiryDate: "2026-05-01",
         }),
       ],
-      meetings: [],
-      supportActions: [],
+      regularInterviews: [],
+      dailySupportRecords: [],
       announcements: [],
       readAnnouncementIds: [],
       now: new Date("2026-05-13T00:00:00.000Z"),
@@ -191,19 +192,19 @@ describe("buildDashboardViewModel", () => {
     const viewModel = buildDashboardViewModel({
       people: [basePerson({ id: "person-1", name: "A" })],
       visas: [],
-      meetings: [
-        baseMeeting({ id: "utc-meeting", datetime: "2026-05-13T16:00:00.000Z" }),
-        baseMeeting({ id: "timezone-less-meeting", datetime: "2026-05-14T00:00:00.000" }),
+      regularInterviews: [
+        baseRegularInterview({ id: "utc-interview", interviewDate: "2026-05-13T16:00:00.000Z" }),
+        baseRegularInterview({ id: "timezone-less-interview", interviewDate: "2026-05-14T00:00:00.000" }),
       ],
-      supportActions: [],
+      dailySupportRecords: [],
       announcements: [],
       readAnnouncementIds: [],
       now: new Date("2026-05-13T00:00:00.000Z"),
     })
 
-    expect(viewModel.latestMeetings.map((meeting) => meeting.id)).toEqual([
-      "timezone-less-meeting",
-      "utc-meeting",
+    expect(viewModel.latestRegularInterviews.map((interview) => interview.id)).toEqual([
+      "timezone-less-interview",
+      "utc-interview",
     ])
   })
 
@@ -211,8 +212,8 @@ describe("buildDashboardViewModel", () => {
     const viewModel = buildDashboardViewModel({
       people: [],
       visas: [],
-      meetings: [],
-      supportActions: [],
+      regularInterviews: [],
+      dailySupportRecords: [],
       announcements: [],
       readAnnouncementIds: [],
       now: new Date("2026-05-13T00:00:00.000Z"),
