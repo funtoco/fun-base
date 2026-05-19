@@ -104,4 +104,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           echo "🕐 Starting interview_records sync at $(date)"
-          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type interview_records --limit "${{ github.event.inputs.batch_size }}" --all-batches
+          cmd=(pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type interview_records --all-batches)
+          if [ -n "${{ github.event.inputs.batch_size }}" ]; then
+            cmd+=(--limit "${{ github.event.inputs.batch_size }}")
+          fi
+          "${cmd[@]}"

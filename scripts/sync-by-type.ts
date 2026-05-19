@@ -10,6 +10,8 @@ import {
 type SyncTargetType = 'people' | 'visas' | 'interview_records'
 type CliSyncType = SyncTargetType | 'both'
 
+const MAX_CONNECTOR_BATCH_ITERATIONS = 1000
+
 interface BatchControls {
   allBatches: boolean
   batchParams: ConnectorBatchParams | null
@@ -294,7 +296,7 @@ async function runSyncByTypeInBatches(
   let offset = initialBatchParams.offset
   const batchSummaries = []
 
-  while (true) {
+  while (batchSummaries.length < MAX_CONNECTOR_BATCH_ITERATIONS) {
     const summary = await runSyncByType(targetAppType, {
       ...initialBatchParams,
       offset,
@@ -307,7 +309,15 @@ async function runSyncByTypeInBatches(
       break
     }
 
+    if (nextOffset <= offset) {
+      throw new Error(`Batch sync did not advance: offset=${offset}, nextOffset=${nextOffset}`)
+    }
+
     offset = nextOffset
+  }
+
+  if (batchSummaries.length >= MAX_CONNECTOR_BATCH_ITERATIONS) {
+    throw new Error(`Exceeded maximum connector batch iterations (${MAX_CONNECTOR_BATCH_ITERATIONS})`)
   }
 
   const results = batchSummaries.flatMap(summary => summary.results)

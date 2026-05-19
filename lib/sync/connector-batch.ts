@@ -21,7 +21,12 @@ function parseOptionalInteger(value: string | null, defaultValue: number, name: 
     throw new Error(`${name} must be an integer`)
   }
 
-  return Number(value)
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`${name} must be a safe integer`)
+  }
+
+  return parsed
 }
 
 export function parseConnectorBatchParams(searchParams: URLSearchParams): ConnectorBatchParams {
@@ -44,10 +49,11 @@ export function parseConnectorBatchParams(searchParams: URLSearchParams): Connec
 }
 
 export function parseOptionalConnectorBatchParams(searchParams: URLSearchParams): ConnectorBatchParams | null {
+  const connectorId = searchParams.get('connectorId')?.trim() || null
   const hasBatchControls =
     searchParams.has('limit') ||
     searchParams.has('offset') ||
-    searchParams.has('connectorId') ||
+    connectorId !== null ||
     searchParams.get('allBatches') === 'true'
 
   if (!hasBatchControls) {
