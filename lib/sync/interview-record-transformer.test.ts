@@ -38,6 +38,16 @@ test('isImportableInterviewRecord only accepts completed regular or daily interv
     }),
     false
   )
+  assert.equal(
+    isImportableInterviewRecord({
+      $id: { value: '9562' },
+      $revision: { value: '1' },
+      Status: { value: '完了' },
+      interview: { value: '定期面談' },
+      timeInterview: { value: ' ' },
+    }),
+    true
+  )
 })
 
 test('buildInterviewRecordsQuery keeps connector filters and enforces completed status', () => {
@@ -96,6 +106,29 @@ test('transformInterviewRecord maps regular interview fields to interview_record
   assert.equal(row.external_confirmation_status, DEFAULT_EXTERNAL_CONFIRMATION_STATUS)
   assert.equal(row.external_report_body, '本人の勤務状況は良好です。')
   assert.deepEqual(row.activity_entries, [])
+})
+
+test('transformInterviewRecord ignores invalid clock values for duration', () => {
+  const row = transformInterviewRecord(
+    {
+      $id: { value: '9563' },
+      $revision: { value: '1' },
+      HRID: { value: '3505' },
+      WOID: { value: '2447' },
+      timeInterview: { value: '定期面談' },
+      Status: { value: '完了' },
+      interviewDate: { value: '2026-05-15' },
+      Time: { value: '14:99' },
+      Time_0: { value: '15:00' },
+    },
+    {
+      tenantId: 'tenant-1',
+      personId: 'person-1',
+      sourceAppId: '98',
+    }
+  )
+
+  assert.equal(row.interview_duration_minutes, null)
 })
 
 test('transformInterviewRecord falls back to HRID when WOID is missing', () => {

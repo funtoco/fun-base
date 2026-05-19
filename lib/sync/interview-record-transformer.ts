@@ -92,8 +92,16 @@ function toMinutesOrNull(startTime: string | null, endTime: string | null): numb
   const endMatch = /^(\d{1,2}):(\d{2})$/.exec(endTime)
   if (!startMatch || !endMatch) return null
 
-  const startMinutes = Number(startMatch[1]) * 60 + Number(startMatch[2])
-  const endMinutes = Number(endMatch[1]) * 60 + Number(endMatch[2])
+  const startHour = Number(startMatch[1])
+  const startMinute = Number(startMatch[2])
+  const endHour = Number(endMatch[1])
+  const endMinute = Number(endMatch[2])
+  if (startHour > 23 || endHour > 23 || startMinute > 59 || endMinute > 59) {
+    return null
+  }
+
+  const startMinutes = startHour * 60 + startMinute
+  const endMinutes = endHour * 60 + endMinute
   const duration = endMinutes - startMinutes
 
   return duration >= 0 ? duration : null
@@ -113,7 +121,7 @@ function normalizeRecordType(value: any): RecordType | null {
 }
 
 function recordTypeValue(record: KintoneRecord): any {
-  return fieldValue(record, 'timeInterview') ?? fieldValue(record, 'interview')
+  return toStringOrNull(fieldValue(record, 'timeInterview')) ?? fieldValue(record, 'interview')
 }
 
 function hasCompletedStatusFilter(query: string): boolean {
