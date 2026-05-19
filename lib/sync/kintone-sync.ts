@@ -22,6 +22,8 @@ import {
 } from './interview-record-transformer'
 // import { getKintoneMapping, type KintoneMapping } from './mapping-loader'
 
+const DEFAULT_SYNC_CONCURRENCY = 6
+
 // Types for field mappings
 interface FieldMapping {
   source_field_code: string
@@ -185,6 +187,32 @@ export function combineKintoneQueries(...queries: Array<string | null | undefine
     .join(' and ')
 }
 
+function getSyncConcurrencyLimit(): number {
+  const rawValue = process.env.SYNC_CONCURRENCY
+  if (!rawValue) {
+    return DEFAULT_SYNC_CONCURRENCY
+  }
+
+  const parsedValue = Number.parseInt(rawValue, 10)
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    console.warn('[sync] invalid SYNC_CONCURRENCY; using default', {
+      value: rawValue,
+      defaultValue: DEFAULT_SYNC_CONCURRENCY,
+    })
+    return DEFAULT_SYNC_CONCURRENCY
+  }
+
+  return parsedValue
+}
+
+function assertConcurrencyLimit(limit: number): number {
+  if (!Number.isFinite(limit) || !Number.isInteger(limit) || limit < 1) {
+    throw new Error(`Invalid concurrency limit: ${limit}. Expected an integer >= 1.`)
+  }
+
+  return limit
+}
+
 async function runWithConcurrency<T, R>(
   items: T[],
   limit: number,
@@ -193,6 +221,7 @@ async function runWithConcurrency<T, R>(
   const results: any[] = []
   let index = 0
   const runners: Promise<void>[] = []
+  const concurrencyLimit = assertConcurrencyLimit(limit)
   const runNext = async (): Promise<void> => {
     if (index >= items.length) return
     const current = index++
@@ -203,7 +232,7 @@ async function runWithConcurrency<T, R>(
       await runNext()
     }
   }
-  const size = Math.min(limit, items.length)
+  const size = Math.min(concurrencyLimit, items.length)
   for (let i = 0; i < size; i++) runners.push(runNext())
   await Promise.all(runners)
   return results as R[]
@@ -722,7 +751,7 @@ export class KintoneDataSync {
       // Process each mapping
       for (const appMapping of appMappings) {
         // Build query using only database filter conditions
-        const filterQuery = await this.buildFilterQuery(targetAppType, appMappingId)
+        const filterQuery = await this.buildFilterQuery(targetAppType, appMapping.id)
         const recordIdQuery = buildRecordIdQuery(options)
         const query = combineKintoneQueries(filterQuery, recordIdQuery)
         console.log('[sync] kintone-query', {
@@ -749,7 +778,7 @@ export class KintoneDataSync {
         }
 
         // Process records with limited concurrency to speed up while avoiding timeouts
-        const CONCURRENCY_LIMIT = Number(process.env.SYNC_CONCURRENCY || 6)
+        const CONCURRENCY_LIMIT = getSyncConcurrencyLimit()
         await runWithConcurrency(records, CONCURRENCY_LIMIT, async (record) => {
           try {
             // Transform Kintone record to our format using database field mappings
@@ -916,94 +945,105 @@ export class KintoneDataSync {
       })
 
       const records = await this.kintoneClient.getRecords(appMapping.source_app_id, query, [])
-      const CONCURRENCY_LIMIT = Number(process.env.SYNC_CONCURRENCY || 6)
+      const CONCURRENCY_LIMIT = getSyncConcurrencyLimit()
       let syncedCount = 0
       let skippedNotImportable = 0
       let skippedUnlinked = 0
       let skippedAmbiguousPerson = 0
+      let failedRecords = 0
 
       await runWithConcurrency(records, CONCURRENCY_LIMIT, async (record) => {
-        const sourceRecordId = getInterviewRecordSourceRecordId(record) || 'unknown'
+        let sourceRecordId = 'unknown'
 
-        if (!isImportableInterviewRecord(record)) {
-          skippedNotImportable++
-          console.log('[sync] interview-records:skip', {
-            sourceRecordId,
-            reason: 'not-importable',
+        try {
+          sourceRecordId = getInterviewRecordSourceRecordId(record) || 'unknown'
+
+          if (!isImportableInterviewRecord(record)) {
+            skippedNotImportable++
+            console.log('[sync] interview-records:skip', {
+              sourceRecordId,
+              reason: 'not-importable',
+            })
+            return
+          }
+
+          const sourcePersonId = getInterviewRecordSourcePersonId(record)
+          if (!sourcePersonId) {
+            skippedUnlinked++
+            console.warn('[sync] interview-records:skip', {
+              sourceRecordId,
+              reason: 'missing-source-person-id',
+            })
+            return
+          }
+
+          const { data: people, error: personError } = await this.supabase
+            .from('people')
+            .select('id')
+            .eq('tenant_id', this.tenantId)
+            .eq('external_id', sourcePersonId)
+            .limit(2)
+
+          if (personError) {
+            console.error('[sync] interview-records:person-lookup-error', {
+              sourceRecordId,
+              error: personError.message,
+            })
+            throw personError
+          }
+
+          if (!people || people.length === 0) {
+            skippedUnlinked++
+            console.warn('[sync] interview-records:skip', {
+              sourceRecordId,
+              reason: 'person-not-found',
+            })
+            return
+          }
+
+          if (people.length > 1) {
+            skippedAmbiguousPerson++
+            console.warn('[sync] interview-records:skip', {
+              sourceRecordId,
+              reason: 'ambiguous-person',
+            })
+            return
+          }
+
+          const now = new Date().toISOString()
+          const payload = transformInterviewRecord(record, {
+            tenantId: this.tenantId,
+            personId: people[0].id,
+            sourceAppId: appMapping.source_app_id,
           })
-          return
-        }
 
-        const sourcePersonId = getInterviewRecordSourcePersonId(record)
-        if (!sourcePersonId) {
-          skippedUnlinked++
-          console.warn('[sync] interview-records:skip', {
+          const { error: upsertError } = await this.supabase
+            .from('interview_records')
+            .upsert(
+              {
+                ...payload,
+                synced_at: now,
+                updated_at: now,
+              },
+              { onConflict: 'tenant_id,source_system,source_app_id,source_record_id' }
+            )
+
+          if (upsertError) {
+            console.error('[sync] interview-records:db-error', {
+              sourceRecordId,
+              error: upsertError.message,
+            })
+            throw upsertError
+          }
+
+          syncedCount++
+        } catch (err) {
+          failedRecords++
+          console.error('[sync] interview-records:record-failure', {
             sourceRecordId,
-            reason: 'missing-source-person-id',
+            error: err instanceof Error ? err.message : err,
           })
-          return
         }
-
-        const { data: people, error: personError } = await this.supabase
-          .from('people')
-          .select('id')
-          .eq('tenant_id', this.tenantId)
-          .eq('external_id', sourcePersonId)
-          .limit(2)
-
-        if (personError) {
-          console.error('[sync] interview-records:person-lookup-error', {
-            sourceRecordId,
-            error: personError.message,
-          })
-          throw personError
-        }
-
-        if (!people || people.length === 0) {
-          skippedUnlinked++
-          console.warn('[sync] interview-records:skip', {
-            sourceRecordId,
-            reason: 'person-not-found',
-          })
-          return
-        }
-
-        if (people.length > 1) {
-          skippedAmbiguousPerson++
-          console.warn('[sync] interview-records:skip', {
-            sourceRecordId,
-            reason: 'ambiguous-person',
-          })
-          return
-        }
-
-        const now = new Date().toISOString()
-        const payload = transformInterviewRecord(record, {
-          tenantId: this.tenantId,
-          personId: people[0].id,
-          sourceAppId: appMapping.source_app_id,
-        })
-
-        const { error: upsertError } = await this.supabase
-          .from('interview_records')
-          .upsert(
-            {
-              ...payload,
-              synced_at: now,
-              updated_at: now,
-            },
-            { onConflict: 'tenant_id,source_system,source_app_id,source_record_id' }
-          )
-
-        if (upsertError) {
-          console.error('[sync] interview-records:db-error', {
-            sourceRecordId,
-            error: upsertError.message,
-          })
-          throw upsertError
-        }
-
-        syncedCount++
       })
 
       console.log('[sync] interview-records:summary', {
@@ -1013,6 +1053,7 @@ export class KintoneDataSync {
         skippedNotImportable,
         skippedUnlinked,
         skippedAmbiguousPerson,
+        failedRecords,
       })
 
       totalSyncedCount += syncedCount
