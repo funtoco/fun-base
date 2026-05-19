@@ -15,7 +15,8 @@ test('isImportableInterviewRecord only accepts completed regular or daily interv
       $id: { value: '9559' },
       $revision: { value: '1' },
       Status: { value: '完了' },
-      interview: { value: '定期面談' },
+      interview: { value: '<div><br /></div>' },
+      timeInterview: { value: '定期面談' },
     }),
     true
   )
@@ -24,7 +25,7 @@ test('isImportableInterviewRecord only accepts completed regular or daily interv
       $id: { value: '9560' },
       $revision: { value: '1' },
       Status: { value: '確認中' },
-      interview: { value: '定期面談' },
+      timeInterview: { value: '定期面談' },
     }),
     false
   )
@@ -33,7 +34,7 @@ test('isImportableInterviewRecord only accepts completed regular or daily interv
       $id: { value: '9561' },
       $revision: { value: '1' },
       Status: { value: '完了' },
-      interview: { value: '家族面談' },
+      timeInterview: { value: '家族面談' },
     }),
     false
   )
@@ -60,13 +61,13 @@ test('transformInterviewRecord maps regular interview fields to interview_record
       WOID: { value: '2447' },
       COID: { value: '3222' },
       companyName: { value: '株式会社ABC製造' },
-      interview: { value: '定期面談' },
+      interview: { value: '<div><br /></div>' },
       Status: { value: '完了' },
       interviewDate: { value: '2026-05-14' },
       Time: { value: '14:00' },
       Time_0: { value: '15:00' },
       targetQuarter: { value: '2026年第2四半期' },
-      timeInterview: { value: '60' },
+      timeInterview: { value: '定期面談' },
       interviewMethod: { value: '対面' },
       interviewPlace: { value: '本社会議室' },
       supportName: { value: [{ name: '田中' }] },
@@ -104,7 +105,7 @@ test('transformInterviewRecord falls back to HRID when WOID is missing', () => {
       $revision: { value: '1' },
       HRID: { value: '3505' },
       WOID: { value: '' },
-      interview: { value: '定期面談' },
+      timeInterview: { value: '定期面談' },
       Status: { value: '完了' },
       interviewDate: { value: '2026-05-15' },
     },

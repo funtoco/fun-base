@@ -85,10 +85,18 @@ function toStringOrNull(value: any): string | null {
   return nonEmptyStringOrNull(labelValue(value))
 }
 
-function toNumberOrNull(value: any): number | null {
-  if (value === undefined || value === null || value === '') return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+function toMinutesOrNull(startTime: string | null, endTime: string | null): number | null {
+  if (!startTime || !endTime) return null
+
+  const startMatch = /^(\d{1,2}):(\d{2})$/.exec(startTime)
+  const endMatch = /^(\d{1,2}):(\d{2})$/.exec(endTime)
+  if (!startMatch || !endMatch) return null
+
+  const startMinutes = Number(startMatch[1]) * 60 + Number(startMatch[2])
+  const endMinutes = Number(endMatch[1]) * 60 + Number(endMatch[2])
+  const duration = endMinutes - startMinutes
+
+  return duration >= 0 ? duration : null
 }
 
 function toDateOrNull(value: any): string | null {
@@ -102,6 +110,10 @@ function normalizeRecordType(value: any): RecordType | null {
   if (text === '定期面談') return 'regular_interview'
   if (text === '日々の面談') return 'daily_support'
   return null
+}
+
+function recordTypeValue(record: KintoneRecord): any {
+  return fieldValue(record, 'timeInterview') ?? fieldValue(record, 'interview')
 }
 
 function hasCompletedStatusFilter(query: string): boolean {
@@ -121,7 +133,7 @@ export function buildInterviewRecordsQuery(baseQuery = ''): string {
 export function isImportableInterviewRecord(record: KintoneRecord): boolean {
   return (
     toStringOrNull(fieldValue(record, 'Status')) === IMPORTABLE_INTERVIEW_STATUS &&
-    normalizeRecordType(fieldValue(record, 'interview')) !== null
+    normalizeRecordType(recordTypeValue(record)) !== null
   )
 }
 
@@ -185,9 +197,11 @@ export function transformInterviewRecord(
     throw new Error('Interview record is not importable')
   }
 
-  const recordType = normalizeRecordType(fieldValue(record, 'interview'))
+  const recordType = normalizeRecordType(recordTypeValue(record))
   const interviewDate = toDateOrNull(fieldValue(record, 'interviewDate'))
   const sourceRecordId = toStringOrNull(fieldValue(record, '$id'))
+  const startTime = toStringOrNull(fieldValue(record, 'Time'))
+  const endTime = toStringOrNull(fieldValue(record, 'Time_0'))
 
   if (!recordType) {
     throw new Error('Unsupported interview record type')
@@ -209,12 +223,12 @@ export function transformInterviewRecord(
     record_type: recordType,
     source_status: toStringOrNull(fieldValue(record, 'Status')) || IMPORTABLE_INTERVIEW_STATUS,
     interview_date: interviewDate,
-    start_time: toStringOrNull(fieldValue(record, 'Time')),
-    end_time: toStringOrNull(fieldValue(record, 'Time_0')),
+    start_time: startTime,
+    end_time: endTime,
     target_quarter: toStringOrNull(fieldValue(record, 'targetQuarter')),
     interview_method: toStringOrNull(fieldValue(record, 'interviewMethod')),
     interview_place: toStringOrNull(fieldValue(record, 'interviewPlace')),
-    interview_duration_minutes: toNumberOrNull(fieldValue(record, 'timeInterview')),
+    interview_duration_minutes: toMinutesOrNull(startTime, endTime),
     company_id: toStringOrNull(fieldValue(record, 'COID')),
     company_name: toStringOrNull(fieldValue(record, 'companyName')),
     support_staff_name: toStringOrNull(fieldValue(record, 'supportName')),
