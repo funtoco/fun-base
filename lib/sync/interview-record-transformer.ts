@@ -54,31 +54,35 @@ function fieldValue(record: Record<string, any>, fieldCode: string): any {
   return record[fieldCode]?.value
 }
 
+function labelValue(value: any): any {
+  if (value && typeof value === 'object') {
+    return value.name ?? value.code ?? value.value
+  }
+
+  return value
+}
+
+function nonEmptyStringOrNull(value: any): string | null {
+  if (value === undefined || value === null) return null
+
+  const text = String(value).trim()
+  return text || null
+}
+
 function toStringOrNull(value: any): string | null {
   if (value === undefined || value === null) return null
 
   if (Array.isArray(value)) {
     const joined = value
-      .map((item) => {
-        if (item && typeof item === 'object') {
-          return item.name ?? item.code ?? item.value
-        }
-        return item
-      })
-      .filter((item) => item !== undefined && item !== null && String(item).trim() !== '')
-      .map(String)
+      .map(labelValue)
+      .map(nonEmptyStringOrNull)
+      .filter((item): item is string => item !== null)
       .join(', ')
 
     return joined || null
   }
 
-  if (typeof value === 'object') {
-    const label = value.name ?? value.code ?? value.value
-    return label === undefined || label === null || String(label).trim() === '' ? null : String(label)
-  }
-
-  const text = String(value).trim()
-  return text || null
+  return nonEmptyStringOrNull(labelValue(value))
 }
 
 function toNumberOrNull(value: any): number | null {
