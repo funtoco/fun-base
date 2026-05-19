@@ -127,6 +127,7 @@ function SupportRecordCard({ record }: { record: DailySupportRecord }) {
 export default function SupportPage() {
   const [records, setRecords] = useState<DailySupportRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [companyFilter, setCompanyFilter] = useState<string>("all")
   const [staffFilter, setStaffFilter] = useState<string>("all")
@@ -139,10 +140,12 @@ export default function SupportPage() {
     async function fetchData() {
       try {
         setLoading(true)
+        setError(null)
         const data = await getDailySupportRecords()
         setRecords(data)
       } catch (err) {
         console.error("Error fetching support records:", err)
+        setError("サポート記録の取得に失敗しました")
       } finally {
         setLoading(false)
       }
@@ -356,6 +359,12 @@ export default function SupportPage() {
               <Card>
                 <CardContent className="flex items-center justify-center py-8">
                   <p className="text-muted-foreground">読み込み中...</p>
+                </CardContent>
+              </Card>
+            ) : error ? (
+              <Card>
+                <CardContent className="flex items-center justify-center py-8">
+                  <p className="text-destructive">{error}</p>
                 </CardContent>
               </Card>
             ) : filteredRecords.length === 0 ? (

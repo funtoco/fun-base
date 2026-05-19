@@ -46,7 +46,7 @@ export async function getRegularInterviews(): Promise<RegularInterview[]> {
     .select("*, person:people(id, name, kana)")
     .eq("record_type", "regular_interview")
     .order("interview_date", { ascending: false })
-    .order("source_record_id", { ascending: false })
+    .order("created_at", { ascending: false })
 
   if (error) {
     return handleInterviewRecordsFetchError("fetch regular interviews", error)
@@ -67,7 +67,7 @@ export async function getRegularInterviewsByPersonId(personId: string): Promise<
     .eq("record_type", "regular_interview")
     .eq("person_id", personId)
     .order("interview_date", { ascending: false })
-    .order("source_record_id", { ascending: false })
+    .order("created_at", { ascending: false })
 
   if (error) {
     return handleInterviewRecordsFetchError("fetch regular interviews by person", error)
@@ -87,7 +87,7 @@ export async function getDailySupportRecords(): Promise<DailySupportRecord[]> {
     .select("*, person:people(id, name, kana)")
     .eq("record_type", "daily_support")
     .order("interview_date", { ascending: false })
-    .order("source_record_id", { ascending: false })
+    .order("created_at", { ascending: false })
 
   if (error) {
     return handleInterviewRecordsFetchError("fetch daily support records", error)
@@ -108,7 +108,7 @@ export async function getDailySupportRecordsByPersonId(personId: string): Promis
     .eq("record_type", "daily_support")
     .eq("person_id", personId)
     .order("interview_date", { ascending: false })
-    .order("source_record_id", { ascending: false })
+    .order("created_at", { ascending: false })
 
   if (error) {
     return handleInterviewRecordsFetchError("fetch daily support records by person", error)
@@ -290,8 +290,8 @@ export function generateSampleDailySupportRecords(
       personName,
       companyName,
       supportDate: formatLocalDate(supportDate),
-      startTime: `${9 + (i % 8)}:00`,
-      endTime: `${10 + (i % 8)}:00`,
+      startTime: `${String(9 + (i % 8)).padStart(2, "0")}:00`,
+      endTime: `${String(10 + (i % 8)).padStart(2, "0")}:00`,
       supportStaffName: supportStaff[i % supportStaff.length],
       kintoneStatus: ELIGIBLE_REGULAR_INTERVIEW_KINTONE_STATUS,
       companyConfirmationStatus: confirmationStatuses[i % confirmationStatuses.length],

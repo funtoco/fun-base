@@ -43,12 +43,63 @@ export type InterviewRecordRow = {
   person?: InterviewRecordPerson | InterviewRecordPerson[] | null
 }
 
+const KINTONE_INTERVIEW_STATUSES = new Set<KintoneInterviewStatus>([
+  "Not started",
+  "完了",
+  "確認不要",
+  "クローズ",
+  "確認中",
+  "差戻(確認事項あり)",
+])
+
+const COMPANY_CONFIRMATION_STATUSES = new Set<CompanyConfirmationStatus>([
+  "確認待ち",
+  "確認完了",
+])
+
+const INTERVIEW_METHODS = new Set<InterviewMethod>([
+  "オンラインMTG",
+  "対面",
+  "電話",
+  "メール",
+])
+
 export function isMissingInterviewRecordsTableError(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false
   return (
     error.code === "42P01" ||
     (/interview_records/i.test(error.message || "") && /does not exist|Could not find the table/i.test(error.message || ""))
   )
+}
+
+function parseKintoneInterviewStatus(value?: string | null): KintoneInterviewStatus | undefined {
+  if (!value) return undefined
+  if (KINTONE_INTERVIEW_STATUSES.has(value as KintoneInterviewStatus)) {
+    return value as KintoneInterviewStatus
+  }
+
+  console.warn("[interview-records] unknown kintone status", { value })
+  return undefined
+}
+
+function parseCompanyConfirmationStatus(value?: string | null): CompanyConfirmationStatus {
+  if (!value) return "確認待ち"
+  if (COMPANY_CONFIRMATION_STATUSES.has(value as CompanyConfirmationStatus)) {
+    return value as CompanyConfirmationStatus
+  }
+
+  console.warn("[interview-records] unknown company confirmation status", { value })
+  return "確認待ち"
+}
+
+function parseInterviewMethod(value?: string | null): InterviewMethod | undefined {
+  if (!value) return undefined
+  if (INTERVIEW_METHODS.has(value as InterviewMethod)) {
+    return value as InterviewMethod
+  }
+
+  console.warn("[interview-records] unknown interview method", { value })
+  return undefined
 }
 
 function getPerson(row: InterviewRecordRow): InterviewRecordPerson | null {
@@ -91,8 +142,8 @@ function baseFields(row: InterviewRecordRow) {
     startTime: trimTime(row.start_time),
     endTime: trimTime(row.end_time),
     supportStaffName: row.support_staff_name ?? undefined,
-    kintoneStatus: row.source_status as KintoneInterviewStatus | undefined,
-    companyConfirmationStatus: (row.external_confirmation_status || "確認待ち") as CompanyConfirmationStatus,
+    kintoneStatus: parseKintoneInterviewStatus(row.source_status),
+    companyConfirmationStatus: parseCompanyConfirmationStatus(row.external_confirmation_status),
     internalNotes: row.internal_notes ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -105,7 +156,7 @@ export function mapInterviewRecordToRegularInterview(row: InterviewRecordRow): R
     interviewDate: row.interview_date,
     targetQuarter: row.target_quarter ?? undefined,
     interviewDuration: row.interview_duration_minutes ?? undefined,
-    interviewMethod: row.interview_method as InterviewMethod | undefined,
+    interviewMethod: parseInterviewMethod(row.interview_method),
     interviewPlace: row.interview_place ?? undefined,
     salesStaffName: row.sales_staff_name ?? undefined,
     funtocoStaff: row.internal_staff_name ?? undefined,

@@ -334,7 +334,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">取得��</span>
+                      <span className="text-sm text-muted-foreground">取得日</span>
                     </div>
                     <span className="text-sm">{formatDate(person.insuranceAcquiredDate)}</span>
                   </div>

@@ -71,6 +71,21 @@ test("mapInterviewRecordToDailySupportRecord normalizes activity entries", () =>
   ])
 })
 
+test("mapInterviewRecordToRegularInterview falls back for unknown enum-like values", () => {
+  const mapped = mapInterviewRecordToRegularInterview({
+    ...baseRow,
+    source_status: "社内確認中",
+    external_confirmation_status: "差戻し",
+    interview_method: "チャット",
+    target_quarter: "2026年第2四半期",
+    external_report_body: "本人の勤務状況は良好です。",
+  })
+
+  assert.equal(mapped.kintoneStatus, undefined)
+  assert.equal(mapped.companyConfirmationStatus, "確認待ち")
+  assert.equal(mapped.interviewMethod, undefined)
+})
+
 test("isMissingInterviewRecordsTableError only matches missing interview_records table errors", () => {
   assert.equal(isMissingInterviewRecordsTableError({ code: "42P01", message: "relation does not exist" }), true)
   assert.equal(

@@ -24,6 +24,17 @@ interface PersonDetailTabsProps {
   dailySupportRecords?: DailySupportRecord[]
 }
 
+function getDailySupportTimelineTitle(record: DailySupportRecord): string {
+  const categories = record.dailyEntries
+    .map((entry) => entry.shou)
+    .filter(Boolean)
+
+  if (categories.length === 0) return "日々対応"
+
+  const visibleCategories = categories.slice(0, 3).join(", ")
+  return `日々対応: ${visibleCategories}${categories.length > 3 ? "..." : ""}`
+}
+
 // Regular Interview Card Component - displays 企業提出用レポート as main content
 function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
   const [expanded, setExpanded] = useState(false)
@@ -221,7 +232,7 @@ export function PersonDetailTabs({
     ...dailySupportRecords.map((record) => ({
       id: record.id,
       type: "support" as const,
-      title: `日々対応: ${record.dailyEntries.map(e => e.shou).join(", ")}`,
+      title: getDailySupportTimelineTitle(record),
       datetime: record.supportDate,
       status: record.companyConfirmationStatus,
     })),
