@@ -57,6 +57,7 @@ test('transformInterviewRecord maps regular interview fields to interview_record
       $id: { value: '9559' },
       $revision: { value: '3' },
       HRID: { value: '3505' },
+      WOID: { value: '2447' },
       COID: { value: '3222' },
       companyName: { value: '株式会社ABC製造' },
       interview: { value: '定期面談' },
@@ -83,10 +84,10 @@ test('transformInterviewRecord maps regular interview fields to interview_record
 
   assert.equal(row.tenant_id, 'tenant-1')
   assert.equal(row.person_id, 'person-1')
-  assert.equal(row.source_person_id, '3505')
   assert.equal(row.source_system, 'kintone')
   assert.equal(row.source_app_id, '98')
   assert.equal(row.source_record_id, '9559')
+  assert.equal(row.source_person_id, '2447')
   assert.equal(row.record_type, 'regular_interview')
   assert.equal(row.source_status, '完了')
   assert.equal(row.interview_date, '2026-05-14')
@@ -94,6 +95,27 @@ test('transformInterviewRecord maps regular interview fields to interview_record
   assert.equal(row.external_confirmation_status, DEFAULT_EXTERNAL_CONFIRMATION_STATUS)
   assert.equal(row.external_report_body, '本人の勤務状況は良好です。')
   assert.deepEqual(row.activity_entries, [])
+})
+
+test('transformInterviewRecord falls back to HRID when WOID is missing', () => {
+  const row = transformInterviewRecord(
+    {
+      $id: { value: '9562' },
+      $revision: { value: '1' },
+      HRID: { value: '3505' },
+      WOID: { value: '' },
+      interview: { value: '定期面談' },
+      Status: { value: '完了' },
+      interviewDate: { value: '2026-05-15' },
+    },
+    {
+      tenantId: 'tenant-1',
+      personId: 'person-1',
+      sourceAppId: '98',
+    }
+  )
+
+  assert.equal(row.source_person_id, '3505')
 })
 
 test('parseActivityEntries normalizes Kintone subtable rows for daily support', () => {

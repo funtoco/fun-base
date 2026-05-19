@@ -15,8 +15,9 @@ import { uploadFileToStorage } from '@/lib/storage/file-uploader'
 import { getDataMappings, mapFieldValues, type DataMapping } from '@/lib/mappings/value-mapper'
 import {
   buildInterviewRecordsQuery,
-  getInterviewRecordSourcePersonId,
+  getInterviewRecordSourceHumanResourceId,
   getInterviewRecordSourceRecordId,
+  getInterviewRecordSourceWorkId,
   isImportableInterviewRecord,
   transformInterviewRecord,
 } from './interview-record-transformer'
@@ -967,32 +968,60 @@ export class KintoneDataSync {
             return
           }
 
-          const sourcePersonId = getInterviewRecordSourcePersonId(record)
-          if (!sourcePersonId) {
+          const sourceWorkId = getInterviewRecordSourceWorkId(record)
+          const sourceHumanResourceId = getInterviewRecordSourceHumanResourceId(record)
+          if (!sourceWorkId && !sourceHumanResourceId) {
             skippedUnlinked++
             console.warn('[sync] interview-records:skip', {
               sourceRecordId,
-              reason: 'missing-source-person-id',
+              reason: 'missing-source-person-link-id',
             })
             return
           }
 
-          const { data: people, error: personError } = await this.supabase
-            .from('people')
-            .select('id')
-            .eq('tenant_id', this.tenantId)
-            .eq('external_id', sourcePersonId)
-            .limit(2)
+          let personId: string | null = null
+          if (sourceWorkId) {
+            const { data: workIdPeople, error: workIdPersonError } = await this.supabase
+              .from('people')
+              .select('id')
+              .eq('tenant_id', this.tenantId)
+              .eq('id', sourceWorkId)
+              .limit(1)
 
-          if (personError) {
-            console.error('[sync] interview-records:person-lookup-error', {
-              sourceRecordId,
-              error: personError.message,
-            })
-            throw personError
+            if (workIdPersonError) {
+              console.error('[sync] interview-records:person-lookup-error', {
+                sourceRecordId,
+                lookup: 'WOID',
+                error: workIdPersonError.message,
+              })
+              throw workIdPersonError
+            }
+
+            personId = workIdPeople?.[0]?.id ?? null
           }
 
-          if (!people || people.length === 0) {
+          let fallbackPeople: Array<{ id: string }> | null = null
+          if (!personId && sourceHumanResourceId) {
+            const { data: people, error: personError } = await this.supabase
+              .from('people')
+              .select('id')
+              .eq('tenant_id', this.tenantId)
+              .eq('external_id', sourceHumanResourceId)
+              .limit(2)
+
+            if (personError) {
+              console.error('[sync] interview-records:person-lookup-error', {
+                sourceRecordId,
+                lookup: 'HRID',
+                error: personError.message,
+              })
+              throw personError
+            }
+
+            fallbackPeople = people
+          }
+
+          if (!personId && (!fallbackPeople || fallbackPeople.length === 0)) {
             skippedUnlinked++
             console.warn('[sync] interview-records:skip', {
               sourceRecordId,
@@ -1001,7 +1030,7 @@ export class KintoneDataSync {
             return
           }
 
-          if (people.length > 1) {
+          if (!personId && fallbackPeople && fallbackPeople.length > 1) {
             skippedAmbiguousPerson++
             console.warn('[sync] interview-records:skip', {
               sourceRecordId,
@@ -1010,10 +1039,20 @@ export class KintoneDataSync {
             return
           }
 
+          personId = personId ?? fallbackPeople?.[0]?.id ?? null
+          if (!personId) {
+            skippedUnlinked++
+            console.warn('[sync] interview-records:skip', {
+              sourceRecordId,
+              reason: 'person-not-found',
+            })
+            return
+          }
+
           const now = new Date().toISOString()
           const payload = transformInterviewRecord(record, {
             tenantId: this.tenantId,
-            personId: people[0].id,
+            personId,
             sourceAppId: appMapping.source_app_id,
           })
 
