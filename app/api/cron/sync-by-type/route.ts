@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSyncService } from '@/lib/sync/kintone-sync'
 import { getConnector, setConnectorStatus } from '@/lib/db/connectors'
+import { buildConnectorBatchMetadata, parseConnectorBatchParams } from '@/lib/sync/connector-batch'
 import { createClient } from '@supabase/supabase-js'
 
 // Use Node.js runtime for crypto operations
@@ -50,6 +51,16 @@ async function handleSyncByType(request: NextRequest) {
     // Get target app type from query parameters
     const { searchParams } = new URL(request.url)
     const targetAppType = searchParams.get('type')
+    let batchParams
+
+    try {
+      batchParams = parseConnectorBatchParams(searchParams)
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Invalid batch parameters' },
+        { status: 400 }
+      )
+    }
     
     if (!targetAppType || !['people', 'people_image', 'visas', 'interview_records'].includes(targetAppType)) {
       return NextResponse.json(
@@ -63,7 +74,7 @@ async function handleSyncByType(request: NextRequest) {
     const supabase = getServerClient()
     
     // Get all connected Kintone connectors that have active mappings for the target app type
-    const { data: connectors, error: connectorsError } = await supabase
+    let connectorsQuery = supabase
       .from('connectors')
       .select(`
         *,
@@ -78,6 +89,27 @@ async function handleSyncByType(request: NextRequest) {
       .eq('connection_status.status', 'connected')
       .eq('connector_app_mappings.target_app_type', targetAppType)
       .eq('connector_app_mappings.is_active', true)
+
+    const effectiveOffset = batchParams.connectorId ? 0 : batchParams.offset
+    if (batchParams.connectorId) {
+      connectorsQuery = connectorsQuery
+        .eq('id', batchParams.connectorId)
+        .limit(1)
+    } else {
+      // Fetch one extra connector to detect whether the workflow should request the next batch.
+      connectorsQuery = connectorsQuery
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(batchParams.offset, batchParams.offset + batchParams.limit)
+    }
+
+    const { data: connectorRows, error: connectorsError } = await connectorsQuery
+    const batchMetadata = buildConnectorBatchMetadata({
+      fetchedCount: connectorRows?.length || 0,
+      limit: batchParams.limit,
+      offset: effectiveOffset,
+    })
+    const connectors = (connectorRows || []).slice(0, batchParams.limit)
     
     if (connectorsError) {
       throw new Error(`Failed to fetch connectors: ${connectorsError.message}`)
@@ -89,7 +121,9 @@ async function handleSyncByType(request: NextRequest) {
         success: true,
         message: `No connectors to sync for ${targetAppType}`,
         synced: 0,
-        targetAppType
+        targetAppType,
+        requestedConnectorId: batchParams.connectorId,
+        ...batchMetadata,
       })
     }
     
@@ -163,7 +197,8 @@ async function handleSyncByType(request: NextRequest) {
       message: `Scheduled ${targetAppType} sync completed: ${successCount} successful, ${failedCount} failed`,
       targetAppType,
       totalSynced,
-      connectorCount: connectors.length,
+      requestedConnectorId: batchParams.connectorId,
+      ...batchMetadata,
       successCount,
       failedCount,
       results

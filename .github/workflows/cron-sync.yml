@@ -16,6 +16,10 @@ on:
           - visas
           - interview_records
           - both
+      batch_size:
+        description: 'Connector batch size for interview_records manual sync'
+        required: false
+        default: '10'
 
 jobs:
   sync-people:
@@ -100,4 +104,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           echo "🕐 Starting interview_records sync at $(date)"
-          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type interview_records
+          cmd=(pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type interview_records --all-batches)
+          if [ -n "${{ github.event.inputs.batch_size }}" ]; then
+            cmd+=(--limit "${{ github.event.inputs.batch_size }}")
+          fi
+          "${cmd[@]}"

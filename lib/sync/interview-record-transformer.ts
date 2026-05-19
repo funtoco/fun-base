@@ -3,6 +3,8 @@ import type { KintoneRecord } from '@/lib/kintone/api-client'
 export const DEFAULT_EXTERNAL_CONFIRMATION_STATUS = '確認待ち'
 export const IMPORTABLE_INTERVIEW_STATUS = '完了'
 export const KINTONE_INTERVIEW_SOURCE_SYSTEM = 'kintone'
+const KINTONE_INTERVIEW_RECORD_TYPE_QUERY =
+  'timeInterview in ("定期面談", "日々の面談")'
 
 type RecordType = 'regular_interview' | 'daily_support'
 
@@ -85,10 +87,26 @@ function toStringOrNull(value: any): string | null {
   return nonEmptyStringOrNull(labelValue(value))
 }
 
-function toNumberOrNull(value: any): number | null {
-  if (value === undefined || value === null || value === '') return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+function toMinutesOrNull(startTime: string | null, endTime: string | null): number | null {
+  if (!startTime || !endTime) return null
+
+  const startMatch = /^(\d{1,2}):(\d{2})$/.exec(startTime)
+  const endMatch = /^(\d{1,2}):(\d{2})$/.exec(endTime)
+  if (!startMatch || !endMatch) return null
+
+  const startHour = Number(startMatch[1])
+  const startMinute = Number(startMatch[2])
+  const endHour = Number(endMatch[1])
+  const endMinute = Number(endMatch[2])
+  if (startHour > 23 || endHour > 23 || startMinute > 59 || endMinute > 59) {
+    return null
+  }
+
+  const startMinutes = startHour * 60 + startMinute
+  const endMinutes = endHour * 60 + endMinute
+  const duration = endMinutes - startMinutes
+
+  return duration >= 0 ? duration : null
 }
 
 function toDateOrNull(value: any): string | null {
@@ -104,29 +122,50 @@ function normalizeRecordType(value: any): RecordType | null {
   return null
 }
 
-function hasCompletedStatusFilter(query: string): boolean {
-  return /\bStatus\s*=\s*"完了"/.test(query)
+function recordTypeValue(record: KintoneRecord): any {
+  return toStringOrNull(fieldValue(record, 'timeInterview')) ?? fieldValue(record, 'interview')
+}
+
+function hasRecordTypeFilter(query: string): boolean {
+  return (
+    /\btimeInterview\s+in\s*\([^)]*"定期面談"[^)]*"日々の面談"[^)]*\)/.test(query) ||
+    (/\btimeInterview\s*=\s*"定期面談"/.test(query) &&
+      /\btimeInterview\s*=\s*"日々の面談"/.test(query))
+  )
+}
+
+function parenthesizeQuery(query: string): string {
+  return query.startsWith('(') && query.endsWith(')') ? query : `(${query})`
 }
 
 export function buildInterviewRecordsQuery(baseQuery = ''): string {
   const trimmed = baseQuery.trim()
-  const statusFilter = 'Status = "完了"'
 
-  if (!trimmed) return statusFilter
-  if (hasCompletedStatusFilter(trimmed)) return trimmed
+  if (!trimmed) return KINTONE_INTERVIEW_RECORD_TYPE_QUERY
+  if (hasRecordTypeFilter(trimmed)) return trimmed
 
-  return `${trimmed} and ${statusFilter}`
+  return `${parenthesizeQuery(trimmed)} and ${KINTONE_INTERVIEW_RECORD_TYPE_QUERY}`
 }
 
 export function isImportableInterviewRecord(record: KintoneRecord): boolean {
-  return (
-    toStringOrNull(fieldValue(record, 'Status')) === IMPORTABLE_INTERVIEW_STATUS &&
-    normalizeRecordType(fieldValue(record, 'interview')) !== null
-  )
+  const recordType = normalizeRecordType(recordTypeValue(record))
+  if (recordType === 'regular_interview') {
+    return toStringOrNull(fieldValue(record, 'Status')) === IMPORTABLE_INTERVIEW_STATUS
+  }
+
+  return recordType === 'daily_support'
+}
+
+export function getInterviewRecordSourceWorkId(record: KintoneRecord): string | null {
+  return toStringOrNull(fieldValue(record, 'WOID'))
+}
+
+export function getInterviewRecordSourceHumanResourceId(record: KintoneRecord): string | null {
+  return toStringOrNull(fieldValue(record, 'HRID'))
 }
 
 export function getInterviewRecordSourcePersonId(record: KintoneRecord): string | null {
-  return toStringOrNull(fieldValue(record, 'HRID'))
+  return getInterviewRecordSourceWorkId(record) ?? getInterviewRecordSourceHumanResourceId(record)
 }
 
 export function getInterviewRecordSourceRecordId(record: KintoneRecord): string | null {
@@ -191,7 +230,7 @@ export function parseActivityEntries(tableStorageDaily: any): ActivityEntry[] {
         ...(notes ? { notes } : {}),
       }
     })
-    .filter((entry): entry is ActivityEntry => entry !== null)
+    .filter((entry: ActivityEntry | null): entry is ActivityEntry => entry !== null)
 }
 
 function toRawRecordJson(record: KintoneRecord): Record<string, unknown> {
@@ -206,9 +245,11 @@ export function transformInterviewRecord(
     throw new Error('Interview record is not importable')
   }
 
-  const recordType = normalizeRecordType(fieldValue(record, 'interview'))
+  const recordType = normalizeRecordType(recordTypeValue(record))
   const interviewDate = toDateOrNull(fieldValue(record, 'interviewDate'))
   const sourceRecordId = toStringOrNull(fieldValue(record, '$id'))
+  const startTime = toStringOrNull(fieldValue(record, 'Time'))
+  const endTime = toStringOrNull(fieldValue(record, 'Time_0'))
 
   if (!recordType) {
     throw new Error('Unsupported interview record type')
@@ -223,19 +264,19 @@ export function transformInterviewRecord(
   return {
     tenant_id: context.tenantId,
     person_id: context.personId,
-    source_person_id: toStringOrNull(fieldValue(record, 'HRID')),
+    source_person_id: getInterviewRecordSourcePersonId(record),
     source_system: KINTONE_INTERVIEW_SOURCE_SYSTEM,
     source_app_id: context.sourceAppId,
     source_record_id: sourceRecordId,
     record_type: recordType,
     source_status: toStringOrNull(fieldValue(record, 'Status')) || IMPORTABLE_INTERVIEW_STATUS,
     interview_date: interviewDate,
-    start_time: toStringOrNull(fieldValue(record, 'Time')),
-    end_time: toStringOrNull(fieldValue(record, 'Time_0')),
+    start_time: startTime,
+    end_time: endTime,
     target_quarter: toStringOrNull(fieldValue(record, 'targetQuarter')),
     interview_method: toStringOrNull(fieldValue(record, 'interviewMethod')),
     interview_place: toStringOrNull(fieldValue(record, 'interviewPlace')),
-    interview_duration_minutes: toNumberOrNull(fieldValue(record, 'timeInterview')),
+    interview_duration_minutes: toMinutesOrNull(startTime, endTime),
     company_id: toStringOrNull(fieldValue(record, 'COID')),
     company_name: toStringOrNull(fieldValue(record, 'companyName')),
     support_staff_name: toStringOrNull(fieldValue(record, 'supportName')),
