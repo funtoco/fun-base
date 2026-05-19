@@ -3,6 +3,8 @@ import type { KintoneRecord } from '@/lib/kintone/api-client'
 export const DEFAULT_EXTERNAL_CONFIRMATION_STATUS = '確認待ち'
 export const IMPORTABLE_INTERVIEW_STATUS = '完了'
 export const KINTONE_INTERVIEW_SOURCE_SYSTEM = 'kintone'
+const KINTONE_INTERVIEW_RECORD_TYPE_QUERY =
+  '(timeInterview = "定期面談" or timeInterview = "日々の面談")'
 
 type RecordType = 'regular_interview' | 'daily_support'
 
@@ -124,25 +126,29 @@ function recordTypeValue(record: KintoneRecord): any {
   return toStringOrNull(fieldValue(record, 'timeInterview')) ?? fieldValue(record, 'interview')
 }
 
-function hasCompletedStatusFilter(query: string): boolean {
-  return /\bStatus\s*=\s*"完了"/.test(query)
+function hasRecordTypeFilter(query: string): boolean {
+  return (
+    /\btimeInterview\s*=\s*"定期面談"/.test(query) &&
+    /\btimeInterview\s*=\s*"日々の面談"/.test(query)
+  )
 }
 
 export function buildInterviewRecordsQuery(baseQuery = ''): string {
   const trimmed = baseQuery.trim()
-  const statusFilter = 'Status = "完了"'
 
-  if (!trimmed) return statusFilter
-  if (hasCompletedStatusFilter(trimmed)) return trimmed
+  if (!trimmed) return KINTONE_INTERVIEW_RECORD_TYPE_QUERY
+  if (hasRecordTypeFilter(trimmed)) return trimmed
 
-  return `${trimmed} and ${statusFilter}`
+  return `${trimmed} and ${KINTONE_INTERVIEW_RECORD_TYPE_QUERY}`
 }
 
 export function isImportableInterviewRecord(record: KintoneRecord): boolean {
-  return (
-    toStringOrNull(fieldValue(record, 'Status')) === IMPORTABLE_INTERVIEW_STATUS &&
-    normalizeRecordType(recordTypeValue(record)) !== null
-  )
+  const recordType = normalizeRecordType(recordTypeValue(record))
+  if (recordType === 'regular_interview') {
+    return toStringOrNull(fieldValue(record, 'Status')) === IMPORTABLE_INTERVIEW_STATUS
+  }
+
+  return recordType === 'daily_support'
 }
 
 export function getInterviewRecordSourceWorkId(record: KintoneRecord): string | null {

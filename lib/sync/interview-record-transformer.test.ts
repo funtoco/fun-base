@@ -9,7 +9,7 @@ import {
   transformInterviewRecord,
 } from './interview-record-transformer'
 
-test('isImportableInterviewRecord only accepts completed regular or daily interview records', () => {
+test('isImportableInterviewRecord only requires completed status for regular interviews', () => {
   assert.equal(
     isImportableInterviewRecord({
       $id: { value: '9559' },
@@ -24,6 +24,15 @@ test('isImportableInterviewRecord only accepts completed regular or daily interv
     isImportableInterviewRecord({
       $id: { value: '9560' },
       $revision: { value: '1' },
+      Status: { value: '確認不要' },
+      timeInterview: { value: '日々の面談' },
+    }),
+    true
+  )
+  assert.equal(
+    isImportableInterviewRecord({
+      $id: { value: '9561' },
+      $revision: { value: '1' },
       Status: { value: '確認中' },
       timeInterview: { value: '定期面談' },
     }),
@@ -31,7 +40,7 @@ test('isImportableInterviewRecord only accepts completed regular or daily interv
   )
   assert.equal(
     isImportableInterviewRecord({
-      $id: { value: '9561' },
+      $id: { value: '9562' },
       $revision: { value: '1' },
       Status: { value: '完了' },
       timeInterview: { value: '家族面談' },
@@ -40,7 +49,7 @@ test('isImportableInterviewRecord only accepts completed regular or daily interv
   )
   assert.equal(
     isImportableInterviewRecord({
-      $id: { value: '9562' },
+      $id: { value: '9563' },
       $revision: { value: '1' },
       Status: { value: '完了' },
       interview: { value: '定期面談' },
@@ -50,15 +59,20 @@ test('isImportableInterviewRecord only accepts completed regular or daily interv
   )
 })
 
-test('buildInterviewRecordsQuery keeps connector filters and enforces completed status', () => {
+test('buildInterviewRecordsQuery keeps connector filters and limits record categories', () => {
   assert.equal(
     buildInterviewRecordsQuery('COID = "3222"'),
-    'COID = "3222" and Status = "完了"'
+    'COID = "3222" and (timeInterview = "定期面談" or timeInterview = "日々の面談")'
   )
 
   assert.equal(
-    buildInterviewRecordsQuery('COID = "3222" and Status = "完了"'),
-    'COID = "3222" and Status = "完了"'
+    buildInterviewRecordsQuery('COID = "3222" and (timeInterview = "定期面談" or timeInterview = "日々の面談")'),
+    'COID = "3222" and (timeInterview = "定期面談" or timeInterview = "日々の面談")'
+  )
+
+  assert.equal(
+    buildInterviewRecordsQuery(),
+    '(timeInterview = "定期面談" or timeInterview = "日々の面談")'
   )
 })
 
@@ -129,6 +143,47 @@ test('transformInterviewRecord ignores invalid clock values for duration', () =>
   )
 
   assert.equal(row.interview_duration_minutes, null)
+})
+
+test('transformInterviewRecord maps daily support regardless of source status', () => {
+  const row = transformInterviewRecord(
+    {
+      $id: { value: '6254' },
+      $revision: { value: '1' },
+      HRID: { value: '1697' },
+      WOID: { value: '2666' },
+      Status: { value: '確認不要' },
+      timeInterview: { value: '日々の面談' },
+      interviewDate: { value: '2025-09-30' },
+      tableStorageDaily: {
+        value: [
+          {
+            id: 'row-1',
+            value: {
+              dai: { value: '生活支援' },
+              chu: { value: '銀行・送金' },
+              shou: { value: ['口座開設'] },
+            },
+          },
+        ],
+      },
+    },
+    {
+      tenantId: 'tenant-1',
+      personId: 'person-1',
+      sourceAppId: '98',
+    }
+  )
+
+  assert.equal(row.record_type, 'daily_support')
+  assert.equal(row.source_status, '確認不要')
+  assert.deepEqual(row.activity_entries, [
+    {
+      dai: '生活支援',
+      chu: '銀行・送金',
+      shou: '口座開設',
+    },
+  ])
 })
 
 test('transformInterviewRecord falls back to HRID when WOID is missing', () => {
