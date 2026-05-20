@@ -2,19 +2,28 @@
 
 import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { AuthGuard } from "@/components/auth-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
 import { getRegularInterviews } from "@/lib/kintone-data"
 import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
+import {
+  buildInterviewListQueryString,
+  getQueryMultiValues,
+  getQuerySingleValue,
+  toggleQueryMultiValue,
+} from "@/lib/interview-list-query"
 import { formatDate } from "@/lib/utils"
 import type { RegularInterview } from "@/lib/models"
 import {
   ArrowUpRight,
   Search,
+  FilterIcon,
   Calendar,
   Clock,
   User,
@@ -121,14 +130,97 @@ function InterviewCard({ interview }: { interview: RegularInterview }) {
 }
 
 export default function MeetingsPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [interviews, setInterviews] = useState<RegularInterview[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [quarterFilter, setQuarterFilter] = useState<string>("all")
-  const [companyFilter, setCompanyFilter] = useState<string>("all")
-  const [staffFilter, setStaffFilter] = useState<string>("all")
-  const [methodFilter, setMethodFilter] = useState<string>("all")
-  const [dateFilter, setDateFilter] = useState<string>("all")
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("search") ?? "")
+  const [quarterFilter, setQuarterFilter] = useState<string[]>(() =>
+    getQueryMultiValues(new URLSearchParams(searchParams.toString()), "quarter")
+  )
+  const [companyFilter, setCompanyFilter] = useState<string[]>(() =>
+    getQueryMultiValues(new URLSearchParams(searchParams.toString()), "company")
+  )
+  const [staffFilter, setStaffFilter] = useState<string[]>(() =>
+    getQueryMultiValues(new URLSearchParams(searchParams.toString()), "staff")
+  )
+  const [methodFilter, setMethodFilter] = useState<string[]>(() =>
+    getQueryMultiValues(new URLSearchParams(searchParams.toString()), "method")
+  )
+  const [dateFilter, setDateFilter] = useState<string>(() =>
+    getQuerySingleValue(new URLSearchParams(searchParams.toString()), "date")
+  )
+
+  const replaceUrl = ({
+    search = searchTerm,
+    quarter = quarterFilter,
+    company = companyFilter,
+    staff = staffFilter,
+    method = methodFilter,
+    date = dateFilter,
+  }: {
+    search?: string
+    quarter?: string[]
+    company?: string[]
+    staff?: string[]
+    method?: string[]
+    date?: string
+  }) => {
+    const query = buildInterviewListQueryString({
+      search,
+      multi: { quarter, company, staff, method },
+      single: { date },
+    })
+    router.replace(`/meetings${query ? `?${query}` : ""}`, { scroll: false })
+  }
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value)
+    replaceUrl({ search: value })
+  }
+
+  const handleMultiFilterToggle = (
+    value: string,
+    currentValues: string[],
+    setValues: (values: string[]) => void,
+    key: "quarter" | "company" | "staff" | "method"
+  ) => {
+    const nextValues = toggleQueryMultiValue(currentValues, value)
+    setValues(nextValues)
+    replaceUrl({ [key]: nextValues })
+  }
+
+  const handleDateFilterChange = (value: string) => {
+    setDateFilter(value)
+    replaceUrl({ date: value })
+  }
+
+  const resetFilters = () => {
+    setSearchTerm("")
+    setQuarterFilter([])
+    setCompanyFilter([])
+    setStaffFilter([])
+    setMethodFilter([])
+    setDateFilter("all")
+    replaceUrl({
+      search: "",
+      quarter: [],
+      company: [],
+      staff: [],
+      method: [],
+      date: "all",
+    })
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    setSearchTerm(params.get("search") ?? "")
+    setQuarterFilter(getQueryMultiValues(params, "quarter"))
+    setCompanyFilter(getQueryMultiValues(params, "company"))
+    setStaffFilter(getQueryMultiValues(params, "staff"))
+    setMethodFilter(getQueryMultiValues(params, "method"))
+    setDateFilter(getQuerySingleValue(params, "date"))
+  }, [searchParams])
 
   // Fetch data from async data adapter
   useEffect(() => {
@@ -184,16 +276,16 @@ export default function MeetingsPage() {
       }
 
       // Quarter filter
-      if (quarterFilter !== "all" && interview.targetQuarter !== quarterFilter) return false
+      if (quarterFilter.length > 0 && !quarterFilter.includes(interview.targetQuarter ?? "")) return false
 
       // Company filter
-      if (companyFilter !== "all" && interview.companyName !== companyFilter) return false
+      if (companyFilter.length > 0 && !companyFilter.includes(interview.companyName ?? "")) return false
 
       // Staff filter
-      if (staffFilter !== "all" && interview.supportStaffName !== staffFilter) return false
+      if (staffFilter.length > 0 && !staffFilter.includes(interview.supportStaffName ?? "")) return false
 
       // Method filter
-      if (methodFilter !== "all" && interview.interviewMethod !== methodFilter) return false
+      if (methodFilter.length > 0 && !methodFilter.includes(interview.interviewMethod ?? "")) return false
 
       // Date filter
       if (dateFilter !== "all") {
@@ -235,60 +327,44 @@ export default function MeetingsPage() {
             <Input
               placeholder="人材名、呼び名、法人名、ID..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-10 w-64"
             />
           </div>
 
-          <Select value={quarterFilter} onValueChange={setQuarterFilter}>
-            <SelectTrigger className="w-36">
-              <SelectValue placeholder="対象四半期" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {filterOptions.quarters.map((quarter) => (
-                <SelectItem key={quarter} value={quarter}>{quarter}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="対象四半期"
+            options={filterOptions.quarters.map((quarter) => ({ value: quarter, label: quarter }))}
+            selectedValues={quarterFilter}
+            onToggle={(value) => handleMultiFilterToggle(value, quarterFilter, setQuarterFilter, "quarter")}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-          <Select value={companyFilter} onValueChange={setCompanyFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="法人" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {filterOptions.companies.map((company) => (
-                <SelectItem key={company} value={company}>{company}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="法人"
+            options={filterOptions.companies.map((company) => ({ value: company, label: company }))}
+            selectedValues={companyFilter}
+            onToggle={(value) => handleMultiFilterToggle(value, companyFilter, setCompanyFilter, "company")}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-          <Select value={staffFilter} onValueChange={setStaffFilter}>
-            <SelectTrigger className="w-36">
-              <SelectValue placeholder="支援担当者" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {filterOptions.staff.map((staff) => (
-                <SelectItem key={staff} value={staff}>{staff}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="支援担当者"
+            options={filterOptions.staff.map((staff) => ({ value: staff, label: staff }))}
+            selectedValues={staffFilter}
+            onToggle={(value) => handleMultiFilterToggle(value, staffFilter, setStaffFilter, "staff")}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-          <Select value={methodFilter} onValueChange={setMethodFilter}>
-            <SelectTrigger className="w-36">
-              <SelectValue placeholder="面談方法" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {filterOptions.methods.map((method) => (
-                <SelectItem key={method} value={method}>{method}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="面談方法"
+            options={filterOptions.methods.map((method) => ({ value: method, label: method }))}
+            selectedValues={methodFilter}
+            onToggle={(value) => handleMultiFilterToggle(value, methodFilter, setMethodFilter, "method")}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-          <Select value={dateFilter} onValueChange={setDateFilter}>
+          <Select value={dateFilter} onValueChange={handleDateFilterChange}>
             <SelectTrigger className="w-32">
               <SelectValue placeholder="期間" />
             </SelectTrigger>
@@ -358,22 +434,16 @@ export default function MeetingsPage() {
                 <button
                   onClick={() => {
                     const now = new Date()
-                    const currentQuarter = `${now.getFullYear()}年Q${Math.ceil((now.getMonth() + 1) / 3)}`
-                    setQuarterFilter(currentQuarter)
+                    const currentQuarter = `${now.getFullYear()}年第${Math.ceil((now.getMonth() + 1) / 3)}四半期`
+                    setQuarterFilter([currentQuarter])
+                    replaceUrl({ quarter: [currentQuarter] })
                   }}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
                   今四半期のみ表示
                 </button>
                 <button
-                  onClick={() => {
-                    setSearchTerm("")
-                    setQuarterFilter("all")
-                    setCompanyFilter("all")
-                    setStaffFilter("all")
-                    setMethodFilter("all")
-                    setDateFilter("all")
-                  }}
+                  onClick={resetFilters}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
                   フィルタをリセット

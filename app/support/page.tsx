@@ -2,20 +2,29 @@
 
 import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { AuthGuard } from "@/components/auth-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
 import { getDailySupportRecords } from "@/lib/kintone-data"
 import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
+import {
+  buildInterviewListQueryString,
+  getQueryMultiValues,
+  getQuerySingleValue,
+  toggleQueryMultiValue,
+} from "@/lib/interview-list-query"
 import { getCategoryColor } from "@/lib/interview-records"
 import { formatDate } from "@/lib/utils"
 import type { DailySupportRecord } from "@/lib/models"
 import {
   ArrowUpRight,
   Search,
+  FilterIcon,
   Calendar,
   Clock,
   User,
@@ -108,14 +117,90 @@ function SupportRecordCard({ record }: { record: DailySupportRecord }) {
 }
 
 export default function SupportPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [records, setRecords] = useState<DailySupportRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [companyFilter, setCompanyFilter] = useState<string>("all")
-  const [staffFilter, setStaffFilter] = useState<string>("all")
-  const [categoryFilter, setCategoryFilter] = useState<string>("all")
-  const [dateFilter, setDateFilter] = useState<string>("all")
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("search") ?? "")
+  const [companyFilter, setCompanyFilter] = useState<string[]>(() =>
+    getQueryMultiValues(new URLSearchParams(searchParams.toString()), "company")
+  )
+  const [staffFilter, setStaffFilter] = useState<string[]>(() =>
+    getQueryMultiValues(new URLSearchParams(searchParams.toString()), "staff")
+  )
+  const [categoryFilter, setCategoryFilter] = useState<string[]>(() =>
+    getQueryMultiValues(new URLSearchParams(searchParams.toString()), "category")
+  )
+  const [dateFilter, setDateFilter] = useState<string>(() =>
+    getQuerySingleValue(new URLSearchParams(searchParams.toString()), "date")
+  )
+
+  const replaceUrl = ({
+    search = searchTerm,
+    company = companyFilter,
+    staff = staffFilter,
+    category = categoryFilter,
+    date = dateFilter,
+  }: {
+    search?: string
+    company?: string[]
+    staff?: string[]
+    category?: string[]
+    date?: string
+  }) => {
+    const query = buildInterviewListQueryString({
+      search,
+      multi: { company, staff, category },
+      single: { date },
+    })
+    router.replace(`/support${query ? `?${query}` : ""}`, { scroll: false })
+  }
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value)
+    replaceUrl({ search: value })
+  }
+
+  const handleMultiFilterToggle = (
+    value: string,
+    currentValues: string[],
+    setValues: (values: string[]) => void,
+    key: "company" | "staff" | "category"
+  ) => {
+    const nextValues = toggleQueryMultiValue(currentValues, value)
+    setValues(nextValues)
+    replaceUrl({ [key]: nextValues })
+  }
+
+  const handleDateFilterChange = (value: string) => {
+    setDateFilter(value)
+    replaceUrl({ date: value })
+  }
+
+  const resetFilters = () => {
+    setSearchTerm("")
+    setCompanyFilter([])
+    setStaffFilter([])
+    setCategoryFilter([])
+    setDateFilter("all")
+    replaceUrl({
+      search: "",
+      company: [],
+      staff: [],
+      category: [],
+      date: "all",
+    })
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    setSearchTerm(params.get("search") ?? "")
+    setCompanyFilter(getQueryMultiValues(params, "company"))
+    setStaffFilter(getQueryMultiValues(params, "staff"))
+    setCategoryFilter(getQueryMultiValues(params, "category"))
+    setDateFilter(getQuerySingleValue(params, "date"))
+  }, [searchParams])
 
   // Fetch data from async data adapter
   useEffect(() => {
@@ -176,14 +261,14 @@ export default function SupportPage() {
       }
 
       // Company filter
-      if (companyFilter !== "all" && record.companyName !== companyFilter) return false
+      if (companyFilter.length > 0 && !companyFilter.includes(record.companyName ?? "")) return false
 
       // Staff filter
-      if (staffFilter !== "all" && record.supportStaffName !== staffFilter) return false
+      if (staffFilter.length > 0 && !staffFilter.includes(record.supportStaffName ?? "")) return false
 
       // Category filter (dai)
-      if (categoryFilter !== "all") {
-        const hasCategory = record.dailyEntries.some((entry) => entry.dai === categoryFilter)
+      if (categoryFilter.length > 0) {
+        const hasCategory = record.dailyEntries.some((entry) => categoryFilter.includes(entry.dai))
         if (!hasCategory) return false
       }
 
@@ -258,12 +343,12 @@ export default function SupportPage() {
             <Input
               placeholder="人材名、法人名、カテゴリ..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-10 w-64"
             />
           </div>
 
-          <Select value={dateFilter} onValueChange={setDateFilter}>
+          <Select value={dateFilter} onValueChange={handleDateFilterChange}>
             <SelectTrigger className="w-32">
               <SelectValue placeholder="期間" />
             </SelectTrigger>
@@ -276,41 +361,29 @@ export default function SupportPage() {
             </SelectContent>
           </Select>
 
-          <Select value={companyFilter} onValueChange={setCompanyFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="法人" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {filterOptions.companies.map((company) => (
-                <SelectItem key={company} value={company}>{company}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="法人"
+            options={filterOptions.companies.map((company) => ({ value: company, label: company }))}
+            selectedValues={companyFilter}
+            onToggle={(value) => handleMultiFilterToggle(value, companyFilter, setCompanyFilter, "company")}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-          <Select value={staffFilter} onValueChange={setStaffFilter}>
-            <SelectTrigger className="w-36">
-              <SelectValue placeholder="支援担当者" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {filterOptions.staff.map((staff) => (
-                <SelectItem key={staff} value={staff}>{staff}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="支援担当者"
+            options={filterOptions.staff.map((staff) => ({ value: staff, label: staff }))}
+            selectedValues={staffFilter}
+            onToggle={(value) => handleMultiFilterToggle(value, staffFilter, setStaffFilter, "staff")}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="カテゴリ" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {filterOptions.categories.map((category) => (
-                <SelectItem key={category} value={category}>{category}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="カテゴリ"
+            options={filterOptions.categories.map((category) => ({ value: category, label: category }))}
+            selectedValues={categoryFilter}
+            onToggle={(value) => handleMultiFilterToggle(value, categoryFilter, setCategoryFilter, "category")}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
           <Badge variant="secondary">{filteredRecords.length} 件</Badge>
         </div>
@@ -421,9 +494,15 @@ export default function SupportPage() {
                 <button
                   onClick={() => {
                     setDateFilter("today")
-                    setCompanyFilter("all")
-                    setStaffFilter("all")
-                    setCategoryFilter("all")
+                    setCompanyFilter([])
+                    setStaffFilter([])
+                    setCategoryFilter([])
+                    replaceUrl({
+                      date: "today",
+                      company: [],
+                      staff: [],
+                      category: [],
+                    })
                   }}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
@@ -432,9 +511,15 @@ export default function SupportPage() {
                 <button
                   onClick={() => {
                     setDateFilter("week")
-                    setCompanyFilter("all")
-                    setStaffFilter("all")
-                    setCategoryFilter("all")
+                    setCompanyFilter([])
+                    setStaffFilter([])
+                    setCategoryFilter([])
+                    replaceUrl({
+                      date: "week",
+                      company: [],
+                      staff: [],
+                      category: [],
+                    })
                   }}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
@@ -442,21 +527,19 @@ export default function SupportPage() {
                 </button>
                 <button
                   onClick={() => {
-                    setCategoryFilter("ビザ関連")
+                    setCategoryFilter(["ビザ関連"])
                     setDateFilter("all")
+                    replaceUrl({
+                      category: ["ビザ関連"],
+                      date: "all",
+                    })
                   }}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
                   ビザ関連のみ
                 </button>
                 <button
-                  onClick={() => {
-                    setSearchTerm("")
-                    setCompanyFilter("all")
-                    setStaffFilter("all")
-                    setCategoryFilter("all")
-                    setDateFilter("all")
-                  }}
+                  onClick={resetFilters}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
                   フィルタをリセット
