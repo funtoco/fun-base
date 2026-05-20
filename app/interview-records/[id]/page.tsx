@@ -136,7 +136,11 @@ export default async function InterviewRecordDetailPage({ params }: InterviewRec
                           {entry.dai}
                         </span>
                       )}
-                      {entry.chu && <Badge variant="outline">{entry.chu}</Badge>}
+                      {entry.chu && (
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(entry.chu)}`}>
+                          {entry.chu}
+                        </span>
+                      )}
                       {entry.shou && <Badge variant="secondary">{entry.shou}</Badge>}
                     </div>
                     {entry.notes && (

@@ -14,6 +14,11 @@ export function getCompanyConfirmationStatusColor(status: string): string {
 
 export function getCategoryColor(dai: string): string {
   const categoryColors: Record<string, string> = {
+    日々の対応報告: "bg-slate-50 text-slate-700 ring-1 ring-inset ring-slate-200",
+    ビザ更新対応: "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200",
+    ライフライン対応: "bg-cyan-50 text-cyan-700 ring-1 ring-inset ring-cyan-200",
+    "SIMカード・インターネット対応": "bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-200",
+    パスポート更新案内: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
     生活支援: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200",
     就労支援: "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200",
     ビザ関連: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",

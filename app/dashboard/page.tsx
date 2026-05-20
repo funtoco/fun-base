@@ -25,6 +25,7 @@ import { getPublishedAnnouncements, getReadAnnouncementIds } from "@/lib/supabas
 import { getLatestDailySupportRecords, getLatestRegularInterviews } from "@/lib/kintone-data"
 import { buildDashboardViewModel } from "@/lib/dashboard/view-model"
 import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
+import { getCategoryColor } from "@/lib/interview-records"
 import { formatDate, formatDateTime } from "@/lib/utils"
 import type { Announcement, DailySupportRecord, Person, RegularInterview, Visa } from "@/lib/models"
 
@@ -153,6 +154,10 @@ function DashboardContent({
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
                 <CardTitle className="text-base">最近の面談</CardTitle>
               </div>
+              <Link href="/meetings" className="text-xs text-primary hover:underline flex items-center gap-1">
+                一覧へ
+                <ChevronRight className="h-3 w-3" />
+              </Link>
             </div>
           </CardHeader>
           <CardContent>
@@ -191,6 +196,10 @@ function DashboardContent({
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <CardTitle className="text-base">日々のサポート</CardTitle>
               </div>
+              <Link href="/support" className="text-xs text-primary hover:underline flex items-center gap-1">
+                一覧へ
+                <ChevronRight className="h-3 w-3" />
+              </Link>
             </div>
           </CardHeader>
           <CardContent>
@@ -212,7 +221,9 @@ function DashboardContent({
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs shrink-0">{categoryLabel}</Badge>
+                            <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(categoryLabel)}`}>
+                              {categoryLabel}
+                            </span>
                           </div>
                           <p className="text-sm font-medium truncate mt-1">{title}</p>
                           <p className="text-xs text-muted-foreground truncate">{record.personName}</p>

@@ -93,15 +93,21 @@ function SupportRecordCard({ record }: { record: DailySupportRecord }) {
               className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg"
             >
               <div className="flex flex-wrap gap-1.5 flex-1">
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(entry.dai)}`}>
-                  {entry.dai}
-                </span>
-                <Badge variant="outline" className="text-xs">
-                  {entry.chu}
-                </Badge>
-                <Badge variant="secondary" className="text-xs">
-                  {entry.shou}
-                </Badge>
+                {entry.dai && (
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(entry.dai)}`}>
+                    {entry.dai}
+                  </span>
+                )}
+                {entry.chu && (
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(entry.chu)}`}>
+                    {entry.chu}
+                  </span>
+                )}
+                {entry.shou && (
+                  <Badge variant="secondary" className="text-xs">
+                    {entry.shou}
+                  </Badge>
+                )}
                 {entry.notes && (
                   <span className="text-sm text-muted-foreground ml-2">
                     {entry.notes}
