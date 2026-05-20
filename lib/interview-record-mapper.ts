@@ -44,6 +44,35 @@ export type InterviewRecordRow = {
   person?: InterviewRecordPerson | InterviewRecordPerson[] | null
 }
 
+const INTERVIEW_RECORD_VISIBLE_COLUMNS = [
+  "id",
+  "person_id",
+  "source_person_id",
+  "source_record_id",
+  "record_type",
+  "source_status",
+  "interview_date",
+  "start_time",
+  "end_time",
+  "target_quarter",
+  "interview_method",
+  "interview_place",
+  "interview_duration_minutes",
+  "company_id",
+  "company_name",
+  "support_staff_name",
+  "sales_staff_name",
+  "internal_staff_name",
+  "external_report_body",
+  "activity_entries",
+  "external_confirmation_status",
+  "created_at",
+  "updated_at",
+].join(", ")
+
+export const INTERVIEW_RECORD_SELECT_COLUMNS = INTERVIEW_RECORD_VISIBLE_COLUMNS
+export const INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON = `${INTERVIEW_RECORD_VISIBLE_COLUMNS}, person:people(id, name, kana)`
+
 const KINTONE_INTERVIEW_STATUSES = new Set<KintoneInterviewStatus>([
   "Not started",
   "完了",

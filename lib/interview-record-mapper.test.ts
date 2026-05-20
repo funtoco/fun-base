@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { test } from "vitest"
 
 import {
+  INTERVIEW_RECORD_SELECT_COLUMNS,
+  INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON,
   isMissingInterviewRecordsTableError,
   mapInterviewRecordToDailySupportRecord,
   mapInterviewRecordToRegularInterview,
@@ -93,4 +95,10 @@ test("isMissingInterviewRecordsTableError only matches missing interview_records
     true
   )
   assert.equal(isMissingInterviewRecordsTableError({ code: "42501", message: "permission denied" }), false)
+})
+
+test("interview record select columns exclude internal and raw sync fields", () => {
+  assert.equal(INTERVIEW_RECORD_SELECT_COLUMNS.includes("raw_record_json"), false)
+  assert.equal(INTERVIEW_RECORD_SELECT_COLUMNS.includes("internal_notes"), false)
+  assert.equal(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON.includes("person:people(id, name, kana)"), true)
 })

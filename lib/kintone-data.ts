@@ -14,6 +14,7 @@ import {
   formatLocalDateTime,
 } from "@/lib/interview-records"
 import {
+  INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON,
   isMissingInterviewRecordsTableError,
   mapInterviewRecordToDailySupportRecord,
   mapInterviewRecordToRegularInterview,
@@ -43,7 +44,7 @@ export async function getRegularInterviews(): Promise<RegularInterview[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from("interview_records")
-    .select("*, person:people(id, name, kana)")
+    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "regular_interview")
     .order("interview_date", { ascending: false })
     .order("created_at", { ascending: false })
@@ -62,7 +63,7 @@ export async function getLatestRegularInterviews(limit = 5): Promise<RegularInte
   const supabase = createClient()
   const { data, error } = await supabase
     .from("interview_records")
-    .select("*, person:people(id, name, kana)")
+    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "regular_interview")
     .order("interview_date", { ascending: false })
     .order("created_at", { ascending: false })
@@ -83,7 +84,7 @@ export async function getRegularInterviewsByPersonId(personId: string): Promise<
   const supabase = createClient()
   const { data, error } = await supabase
     .from("interview_records")
-    .select("*")
+    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "regular_interview")
     .eq("person_id", personId)
     .order("interview_date", { ascending: false })
@@ -104,7 +105,7 @@ export async function getDailySupportRecords(): Promise<DailySupportRecord[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from("interview_records")
-    .select("*, person:people(id, name, kana)")
+    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "daily_support")
     .order("interview_date", { ascending: false })
     .order("created_at", { ascending: false })
@@ -123,7 +124,7 @@ export async function getLatestDailySupportRecords(limit = 5): Promise<DailySupp
   const supabase = createClient()
   const { data, error } = await supabase
     .from("interview_records")
-    .select("*, person:people(id, name, kana)")
+    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "daily_support")
     .order("interview_date", { ascending: false })
     .order("created_at", { ascending: false })
@@ -144,7 +145,7 @@ export async function getDailySupportRecordsByPersonId(personId: string): Promis
   const supabase = createClient()
   const { data, error } = await supabase
     .from("interview_records")
-    .select("*")
+    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "daily_support")
     .eq("person_id", personId)
     .order("interview_date", { ascending: false })

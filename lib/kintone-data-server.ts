@@ -1,6 +1,7 @@
 import type { DailySupportRecord, RegularInterview } from "@/lib/models"
 import { createClient } from "@/lib/supabase/server"
 import {
+  INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON,
   isMissingInterviewRecordsTableError,
   mapInterviewRecordToDailySupportRecord,
   mapInterviewRecordToRegularInterview,
@@ -35,7 +36,7 @@ export async function getInterviewRecordDetailById(recordId: string): Promise<In
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("interview_records")
-    .select("*, person:people(id, name, kana)")
+    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("id", recordId)
     .maybeSingle()
 
@@ -68,7 +69,7 @@ export async function getRegularInterviewsByPersonId(personId: string): Promise<
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("interview_records")
-    .select("*")
+    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "regular_interview")
     .eq("person_id", personId)
     .order("interview_date", { ascending: false })
@@ -85,7 +86,7 @@ export async function getDailySupportRecordsByPersonId(personId: string): Promis
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("interview_records")
-    .select("*")
+    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "daily_support")
     .eq("person_id", personId)
     .order("interview_date", { ascending: false })
