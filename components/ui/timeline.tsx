@@ -15,6 +15,7 @@ export interface TimelineItem {
   datetime: string
   status?: string
   personName?: string
+  href?: string
 }
 
 interface TimelineProps {
@@ -40,6 +41,11 @@ export function Timeline({ items, className }: TimelineProps) {
   const router = useRouter()
 
   const handleItemClick = (item: TimelineItem) => {
+    if (item.href) {
+      router.push(item.href)
+      return
+    }
+
     switch (item.type) {
       case "meeting":
         router.push("/meetings")

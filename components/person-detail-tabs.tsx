@@ -1,16 +1,18 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Timeline } from "@/components/ui/timeline"
+import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
 import { getCategoryColor } from "@/lib/interview-records"
 import { formatDate } from "@/lib/utils"
 import type { Visa, PersonDocument, RegularInterview, DailySupportRecord } from "@/lib/models"
 import { PersonDocumentsTab } from "@/components/person-documents-tab"
-import { Calendar, Clock, MapPin, User, FileText, ChevronDown, ChevronUp } from "lucide-react"
+import { ArrowUpRight, Calendar, Clock, MapPin, User, FileText, ChevronDown, ChevronUp } from "lucide-react"
 
 interface PersonDetailTabsProps {
   personId: string
@@ -34,6 +36,7 @@ function getDailySupportTimelineTitle(record: DailySupportRecord): string {
 // Regular Interview Card Component - displays 企業提出用レポート as main content
 function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
   const [expanded, setExpanded] = useState(false)
+  const detailHref = getInterviewRecordDetailPath(interview.id)
 
   return (
     <Card>
@@ -70,6 +73,12 @@ function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
               )}
             </div>
           </div>
+          <Button asChild variant="ghost" size="sm" className="shrink-0">
+            <Link href={detailHref} aria-label={`${interview.targetQuarter ?? "定期面談"}の詳細`}>
+              詳細
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </Button>
         </div>
       </CardHeader>
       <CardContent>
@@ -108,6 +117,8 @@ function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
 
 // Daily Support Card Component - displays tableStorageDaily entries as main content
 function DailySupportCard({ record }: { record: DailySupportRecord }) {
+  const detailHref = getInterviewRecordDetailPath(record.id)
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -133,6 +144,12 @@ function DailySupportCard({ record }: { record: DailySupportRecord }) {
               )}
             </div>
           </div>
+          <Button asChild variant="ghost" size="sm" className="shrink-0">
+            <Link href={detailHref} aria-label={`${formatDate(record.supportDate)}のサポート詳細`}>
+              詳細
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </Button>
         </div>
       </CardHeader>
       <CardContent>
@@ -183,12 +200,14 @@ export function PersonDetailTabs({
       type: "meeting" as const,
       title: `${interview.targetQuarter} 定期面談`,
       datetime: interview.interviewDate,
+      href: getInterviewRecordDetailPath(interview.id),
     })),
     ...dailySupportRecords.map((record) => ({
       id: record.id,
       type: "support" as const,
       title: getDailySupportTimelineTitle(record),
       datetime: record.supportDate,
+      href: getInterviewRecordDetailPath(record.id),
     })),
   ].sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime())
 

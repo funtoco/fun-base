@@ -15,6 +15,7 @@ type InterviewRecordPerson = {
 
 export type InterviewRecordRow = {
   id: string
+  tenant_id?: string | null
   person_id: string
   source_person_id?: string | null
   source_system?: string | null

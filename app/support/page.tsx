@@ -5,13 +5,16 @@ import Link from "next/link"
 import { AuthGuard } from "@/components/auth-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getDailySupportRecords } from "@/lib/kintone-data"
+import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
 import { getCategoryColor } from "@/lib/interview-records"
 import { formatDate } from "@/lib/utils"
 import type { DailySupportRecord } from "@/lib/models"
 import {
+  ArrowUpRight,
   Search,
   Calendar,
   Clock,
@@ -19,8 +22,10 @@ import {
   Building2
 } from "lucide-react"
 
-// Support Record Card Component - read-only, links to person detail
+// Support Record Card Component - read-only, links to person and record detail
 function SupportRecordCard({ record }: { record: DailySupportRecord }) {
+  const detailHref = getInterviewRecordDetailPath(record.id)
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -62,6 +67,12 @@ function SupportRecordCard({ record }: { record: DailySupportRecord }) {
               )}
             </div>
           </div>
+          <Button asChild variant="ghost" size="sm" className="shrink-0">
+            <Link href={detailHref} aria-label={`${record.personName}のサポート詳細`}>
+              詳細
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </Button>
         </div>
       </CardHeader>
       <CardContent>

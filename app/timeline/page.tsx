@@ -12,6 +12,7 @@ import { Search, Calendar, FileText, CheckSquare, ChevronRight } from "lucide-re
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
 import { getRegularInterviews, getDailySupportRecords } from "@/lib/kintone-data"
+import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
 import type { Person, Visa, EnhancedActivityItem, TimelineActivityType } from "@/lib/models"
 import { cn } from "@/lib/utils"
 
@@ -22,7 +23,7 @@ const typeConfig: Record<TimelineActivityType, { icon: typeof Calendar; color: s
   daily_support: { icon: CheckSquare, color: "text-orange-600 bg-orange-100", label: "日々対応" },
 }
 
-// Timeline Item Component - links to person detail page (not individual record detail)
+// Timeline Item Component - links to the owning detail page.
 function TimelineItem({ item, isLast }: { item: EnhancedActivityItem; isLast: boolean }) {
   const config = typeConfig[item.type]
   const Icon = config.icon
@@ -152,7 +153,7 @@ export default function TimelinePage() {
             personName: interview.personName,
             companyName: interview.companyName,
             datetime: interview.interviewDate,
-            link: `/people/${interview.personId}`, // Link to person detail
+            link: getInterviewRecordDetailPath(interview.id),
           })
         })
 
@@ -167,7 +168,7 @@ export default function TimelinePage() {
             personName: record.personName,
             companyName: record.companyName,
             datetime: record.supportDate,
-            link: `/people/${record.personId}`, // Link to person detail
+            link: getInterviewRecordDetailPath(record.id),
           })
         })
 

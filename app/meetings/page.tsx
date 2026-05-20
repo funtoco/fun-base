@@ -9,9 +9,11 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getRegularInterviews } from "@/lib/kintone-data"
+import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
 import { formatDate } from "@/lib/utils"
 import type { RegularInterview } from "@/lib/models"
 import {
+  ArrowUpRight,
   Search,
   Calendar,
   Clock,
@@ -23,9 +25,10 @@ import {
   ChevronUp
 } from "lucide-react"
 
-// Interview Card Component - read-only, links to person detail
+// Interview Card Component - read-only, links to person and record detail
 function InterviewCard({ interview }: { interview: RegularInterview }) {
   const [expanded, setExpanded] = useState(false)
+  const detailHref = getInterviewRecordDetailPath(interview.id)
 
   return (
     <Card>
@@ -75,6 +78,12 @@ function InterviewCard({ interview }: { interview: RegularInterview }) {
               )}
             </div>
           </div>
+          <Button asChild variant="ghost" size="sm" className="shrink-0">
+            <Link href={detailHref} aria-label={`${interview.personName}の面談詳細`}>
+              詳細
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </Button>
         </div>
       </CardHeader>
       <CardContent>

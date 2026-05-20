@@ -7,6 +7,10 @@ import {
   type InterviewRecordRow,
 } from "@/lib/interview-record-mapper"
 
+export type InterviewRecordDetail =
+  | { recordType: "regular_interview"; record: RegularInterview }
+  | { recordType: "daily_support"; record: DailySupportRecord }
+
 function handleInterviewRecordsFetchError<T>(context: string, error: { code?: string; message?: string }): T[] {
   if (isMissingInterviewRecordsTableError(error)) {
     console.warn(`[interview-records] ${context}: interview_records table is not ready yet`)
@@ -15,6 +19,49 @@ function handleInterviewRecordsFetchError<T>(context: string, error: { code?: st
 
   console.error(`[interview-records] ${context}:`, error)
   throw error
+}
+
+function handleInterviewRecordFetchError(context: string, error: { code?: string; message?: string }): null {
+  if (isMissingInterviewRecordsTableError(error)) {
+    console.warn(`[interview-records] ${context}: interview_records table is not ready yet`)
+    return null
+  }
+
+  console.error(`[interview-records] ${context}:`, error)
+  throw error
+}
+
+export async function getInterviewRecordDetailById(recordId: string): Promise<InterviewRecordDetail | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("interview_records")
+    .select("*, person:people(id, name, kana)")
+    .eq("id", recordId)
+    .maybeSingle()
+
+  if (error) {
+    return handleInterviewRecordFetchError("fetch interview record detail", error)
+  }
+
+  if (!data) return null
+
+  const row = data as InterviewRecordRow
+  if (row.record_type === "regular_interview") {
+    return {
+      recordType: "regular_interview",
+      record: mapInterviewRecordToRegularInterview(row),
+    }
+  }
+
+  if (row.record_type === "daily_support") {
+    return {
+      recordType: "daily_support",
+      record: mapInterviewRecordToDailySupportRecord(row),
+    }
+  }
+
+  console.warn("[interview-records] unknown record type", { recordType: row.record_type, recordId })
+  return null
 }
 
 export async function getRegularInterviewsByPersonId(personId: string): Promise<RegularInterview[]> {

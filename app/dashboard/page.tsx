@@ -24,6 +24,7 @@ import { getVisas } from "@/lib/supabase/visas"
 import { getPublishedAnnouncements, getReadAnnouncementIds } from "@/lib/supabase/announcements"
 import { getLatestDailySupportRecords, getLatestRegularInterviews } from "@/lib/kintone-data"
 import { buildDashboardViewModel } from "@/lib/dashboard/view-model"
+import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
 import { formatDate, formatDateTime } from "@/lib/utils"
 import type { Announcement, DailySupportRecord, Person, RegularInterview, Visa } from "@/lib/models"
 
@@ -162,7 +163,7 @@ function DashboardContent({
                 {viewModel.latestRegularInterviews.map((interview) => (
                   <Link
                     key={interview.id}
-                    href={`/people/${interview.personId}`}
+                    href={getInterviewRecordDetailPath(interview.id)}
                     className="block p-2 rounded-lg hover:bg-muted/50 transition-colors -mx-2"
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -205,7 +206,7 @@ function DashboardContent({
                   return (
                     <Link
                       key={record.id}
-                      href={`/people/${record.personId}`}
+                      href={getInterviewRecordDetailPath(record.id)}
                       className="block p-2 rounded-lg hover:bg-muted/50 transition-colors -mx-2"
                     >
                       <div className="flex items-start justify-between gap-2">
