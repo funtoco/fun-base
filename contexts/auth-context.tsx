@@ -4,6 +4,7 @@ import type React from "react"
 
 import { createContext, useContext, useEffect, useState } from "react"
 import type { User } from "@supabase/supabase-js"
+import { DEFAULT_AUTH_REDIRECT_PATH, getSafeRedirectPath } from "@/lib/auth-route-guards"
 import { createClient } from "@/lib/supabase/client"
 import { accessLogger } from "@/lib/access-logger"
 
@@ -18,14 +19,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-function getSafeRedirectPath(redirectTo?: string) {
-  if (!redirectTo || !redirectTo.startsWith("/") || redirectTo.startsWith("//")) {
-    return "/dashboard"
-  }
-
-  return redirectTo
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -130,7 +123,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email,
         password,
         options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
+          emailRedirectTo:
+            process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
+            `${window.location.origin}${DEFAULT_AUTH_REDIRECT_PATH}`,
           data: {
             tenant_name: tenantName,
           },

@@ -5,6 +5,7 @@ import { useEffect } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
+import { isPublicRoute } from "@/lib/auth-route-guards"
 import { usePathname, useRouter } from "next/navigation"
 import { usePageViewLogger } from "@/hooks/use-page-view-logger"
 
@@ -16,14 +17,7 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   const { user, loading } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
-
-  // 認証が不要なページ（ログイン、サインアップ）
-  const publicPages = ["/login", "/signup"]
-  const isPublicPage =
-    publicPages.includes(pathname) ||
-    pathname.startsWith("/auth") ||
-    pathname === "/invite" ||
-    pathname.startsWith("/invite/")
+  const isPublicPage = isPublicRoute(pathname)
 
   // auth が完了していてログイン済みの非公開ページのみ記録する
   usePageViewLogger({ enabled: !loading && !!user && !isPublicPage })

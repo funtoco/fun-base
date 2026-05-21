@@ -9,28 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { getSafeRedirectPath } from "@/lib/auth-route-guards"
 import Link from "next/link"
 import Image from "next/image"
 import { useSearchParams } from "next/navigation"
-
-function getSafeNextPath(next: string | null) {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) {
-    return "/dashboard"
-  }
-
-  let nextUrl: URL
-  try {
-    nextUrl = new URL(next, "https://funbase.local")
-  } catch {
-    return "/dashboard"
-  }
-
-  if (nextUrl.pathname === "/login" || nextUrl.pathname === "/signup" || nextUrl.pathname.startsWith("/auth")) {
-    return "/dashboard"
-  }
-
-  return `${nextUrl.pathname}${nextUrl.search}`
-}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -45,7 +27,7 @@ export default function LoginPage() {
     setLoading(true)
     setError("")
 
-    const { error } = await signIn(email, password, getSafeNextPath(searchParams.get("next")))
+    const { error } = await signIn(email, password, getSafeRedirectPath(searchParams.get("next")))
 
     if (error) {
       setError("ログインに失敗しました。メールアドレスとパスワードを確認してください。")

@@ -1,43 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
+import { getSafeRedirectPath, isAuthRoute, isPublicRoute } from "@/lib/auth-route-guards"
 import { NextResponse, type NextRequest } from "next/server"
-
-const AUTH_ROUTES = ["/login", "/signup"]
-const PUBLIC_ROUTE_PREFIXES = ["/auth", "/invite"]
-
-function isAuthRoute(pathname: string) {
-  return AUTH_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
-}
-
-function isPublicRoute(pathname: string) {
-  if (pathname === "/") {
-    return true
-  }
-
-  if (isAuthRoute(pathname)) {
-    return true
-  }
-
-  return PUBLIC_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
-}
-
-function getSafeNextPath(next: string | null) {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) {
-    return null
-  }
-
-  let nextUrl: URL
-  try {
-    nextUrl = new URL(next, "https://funbase.local")
-  } catch {
-    return null
-  }
-
-  if (isPublicRoute(nextUrl.pathname)) {
-    return null
-  }
-
-  return `${nextUrl.pathname}${nextUrl.search}`
-}
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
@@ -108,7 +71,7 @@ export async function middleware(request: NextRequest) {
   // Redirect authenticated users away from auth pages to the default landing page.
   if (isAuthenticated && isAuthRoute(pathname)) {
     const url = request.nextUrl.clone()
-    const nextPath = getSafeNextPath(request.nextUrl.searchParams.get("next")) || "/dashboard"
+    const nextPath = getSafeRedirectPath(request.nextUrl.searchParams.get("next"))
     const nextUrl = new URL(nextPath, request.nextUrl.origin)
     url.pathname = nextUrl.pathname
     url.search = nextUrl.search
