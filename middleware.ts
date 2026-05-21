@@ -105,10 +105,10 @@ export async function middleware(request: NextRequest) {
     return redirectWithSessionCookies(url)
   }
 
-  // Redirect to people page if authenticated and trying to access auth pages
+  // Redirect authenticated users away from auth pages to the default landing page.
   if (isAuthenticated && isAuthRoute(pathname)) {
     const url = request.nextUrl.clone()
-    const nextPath = getSafeNextPath(request.nextUrl.searchParams.get("next")) || "/people"
+    const nextPath = getSafeNextPath(request.nextUrl.searchParams.get("next")) || "/dashboard"
     const nextUrl = new URL(nextPath, request.nextUrl.origin)
     url.pathname = nextUrl.pathname
     url.search = nextUrl.search

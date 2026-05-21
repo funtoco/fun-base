@@ -21,7 +21,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 function getSafeRedirectPath(redirectTo?: string) {
   if (!redirectTo || !redirectTo.startsWith("/") || redirectTo.startsWith("//")) {
-    return "/people"
+    return "/dashboard"
   }
 
   return redirectTo
@@ -130,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email,
         password,
         options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/people`,
+          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
           data: {
             tenant_name: tenantName,
           },

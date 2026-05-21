@@ -15,18 +15,18 @@ import { useSearchParams } from "next/navigation"
 
 function getSafeNextPath(next: string | null) {
   if (!next || !next.startsWith("/") || next.startsWith("//")) {
-    return "/people"
+    return "/dashboard"
   }
 
   let nextUrl: URL
   try {
     nextUrl = new URL(next, "https://funbase.local")
   } catch {
-    return "/people"
+    return "/dashboard"
   }
 
   if (nextUrl.pathname === "/login" || nextUrl.pathname === "/signup" || nextUrl.pathname.startsWith("/auth")) {
-    return "/people"
+    return "/dashboard"
   }
 
   return `${nextUrl.pathname}${nextUrl.search}`
