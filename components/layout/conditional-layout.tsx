@@ -1,9 +1,11 @@
 "use client"
 
+import type React from "react"
+import { useEffect } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { usePageViewLogger } from "@/hooks/use-page-view-logger"
 
 interface ConditionalLayoutProps {
@@ -13,6 +15,7 @@ interface ConditionalLayoutProps {
 export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   const { user, loading } = useAuth()
   const pathname = usePathname()
+  const router = useRouter()
 
   // 認証が不要なページ（ログイン、サインアップ）
   const publicPages = ["/login", "/signup"]
@@ -25,7 +28,16 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   // auth が完了していてログイン済みの非公開ページのみ記録する
   usePageViewLogger({ enabled: !loading && !!user && !isPublicPage })
 
-  if (loading) {
+  useEffect(() => {
+    if (loading || user || isPublicPage) {
+      return
+    }
+
+    const search = typeof window !== "undefined" ? window.location.search : ""
+    router.replace(`/login?next=${encodeURIComponent(`${pathname}${search}`)}`)
+  }, [isPublicPage, loading, pathname, router, user])
+
+  if (loading || (!isPublicPage && !user)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

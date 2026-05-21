@@ -11,13 +11,21 @@ interface AuthContextType {
   user: User | null
   loading: boolean
   role: string | null
-  signIn: (email: string, password: string) => Promise<{ error: any }>
+  signIn: (email: string, password: string, redirectTo?: string) => Promise<{ error: any }>
   signUp: (email: string, password: string, tenantName?: string) => Promise<{ error: any }>
   signOut: () => Promise<void>
   refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+function getSafeRedirectPath(redirectTo?: string) {
+  if (!redirectTo || !redirectTo.startsWith("/") || redirectTo.startsWith("//")) {
+    return "/people"
+  }
+
+  return redirectTo
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -64,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [supabase.auth, isAuthEnabled])
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, redirectTo?: string) => {
     if (!isAuthEnabled) {
       console.log("認証機能が無効化されているため、ログインをスキップします")
       return { error: new Error("認証機能が無効化されています") }
@@ -95,8 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         accessLogger.login()
 
-        // ログイン成功時はミドルウェアがリダイレクトを処理
-        window.location.href = "/people"
+        window.location.href = getSafeRedirectPath(redirectTo)
       }
 
       if (error) {

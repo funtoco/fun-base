@@ -11,6 +11,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import Link from "next/link"
 import Image from "next/image"
+import { useSearchParams } from "next/navigation"
+
+function getSafeNextPath(next: string | null) {
+  if (!next || !next.startsWith("/") || next.startsWith("//")) {
+    return "/people"
+  }
+
+  let nextUrl: URL
+  try {
+    nextUrl = new URL(next, "https://funbase.local")
+  } catch {
+    return "/people"
+  }
+
+  if (nextUrl.pathname === "/login" || nextUrl.pathname === "/signup" || nextUrl.pathname.startsWith("/auth")) {
+    return "/people"
+  }
+
+  return `${nextUrl.pathname}${nextUrl.search}`
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -18,13 +38,14 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const { signIn } = useAuth()
+  const searchParams = useSearchParams()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
 
-    const { error } = await signIn(email, password)
+    const { error } = await signIn(email, password, getSafeNextPath(searchParams.get("next")))
 
     if (error) {
       setError("ログインに失敗しました。メールアドレスとパスワードを確認してください。")

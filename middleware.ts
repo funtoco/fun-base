@@ -1,7 +1,61 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
+const AUTH_ROUTES = ["/login", "/signup"]
+const PUBLIC_ROUTE_PREFIXES = ["/auth", "/invite"]
+
+function isAuthRoute(pathname: string) {
+  return AUTH_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+}
+
+function isPublicRoute(pathname: string) {
+  if (pathname === "/") {
+    return true
+  }
+
+  if (isAuthRoute(pathname)) {
+    return true
+  }
+
+  return PUBLIC_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+}
+
+function getSafeNextPath(next: string | null) {
+  if (!next || !next.startsWith("/") || next.startsWith("//")) {
+    return null
+  }
+
+  let nextUrl: URL
+  try {
+    nextUrl = new URL(next, "https://funbase.local")
+  } catch {
+    return null
+  }
+
+  if (isPublicRoute(nextUrl.pathname)) {
+    return null
+  }
+
+  return `${nextUrl.pathname}${nextUrl.search}`
+}
+
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next({
+      request,
+    })
+  }
+
+  const shouldCheckAuth = !isPublicRoute(pathname) || isAuthRoute(pathname)
+
+  if (!shouldCheckAuth) {
+    return NextResponse.next({
+      request,
+    })
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -25,23 +79,40 @@ export async function middleware(request: NextRequest) {
     },
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  let isAuthenticated = false
+  try {
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser()
+    isAuthenticated = Boolean(currentUser)
+  } catch (error) {
+    console.error("Failed to verify auth session in middleware:", error)
+  }
 
-  // Redirect to login if not authenticated and trying to access protected routes
-  // Temporarily disabled for testing
-  // if (!user && !request.nextUrl.pathname.startsWith("/login") && !request.nextUrl.pathname.startsWith("/signup")) {
-  //   const url = request.nextUrl.clone()
-  //   url.pathname = "/login"
-  //   return NextResponse.redirect(url)
-  // }
+  const redirectWithSessionCookies = (url: URL) => {
+    const response = NextResponse.redirect(url)
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      response.cookies.set(cookie.name, cookie.value, cookie)
+    })
+    return response
+  }
+
+  if (!isAuthenticated && !isPublicRoute(pathname)) {
+    const url = request.nextUrl.clone()
+    url.pathname = "/login"
+    url.search = ""
+    url.searchParams.set("next", `${pathname}${request.nextUrl.search}`)
+    return redirectWithSessionCookies(url)
+  }
 
   // Redirect to people page if authenticated and trying to access auth pages
-  if (user && (request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/signup"))) {
+  if (isAuthenticated && isAuthRoute(pathname)) {
     const url = request.nextUrl.clone()
-    url.pathname = "/people"
-    return NextResponse.redirect(url)
+    const nextPath = getSafeNextPath(request.nextUrl.searchParams.get("next")) || "/people"
+    const nextUrl = new URL(nextPath, request.nextUrl.origin)
+    url.pathname = nextUrl.pathname
+    url.search = nextUrl.search
+    return redirectWithSessionCookies(url)
   }
 
   return supabaseResponse
