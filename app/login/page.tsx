@@ -9,8 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { getSafeRedirectPath } from "@/lib/auth-route-guards"
 import Link from "next/link"
 import Image from "next/image"
+import { useSearchParams } from "next/navigation"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -18,13 +20,14 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const { signIn } = useAuth()
+  const searchParams = useSearchParams()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
 
-    const { error } = await signIn(email, password)
+    const { error } = await signIn(email, password, getSafeRedirectPath(searchParams.get("next")))
 
     if (error) {
       setError("ログインに失敗しました。メールアドレスとパスワードを確認してください。")

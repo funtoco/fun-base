@@ -4,6 +4,7 @@ import type React from "react"
 
 import { createContext, useContext, useEffect, useState } from "react"
 import type { User } from "@supabase/supabase-js"
+import { DEFAULT_AUTH_REDIRECT_PATH, getSafeRedirectPath } from "@/lib/auth-route-guards"
 import { createClient } from "@/lib/supabase/client"
 import { accessLogger } from "@/lib/access-logger"
 
@@ -11,7 +12,7 @@ interface AuthContextType {
   user: User | null
   loading: boolean
   role: string | null
-  signIn: (email: string, password: string) => Promise<{ error: any }>
+  signIn: (email: string, password: string, redirectTo?: string) => Promise<{ error: any }>
   signUp: (email: string, password: string, tenantName?: string) => Promise<{ error: any }>
   signOut: () => Promise<void>
   refreshUser: () => Promise<void>
@@ -64,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [supabase.auth, isAuthEnabled])
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, redirectTo?: string) => {
     if (!isAuthEnabled) {
       console.log("認証機能が無効化されているため、ログインをスキップします")
       return { error: new Error("認証機能が無効化されています") }
@@ -95,8 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         accessLogger.login()
 
-        // ログイン成功時はミドルウェアがリダイレクトを処理
-        window.location.href = "/people"
+        window.location.href = getSafeRedirectPath(redirectTo)
       }
 
       if (error) {
@@ -123,7 +123,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email,
         password,
         options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/people`,
+          emailRedirectTo:
+            process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
+            `${window.location.origin}${DEFAULT_AUTH_REDIRECT_PATH}`,
           data: {
             tenant_name: tenantName,
           },

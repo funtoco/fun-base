@@ -1,7 +1,24 @@
 import { createServerClient } from "@supabase/ssr"
+import { getSafeRedirectPath, isAuthRoute, isPublicRoute } from "@/lib/auth-route-guards"
 import { NextResponse, type NextRequest } from "next/server"
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next({
+      request,
+    })
+  }
+
+  const shouldCheckAuth = !isPublicRoute(pathname) || isAuthRoute(pathname)
+
+  if (!shouldCheckAuth) {
+    return NextResponse.next({
+      request,
+    })
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -25,23 +42,40 @@ export async function middleware(request: NextRequest) {
     },
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  let isAuthenticated = false
+  try {
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser()
+    isAuthenticated = Boolean(currentUser)
+  } catch (error) {
+    console.error("Failed to verify auth session in middleware:", error)
+  }
 
-  // Redirect to login if not authenticated and trying to access protected routes
-  // Temporarily disabled for testing
-  // if (!user && !request.nextUrl.pathname.startsWith("/login") && !request.nextUrl.pathname.startsWith("/signup")) {
-  //   const url = request.nextUrl.clone()
-  //   url.pathname = "/login"
-  //   return NextResponse.redirect(url)
-  // }
+  const redirectWithSessionCookies = (url: URL) => {
+    const response = NextResponse.redirect(url)
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      response.cookies.set(cookie.name, cookie.value, cookie)
+    })
+    return response
+  }
 
-  // Redirect to people page if authenticated and trying to access auth pages
-  if (user && (request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/signup"))) {
+  if (!isAuthenticated && !isPublicRoute(pathname)) {
     const url = request.nextUrl.clone()
-    url.pathname = "/people"
-    return NextResponse.redirect(url)
+    url.pathname = "/login"
+    url.search = ""
+    url.searchParams.set("next", `${pathname}${request.nextUrl.search}`)
+    return redirectWithSessionCookies(url)
+  }
+
+  // Redirect authenticated users away from auth pages to the default landing page.
+  if (isAuthenticated && isAuthRoute(pathname)) {
+    const url = request.nextUrl.clone()
+    const nextPath = getSafeRedirectPath(request.nextUrl.searchParams.get("next"))
+    const nextUrl = new URL(nextPath, request.nextUrl.origin)
+    url.pathname = nextUrl.pathname
+    url.search = nextUrl.search
+    return redirectWithSessionCookies(url)
   }
 
   return supabaseResponse
