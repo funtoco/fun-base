@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
@@ -435,12 +436,7 @@ export default function VisasPage() {
             />
           </div>
 
-          {/* Active filters count */}
-          {(searchTerm || typeFilter !== "all" || expiryFilter !== "all" || companyFilter.length > 0 || affiliationFilter.length > 0) && (
-            <Badge variant="secondary" className="ml-auto">
-              {filteredVisas.length} / {visas.length} 件を表示
-            </Badge>
-          )}
+          <ResultCountBadge count={filteredVisas.length} total={visas.length} className="ml-auto" />
         </div>
 
         {/* Filter Row */}

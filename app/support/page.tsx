@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { AuthGuard } from "@/components/auth-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -391,7 +392,7 @@ export default function SupportPage() {
             triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
           />
 
-          <Badge variant="secondary">{filteredRecords.length} 件</Badge>
+          <ResultCountBadge count={filteredRecords.length} total={records.length} />
         </div>
 
         {/* Main Content */}

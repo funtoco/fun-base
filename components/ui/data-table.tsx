@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Search, FilterIcon, Download, ChevronUp, ChevronDown, X, ChevronDown as ChevronDownIcon } from "lucide-react"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
+import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { cn } from "@/lib/utils"
 import Encoding from "encoding-japanese"
 
@@ -19,6 +20,8 @@ export interface Column<T> {
   sortable?: boolean
   filterable?: boolean
   render?: (value: any, row: T) => React.ReactNode
+  headerClassName?: string
+  cellClassName?: string
 }
 
 interface DataTableProps<T> {
@@ -29,6 +32,7 @@ interface DataTableProps<T> {
   searchKeys?: (keyof T)[]
   onRowClick?: (row: T) => void
   className?: string
+  tableClassName?: string
   // URLパラメータ永続化用
   initialSearchTerm?: string
   initialActiveFilters?: Record<string, string[]>
@@ -50,6 +54,7 @@ export function DataTable<T extends Record<string, any>>({
   searchKeys = [],
   onRowClick,
   className,
+  tableClassName,
   initialSearchTerm = "",
   initialActiveFilters = {},
   onFilterChange,
@@ -186,11 +191,11 @@ export function DataTable<T extends Record<string, any>>({
   return (
     <div className={cn("space-y-4", className)}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 flex-1">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {/* Search */}
           {searchKeys.length > 0 && (
-            <div className="relative max-w-sm">
+            <div className="relative w-full max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="検索..."
@@ -216,11 +221,13 @@ export function DataTable<T extends Record<string, any>>({
               />
             )
           })}
+
+          <ResultCountBadge count={sortedData.length} total={data.length} />
         </div>
 
         {/* Export */}
         <DropdownMenu>
-          <DropdownMenuTrigger className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-muted h-9">
+          <DropdownMenuTrigger className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-muted">
             <Download className="h-4 w-4" />
             CSV出力
             <ChevronDownIcon className="h-4 w-4 opacity-50" />
@@ -266,13 +273,16 @@ export function DataTable<T extends Record<string, any>>({
 
       {/* Table */}
       <div className="rounded-lg border bg-card shadow-sm">
-        <Table>
+        <Table className={tableClassName}>
           <TableHeader>
             <TableRow>
               {columns.map((column) => (
                 <TableHead
                   key={column.key.toString()}
-                  className={cn(column.sortable && "cursor-pointer select-none hover:bg-muted/50")}
+                  className={cn(
+                    column.sortable && "cursor-pointer select-none hover:bg-muted/50",
+                    column.headerClassName,
+                  )}
                   onClick={() => column.sortable && handleSort(column.key.toString())}
                 >
                   <div className="flex items-center gap-2">
@@ -317,7 +327,7 @@ export function DataTable<T extends Record<string, any>>({
                   onClick={() => onRowClick?.(row)}
                 >
                   {columns.map((column) => (
-                    <TableCell key={column.key.toString()}>
+                    <TableCell key={column.key.toString()} className={column.cellClassName}>
                       {column.render ? column.render(row[column.key], row) : row[column.key]?.toString() || ""}
                     </TableCell>
                   ))}
@@ -328,27 +338,6 @@ export function DataTable<T extends Record<string, any>>({
         </Table>
       </div>
 
-      {/* Results count */}
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <div>
-          {data.length !== sortedData.length ? (
-            <>
-              <span className="font-medium text-foreground">{sortedData.length}</span> 件を表示 
-              <span className="mx-1">•</span> 
-              合計 <span className="font-medium text-foreground">{data.length}</span> 件
-            </>
-          ) : (
-            <>
-              合計 <span className="font-medium text-foreground">{data.length}</span> 件
-            </>
-          )}
-        </div>
-        {data.length !== sortedData.length && (
-          <div className="text-xs">
-            {Math.round((sortedData.length / data.length) * 100)}% を表示中
-          </div>
-        )}
-      </div>
     </div>
   )
 }

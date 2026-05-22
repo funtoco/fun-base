@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
 import { formatDate } from "@/lib/utils"
 import { Search, Calendar, FileText, CheckSquare, ChevronRight, Filter } from "lucide-react"
@@ -383,7 +384,7 @@ export default function TimelinePage() {
             </SelectContent>
           </Select>
 
-          <Badge variant="secondary">{filteredActivities.length} 件</Badge>
+          <ResultCountBadge count={filteredActivities.length} total={allActivities.length} />
         </div>
 
         {/* Main Content */}

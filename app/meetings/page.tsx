@@ -7,6 +7,7 @@ import { AuthGuard } from "@/components/auth-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
@@ -376,7 +377,7 @@ export default function MeetingsPage() {
             </SelectContent>
           </Select>
 
-          <Badge variant="secondary">{filteredInterviews.length} 件</Badge>
+          <ResultCountBadge count={filteredInterviews.length} total={interviews.length} />
         </div>
 
         {/* Main Content */}

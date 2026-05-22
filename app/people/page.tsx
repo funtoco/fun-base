@@ -134,16 +134,17 @@ export default function PeoplePage() {
       key: "name",
       label: "名前",
       sortable: true,
+      cellClassName: "w-[260px] max-w-[260px]",
       render: (value, row) => (
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <PersonAvatar 
             name={value || ""} 
             imagePath={row.imagePath}
             size="md"
           />
-          <div>
-            <div className="font-medium">{value}</div>
-            {row.kana && <div className="text-xs text-muted-foreground">{row.kana}</div>}
+          <div className="min-w-0">
+            <div className="truncate font-medium">{value}</div>
+            {row.kana && <div className="truncate text-xs text-muted-foreground">{row.kana}</div>}
           </div>
         </div>
       ),
@@ -153,23 +154,29 @@ export default function PeoplePage() {
       label: "国籍",
       sortable: true,
       filterable: true,
+      cellClassName: "w-[100px]",
     },
     {
       key: "tenantName",
       label: "会社",
       sortable: true,
       filterable: true,
+      cellClassName: "w-[220px] max-w-[220px]",
+      render: (value) => <div className="truncate">{value}</div>,
     },
     {
       key: "company",
       label: "所属先",
       sortable: true,
       filterable: true,
+      cellClassName: "w-[260px] max-w-[260px]",
+      render: (value) => <div className="truncate">{value}</div>,
     },
     {
       key: "employeeNumber",
       label: "従業員番号",
       sortable: true,
+      cellClassName: "w-[120px]",
       render: (value) =>
         value ? <span className="text-sm font-mono">{value}</span> : <span className="text-muted-foreground">-</span>,
     },
@@ -178,6 +185,7 @@ export default function PeoplePage() {
       label: "就労ステータス",
       sortable: true,
       filterable: true,
+      cellClassName: "w-[132px]",
       render: (value) =>
         value ? <StatusBadge status={value} type="working" /> : <span className="text-muted-foreground">-</span>,
     },
@@ -299,6 +307,7 @@ export default function PeoplePage() {
         filters={filters}
         searchKeys={["name", "tenantName", "nationality"]}
         onRowClick={handleRowClick}
+        tableClassName="min-w-[960px] table-fixed"
         initialSearchTerm={searchParams.get('search') || ''}
         initialActiveFilters={getFiltersFromUrl()}
         onFilterChange={updateUrl}
