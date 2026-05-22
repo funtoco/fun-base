@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, type FormEvent } from "react"
-import { Search, Bell, Settings, User, LogOut, RefreshCw, Cable, Users, ShieldCheck, Megaphone } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { Bell, Settings, LogOut, RefreshCw, Cable, Users, ShieldCheck, Megaphone } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,10 +15,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
-import { usePathname, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { currentUser } from "@/data/users"
 import { formatDate } from "@/lib/utils"
-import { buildPeopleSearchHref } from "@/lib/header-search"
 import {
   getPublishedAnnouncements,
   getReadAnnouncementIds,
@@ -31,9 +29,6 @@ import type { Announcement } from "@/lib/models"
 export function Header() {
   const { user, role, signOut, refreshUser } = useAuth()
   const router = useRouter()
-  const pathname = usePathname()
-  const searchInputRef = useRef<HTMLInputElement>(null)
-  const [searchQuery, setSearchQuery] = useState("")
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [readIds, setReadIds] = useState<string[]>([])
   const [announcementsOpen, setAnnouncementsOpen] = useState(false)
@@ -59,39 +54,6 @@ export function Header() {
     }
   }, [user, loadAnnouncements])
 
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    if (pathname === "/people") {
-      setSearchQuery(new URLSearchParams(window.location.search).get("search") ?? "")
-      return
-    }
-
-    setSearchQuery("")
-  }, [pathname])
-
-  useEffect(() => {
-    const handleSlashFocus = (event: KeyboardEvent) => {
-      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return
-
-      const target = event.target as HTMLElement | null
-      const tagName = target?.tagName
-      const isTypingTarget =
-        target?.isContentEditable ||
-        tagName === "INPUT" ||
-        tagName === "TEXTAREA" ||
-        tagName === "SELECT"
-
-      if (isTypingTarget) return
-
-      event.preventDefault()
-      searchInputRef.current?.focus()
-    }
-
-    window.addEventListener("keydown", handleSlashFocus)
-    return () => window.removeEventListener("keydown", handleSlashFocus)
-  }, [])
-
   const handleMarkAsRead = async (id: string) => {
     try {
       await markAnnouncementAsRead(id)
@@ -116,31 +78,9 @@ export function Header() {
     await signOut()
   }
 
-  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-
-    const currentPathname = typeof window !== "undefined" ? window.location.pathname : pathname
-    const currentSearch = typeof window !== "undefined" ? window.location.search : ""
-    router.push(buildPeopleSearchHref(searchQuery, currentPathname, currentSearch))
-  }
-
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4 md:px-6">
-      {/* Search and Company Switcher */}
-      <div className="flex min-w-0 flex-1 items-center gap-4">
-        <form className="relative w-full max-w-[28rem]" onSubmit={handleSearchSubmit}>
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            ref={searchInputRef}
-            aria-label="人材名、会社名で検索"
-            placeholder="人材名、会社名で検索... (/ でフォーカス)"
-            className="w-full pl-10"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </form>
-
-      </div>
+      <div className="min-w-0 flex-1" />
 
       {/* Actions */}
       <div className="flex shrink-0 items-center gap-2">

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FilterSelect } from "@/components/ui/filter-select"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
 import { getDailySupportRecords } from "@/lib/kintone-data"
 import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
@@ -31,6 +31,14 @@ import {
   User,
   Building2
 } from "lucide-react"
+
+const SUPPORT_DATE_FILTER_OPTIONS = [
+  { value: "all", label: "すべて" },
+  { value: "today", label: "今日" },
+  { value: "week", label: "今週" },
+  { value: "30", label: "過去30日" },
+  { value: "90", label: "過去90日" },
+]
 
 // Support Record Card Component - read-only, links to person and record detail
 function SupportRecordCard({ record }: { record: DailySupportRecord }) {
@@ -355,18 +363,13 @@ export default function SupportPage() {
             />
           </div>
 
-          <Select value={dateFilter} onValueChange={handleDateFilterChange}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="期間" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              <SelectItem value="today">今日</SelectItem>
-              <SelectItem value="week">今週</SelectItem>
-              <SelectItem value="30">過去30日</SelectItem>
-              <SelectItem value="90">過去90日</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterSelect
+            label="期間"
+            value={dateFilter}
+            options={SUPPORT_DATE_FILTER_OPTIONS}
+            onValueChange={handleDateFilterChange}
+            triggerIcon={<FilterIcon className="h-4 w-4 flex-shrink-0" />}
+          />
 
           <FilterMultiSelectPopover
             label="法人"

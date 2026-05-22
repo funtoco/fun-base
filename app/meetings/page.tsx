@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FilterSelect } from "@/components/ui/filter-select"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
 import { getRegularInterviews } from "@/lib/kintone-data"
 import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
@@ -34,6 +34,13 @@ import {
   ChevronDown,
   ChevronUp
 } from "lucide-react"
+
+const MEETING_DATE_FILTER_OPTIONS = [
+  { value: "all", label: "すべて" },
+  { value: "7", label: "過去7日" },
+  { value: "30", label: "過去30日" },
+  { value: "90", label: "過去90日" },
+]
 
 // Interview Card Component - read-only, links to person and record detail
 function InterviewCard({ interview }: { interview: RegularInterview }) {
@@ -365,17 +372,13 @@ export default function MeetingsPage() {
             triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
           />
 
-          <Select value={dateFilter} onValueChange={handleDateFilterChange}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="期間" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              <SelectItem value="7">過去7日</SelectItem>
-              <SelectItem value="30">過去30日</SelectItem>
-              <SelectItem value="90">過去90日</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterSelect
+            label="期間"
+            value={dateFilter}
+            options={MEETING_DATE_FILTER_OPTIONS}
+            onValueChange={handleDateFilterChange}
+            triggerIcon={<FilterIcon className="h-4 w-4 flex-shrink-0" />}
+          />
 
           <ResultCountBadge count={filteredInterviews.length} total={interviews.length} />
         </div>

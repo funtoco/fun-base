@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { AuthGuard } from "@/components/auth-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FilterSelect } from "@/components/ui/filter-select"
 import { Badge } from "@/components/ui/badge"
 import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
@@ -19,6 +19,20 @@ import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
 import { buildTimelineQueryString, readTimelineFilters, toggleTimelinePerson } from "@/lib/timeline-query"
 import type { Person, Visa, EnhancedActivityItem, TimelineActivityType } from "@/lib/models"
 import { cn } from "@/lib/utils"
+
+const TIMELINE_TYPE_FILTER_OPTIONS = [
+  { value: "all", label: "すべて" },
+  { value: "regular_interview", label: "定期面談" },
+  { value: "daily_support", label: "日々対応" },
+  { value: "visa", label: "ビザ" },
+]
+
+const TIMELINE_DATE_FILTER_OPTIONS = [
+  { value: "all", label: "すべて" },
+  { value: "7", label: "過去7日" },
+  { value: "30", label: "過去30日" },
+  { value: "90", label: "過去90日" },
+]
 
 // Type icons and colors
 const typeConfig: Record<TimelineActivityType, { icon: typeof Calendar; color: string; label: string }> = {
@@ -350,17 +364,13 @@ export default function TimelinePage() {
             />
           </div>
 
-          <Select value={typeFilter} onValueChange={handleTypeFilterChange}>
-            <SelectTrigger className="w-36">
-              <SelectValue placeholder="種別" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              <SelectItem value="regular_interview">定期面談</SelectItem>
-              <SelectItem value="daily_support">日々対応</SelectItem>
-              <SelectItem value="visa">ビザ</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterSelect
+            label="活動種別"
+            value={typeFilter}
+            options={TIMELINE_TYPE_FILTER_OPTIONS}
+            onValueChange={handleTypeFilterChange}
+            triggerIcon={<Filter className="h-4 w-4 flex-shrink-0" />}
+          />
 
           <FilterMultiSelectPopover
             label="対象者"
@@ -372,17 +382,13 @@ export default function TimelinePage() {
             noResultsMessage="該当する対象者がありません"
           />
 
-          <Select value={dateFilter} onValueChange={handleDateFilterChange}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="期間" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              <SelectItem value="7">過去7日</SelectItem>
-              <SelectItem value="30">過去30日</SelectItem>
-              <SelectItem value="90">過去90日</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterSelect
+            label="期間"
+            value={dateFilter}
+            options={TIMELINE_DATE_FILTER_OPTIONS}
+            onValueChange={handleDateFilterChange}
+            triggerIcon={<Filter className="h-4 w-4 flex-shrink-0" />}
+          />
 
           <ResultCountBadge count={filteredActivities.length} total={allActivities.length} />
         </div>
