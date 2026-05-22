@@ -2,17 +2,20 @@
 
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { AuthGuard } from "@/components/auth-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
 import { formatDate } from "@/lib/utils"
-import { Search, Calendar, FileText, CheckSquare, ChevronRight } from "lucide-react"
+import { Search, Calendar, FileText, CheckSquare, ChevronRight, Filter } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
 import { getRegularInterviews, getDailySupportRecords } from "@/lib/kintone-data"
 import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
+import { buildTimelineQueryString, readTimelineFilters, toggleTimelinePerson } from "@/lib/timeline-query"
 import type { Person, Visa, EnhancedActivityItem, TimelineActivityType } from "@/lib/models"
 import { cn } from "@/lib/utils"
 
@@ -80,15 +83,70 @@ function TimelineItem({ item, isLast }: { item: EnhancedActivityItem; isLast: bo
 }
 
 export default function TimelinePage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [typeFilter, setTypeFilter] = useState<string>("all")
-  const [personFilter, setPersonFilter] = useState<string>("all")
-  const [dateFilter, setDateFilter] = useState<string>("all")
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const initialFilters = readTimelineFilters(new URLSearchParams(searchParams.toString()))
+  const [searchTerm, setSearchTerm] = useState(initialFilters.search)
+  const [typeFilter, setTypeFilter] = useState<string>(initialFilters.type)
+  const [personFilter, setPersonFilter] = useState<string[]>(initialFilters.persons)
+  const [dateFilter, setDateFilter] = useState<string>(initialFilters.date)
   const [people, setPeople] = useState<Person[]>([])
   const [visas, setVisas] = useState<Visa[]>([])
   const [allActivities, setAllActivities] = useState<EnhancedActivityItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const replaceTimelineUrl = ({
+    search = searchTerm,
+    type = typeFilter,
+    persons = personFilter,
+    date = dateFilter,
+  }: {
+    search?: string
+    type?: string
+    persons?: string[]
+    date?: string
+  }) => {
+    const query = buildTimelineQueryString({ search, type, persons, date })
+    router.replace(query ? `/timeline?${query}` : "/timeline", { scroll: false })
+  }
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value)
+    replaceTimelineUrl({ search: value })
+  }
+
+  const handleTypeFilterChange = (value: string) => {
+    setTypeFilter(value)
+    replaceTimelineUrl({ type: value })
+  }
+
+  const handlePersonFilterToggle = (personId: string) => {
+    const nextPersonFilter = toggleTimelinePerson(personFilter, personId)
+    setPersonFilter(nextPersonFilter)
+    replaceTimelineUrl({ persons: nextPersonFilter })
+  }
+
+  const handleDateFilterChange = (value: string) => {
+    setDateFilter(value)
+    replaceTimelineUrl({ date: value })
+  }
+
+  const resetFilters = () => {
+    setTypeFilter("all")
+    setPersonFilter([])
+    setDateFilter("all")
+    setSearchTerm("")
+    replaceTimelineUrl({ search: "", type: "all", persons: [], date: "all" })
+  }
+
+  useEffect(() => {
+    const filters = readTimelineFilters(new URLSearchParams(searchParams.toString()))
+    setSearchTerm(filters.search)
+    setTypeFilter(filters.type)
+    setPersonFilter(filters.persons)
+    setDateFilter(filters.date)
+  }, [searchParams])
 
   // Fetch data from Supabase and async data adapters
   useEffect(() => {
@@ -205,7 +263,7 @@ export default function TimelinePage() {
       }
 
       // Person filter
-      if (personFilter !== "all" && activity.personId !== personFilter) return false
+      if (personFilter.length > 0 && !personFilter.includes(activity.personId)) return false
 
       // Date filter
       if (dateFilter !== "all") {
@@ -286,12 +344,12 @@ export default function TimelinePage() {
             <Input
               placeholder="タイトル、人材名、法人名..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-10 w-64"
             />
           </div>
 
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <Select value={typeFilter} onValueChange={handleTypeFilterChange}>
             <SelectTrigger className="w-36">
               <SelectValue placeholder="種別" />
             </SelectTrigger>
@@ -303,21 +361,17 @@ export default function TimelinePage() {
             </SelectContent>
           </Select>
 
-          <Select value={personFilter} onValueChange={setPersonFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="対象者" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {uniquePeople.map((person) => (
-                <SelectItem key={person.id} value={person.id}>
-                  {person.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="対象者"
+            options={uniquePeople.map((person) => ({ value: person.id, label: person.name }))}
+            selectedValues={personFilter}
+            onToggle={handlePersonFilterToggle}
+            triggerIcon={<Filter className="h-4 w-4" />}
+            emptyMessage="対象者がありません"
+            noResultsMessage="該当する対象者がありません"
+          />
 
-          <Select value={dateFilter} onValueChange={setDateFilter}>
+          <Select value={dateFilter} onValueChange={handleDateFilterChange}>
             <SelectTrigger className="w-32">
               <SelectValue placeholder="期間" />
             </SelectTrigger>
@@ -437,30 +491,25 @@ export default function TimelinePage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <button
-                  onClick={() => setTypeFilter("regular_interview")}
+                  onClick={() => handleTypeFilterChange("regular_interview")}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
                   定期面談のみ表示
                 </button>
                 <button
-                  onClick={() => setTypeFilter("daily_support")}
+                  onClick={() => handleTypeFilterChange("daily_support")}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
                   日々対応のみ表示
                 </button>
                 <button
-                  onClick={() => setTypeFilter("visa")}
+                  onClick={() => handleTypeFilterChange("visa")}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
                   ビザ更新のみ表示
                 </button>
                 <button
-                  onClick={() => {
-                    setTypeFilter("all")
-                    setPersonFilter("all")
-                    setDateFilter("all")
-                    setSearchTerm("")
-                  }}
+                  onClick={resetFilters}
                   className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
                 >
                   フィルタをリセット
