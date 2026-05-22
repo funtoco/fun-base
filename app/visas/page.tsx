@@ -3,17 +3,18 @@
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
-import { Search, FileText, Clock, X, ChevronDown, ChevronUp, Building2 } from "lucide-react"
+import { Search, Filter as FilterIcon, X, ChevronDown, ChevronUp, Building2 } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
 import { cn, formatDate, isExpiringSoon } from "@/lib/utils"
+import { toggleQueryMultiValue } from "@/lib/interview-list-query"
 import { getLatestVisaActivityDate } from "@/lib/visa-display"
+import { buildVisaFilterQuery, parseVisaFilterQuery } from "@/lib/visa-filter-query"
 import type { VisaStatus, Person, Visa } from "@/lib/models"
 
 const visaStatuses: VisaStatus[] = [
@@ -39,8 +40,8 @@ export default function VisasPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [searchTerm, setSearchTerm] = useState("")
-  const [typeFilter, setTypeFilter] = useState<string>("all")
-  const [expiryFilter, setExpiryFilter] = useState<string>("all")
+  const [typeFilter, setTypeFilter] = useState<string[]>([])
+  const [expiryFilter, setExpiryFilter] = useState<string[]>([])
   const [companyFilter, setCompanyFilter] = useState<string[]>([])
   const [affiliationFilter, setAffiliationFilter] = useState<string[]>([])
   const [people, setPeople] = useState<Person[]>([])
@@ -51,17 +52,12 @@ export default function VisasPage() {
 
   // URLパラメータから初期値を設定
   useEffect(() => {
-    const search = searchParams.get('search')
-    const type = searchParams.get('type')
-    const expiry = searchParams.get('expiry')
-    const company = searchParams.get('company')
-    const affiliation = searchParams.get('affiliation')
-
-    if (search !== null) setSearchTerm(search)
-    if (type) setTypeFilter(type)
-    if (expiry) setExpiryFilter(expiry)
-    if (company) setCompanyFilter(company.split(','))
-    if (affiliation) setAffiliationFilter(affiliation.split(','))
+    const filters = parseVisaFilterQuery(new URLSearchParams(searchParams.toString()))
+    setSearchTerm(filters.search)
+    setTypeFilter(filters.types)
+    setExpiryFilter(filters.expiries)
+    setCompanyFilter(filters.companies)
+    setAffiliationFilter(filters.affiliations)
   }, [searchParams])
 
   useEffect(() => {
@@ -88,20 +84,20 @@ export default function VisasPage() {
   // URLパラメータを更新
   const updateUrl = (filters: {
     search?: string
-    type?: string
-    expiry?: string
-    company?: string[]
-    affiliation?: string[]
+    types?: string[]
+    expiries?: string[]
+    companies?: string[]
+    affiliations?: string[]
   }) => {
-    const newParams = new URLSearchParams()
-    
-    if (filters.search) newParams.set('search', filters.search)
-    if (filters.type && filters.type !== 'all') newParams.set('type', filters.type)
-    if (filters.expiry && filters.expiry !== 'all') newParams.set('expiry', filters.expiry)
-    if (filters.company && filters.company.length > 0) newParams.set('company', filters.company.join(','))
-    if (filters.affiliation && filters.affiliation.length > 0) newParams.set('affiliation', filters.affiliation.join(','))
+    const query = buildVisaFilterQuery({
+      search: filters.search ?? searchTerm,
+      types: filters.types ?? typeFilter,
+      expiries: filters.expiries ?? expiryFilter,
+      companies: filters.companies ?? companyFilter,
+      affiliations: filters.affiliations ?? affiliationFilter,
+    })
 
-    router.replace(`/visas?${newParams.toString()}`, { scroll: false })
+    router.replace(`/visas${query ? `?${query}` : ""}`, { scroll: false })
   }
 
   // フィルター変更時のハンドラ
@@ -109,32 +105,22 @@ export default function VisasPage() {
     setSearchTerm(value)
     updateUrl({
       search: value,
-      type: typeFilter,
-      expiry: expiryFilter,
-      company: companyFilter,
-      affiliation: affiliationFilter,
     })
   }
 
-  const handleTypeFilterChange = (value: string) => {
-    setTypeFilter(value)
+  const handleTypeFilterToggle = (value: string) => {
+    const nextTypes = toggleQueryMultiValue(typeFilter, value)
+    setTypeFilter(nextTypes)
     updateUrl({
-      search: searchTerm,
-      type: value,
-      expiry: expiryFilter,
-      company: companyFilter,
-      affiliation: affiliationFilter,
+      types: nextTypes,
     })
   }
 
-  const handleExpiryFilterChange = (value: string) => {
-    setExpiryFilter(value)
+  const handleExpiryFilterToggle = (value: string) => {
+    const nextExpiries = toggleQueryMultiValue(expiryFilter, value)
+    setExpiryFilter(nextExpiries)
     updateUrl({
-      search: searchTerm,
-      type: typeFilter,
-      expiry: value,
-      company: companyFilter,
-      affiliation: affiliationFilter,
+      expiries: nextExpiries,
     })
   }
 
@@ -144,11 +130,7 @@ export default function VisasPage() {
       : [...companyFilter, value]
     setCompanyFilter(newCompanyFilter)
     updateUrl({
-      search: searchTerm,
-      type: typeFilter,
-      expiry: expiryFilter,
-      company: newCompanyFilter,
-      affiliation: affiliationFilter,
+      companies: newCompanyFilter,
     })
   }
 
@@ -158,11 +140,7 @@ export default function VisasPage() {
       : [...affiliationFilter, value]
     setAffiliationFilter(newAffiliationFilter)
     updateUrl({
-      search: searchTerm,
-      type: typeFilter,
-      expiry: expiryFilter,
-      company: companyFilter,
-      affiliation: newAffiliationFilter,
+      affiliations: newAffiliationFilter,
     })
   }
 
@@ -178,12 +156,17 @@ export default function VisasPage() {
     }
 
     // Type filter
-    if (typeFilter !== "all" && visa.type !== typeFilter) return false
+    if (typeFilter.length > 0 && !typeFilter.includes(visa.type)) return false
 
     // Expiry filter
-    if (expiryFilter !== "all" && visa.expiryDate) {
-      const days = Number.parseInt(expiryFilter)
-      if (!isExpiringSoon(visa.expiryDate, days)) return false
+    if (expiryFilter.length > 0) {
+      if (!visa.expiryDate) return false
+
+      const matchesExpiry = expiryFilter.some((expiry) => {
+        const days = Number.parseInt(expiry, 10)
+        return Number.isFinite(days) && isExpiringSoon(visa.expiryDate!, days)
+      })
+      if (!matchesExpiry) return false
     }
 
     // Company filter
@@ -281,12 +264,17 @@ export default function VisasPage() {
       }
 
       // Type filter
-      if (typeFilter !== "all" && visa.type !== typeFilter) return false
+      if (typeFilter.length > 0 && !typeFilter.includes(visa.type)) return false
 
       // Expiry filter
-      if (expiryFilter !== "all" && visa.expiryDate) {
-        const days = Number.parseInt(expiryFilter)
-        if (!isExpiringSoon(visa.expiryDate, days)) return false
+      if (expiryFilter.length > 0) {
+        if (!visa.expiryDate) return false
+
+        const matchesExpiry = expiryFilter.some((expiry) => {
+          const days = Number.parseInt(expiry, 10)
+          return Number.isFinite(days) && isExpiringSoon(visa.expiryDate!, days)
+        })
+        if (!matchesExpiry) return false
       }
 
       // 会社と所属先のフィルターは除外（選択肢生成のため）
@@ -303,8 +291,8 @@ export default function VisasPage() {
 
   const clearAllFilters = () => {
     setSearchTerm("")
-    setTypeFilter("all")
-    setExpiryFilter("all")
+    setTypeFilter([])
+    setExpiryFilter([])
     setCompanyFilter([])
     setAffiliationFilter([])
     router.replace('/visas', { scroll: false })
@@ -314,10 +302,20 @@ export default function VisasPage() {
   const removeFilter = (filterType: string, value?: string) => {
     switch (filterType) {
       case 'type':
-        handleTypeFilterChange('all')
+        if (value) {
+          handleTypeFilterToggle(value)
+        } else {
+          setTypeFilter([])
+          updateUrl({ types: [] })
+        }
         break
       case 'expiry':
-        handleExpiryFilterChange('all')
+        if (value) {
+          handleExpiryFilterToggle(value)
+        } else {
+          setExpiryFilter([])
+          updateUrl({ expiries: [] })
+        }
         break
       case 'company':
         if (value) {
@@ -325,11 +323,7 @@ export default function VisasPage() {
         } else {
           setCompanyFilter([])
           updateUrl({
-            search: searchTerm,
-            type: typeFilter,
-            expiry: expiryFilter,
-            company: [],
-            affiliation: affiliationFilter,
+            companies: [],
           })
         }
         break
@@ -339,11 +333,7 @@ export default function VisasPage() {
         } else {
           setAffiliationFilter([])
           updateUrl({
-            search: searchTerm,
-            type: typeFilter,
-            expiry: expiryFilter,
-            company: companyFilter,
-            affiliation: [],
+            affiliations: [],
           })
         }
         break
@@ -355,8 +345,12 @@ export default function VisasPage() {
 
   // アクティブなフィルターを取得
   const activeFilters: Array<{ key: string; label: string; value: string }> = []
-  if (typeFilter !== "all") activeFilters.push({ key: 'type', label: `ビザ種別: ${typeFilter}`, value: typeFilter })
-  if (expiryFilter !== "all") activeFilters.push({ key: 'expiry', label: `期限: ${expiryFilter}日以内`, value: expiryFilter })
+  typeFilter.forEach((type) => {
+    activeFilters.push({ key: 'type', label: `ビザ種別: ${type}`, value: type })
+  })
+  expiryFilter.forEach((expiry) => {
+    activeFilters.push({ key: 'expiry', label: `期限: ${expiry}日以内`, value: expiry })
+  })
   companyFilter.forEach((company) => {
     activeFilters.push({ key: 'company', label: `会社: ${company}`, value: company })
   })
@@ -367,6 +361,12 @@ export default function VisasPage() {
 
   // Get unique values for filters
   const visaTypes = Array.from(new Set(visas.map((v) => v.type)))
+  const expiryOptions = [
+    { value: "7", label: "7日以内" },
+    { value: "30", label: "30日以内" },
+    { value: "60", label: "60日以内" },
+    { value: "90", label: "90日以内" },
+  ]
   
   // 会社の選択肢（会社フィルターを除いた他のフィルターに基づいて動的に生成）
   const companies = Array.from(new Set(
@@ -426,9 +426,8 @@ export default function VisasPage() {
       </div>
 
       {/* Filters */}
-      <div className="space-y-4">
-        {/* Search */}
-        <div className="flex items-center gap-4 flex-wrap">
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -439,45 +438,21 @@ export default function VisasPage() {
             />
           </div>
 
-          <ResultCountBadge count={filteredVisas.length} total={visas.length} className="ml-auto" />
-        </div>
+          <FilterMultiSelectPopover
+            label="ビザ種別"
+            options={visaTypes.map((type) => ({ value: type, label: type }))}
+            selectedValues={typeFilter}
+            onToggle={handleTypeFilterToggle}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-        {/* Filter Row */}
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <Select value={typeFilter} onValueChange={handleTypeFilterChange}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="種別" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">すべて</SelectItem>
-                {visaTypes.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="text-xs text-muted-foreground">ビザ種別</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <Select value={expiryFilter} onValueChange={handleExpiryFilterChange}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="期限" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">すべて</SelectItem>
-                <SelectItem value="7">7日以内</SelectItem>
-                <SelectItem value="30">30日以内</SelectItem>
-                <SelectItem value="60">60日以内</SelectItem>
-                <SelectItem value="90">90日以内</SelectItem>
-              </SelectContent>
-            </Select>
-            <span className="text-xs text-muted-foreground">期限</span>
-          </div>
+          <FilterMultiSelectPopover
+            label="期限"
+            options={expiryOptions}
+            selectedValues={expiryFilter}
+            onToggle={handleExpiryFilterToggle}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
           <FilterMultiSelectPopover
             label="会社"
@@ -501,18 +476,7 @@ export default function VisasPage() {
             triggerIcon={<Building2 className="mr-2 h-4 w-4 flex-shrink-0" />}
           />
 
-          {/* Clear filters button */}
-          {(typeFilter !== "all" || expiryFilter !== "all" || companyFilter.length > 0 || affiliationFilter.length > 0) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearAllFilters}
-              className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground ml-auto"
-            >
-              <X className="h-3 w-3 mr-1" />
-              フィルタークリア
-            </Button>
-          )}
+          <ResultCountBadge count={filteredVisas.length} total={visas.length} />
         </div>
 
         {/* Active Filters */}
