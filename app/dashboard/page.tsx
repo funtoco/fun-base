@@ -88,25 +88,28 @@ function DashboardContent({
           count={viewModel.kpis.waitingCount}
           icon={<Briefcase className="h-4 w-4" />}
           href={buildFilteredHref("/people", { workingStatus: "入社待ち" })}
+          variant="waiting"
         />
         <KPICard
           title="在籍中"
           count={viewModel.kpis.activeCount}
           icon={<UserCheck className="h-4 w-4" />}
           href={buildFilteredHref("/people", { workingStatus: "在籍中" })}
+          variant="active"
         />
         <KPICard
           title="退職"
           count={viewModel.kpis.retiredCount}
           icon={<UserX className="h-4 w-4" />}
           href={buildFilteredHref("/people", { workingStatus: "退職" })}
+          variant="retired"
         />
         <KPICard
           title="ビザ申請中"
           count={viewModel.kpis.applicationInProgressCount}
           icon={<FileText className="h-4 w-4" />}
           href={buildFilteredHref("/people", { visaStatus: "申請中" })}
-          highlight
+          variant="primary"
         />
         <KPICard
           title="期限30日以内"
@@ -402,36 +405,55 @@ function KPICard({
   icon,
   href,
   variant = "default",
-  highlight = false,
 }: {
   title: string
   count: number
   icon: ReactNode
   href: string
-  variant?: "default" | "warning"
-  highlight?: boolean
+  variant?: "default" | "waiting" | "active" | "retired" | "primary" | "warning"
 }) {
+  const variantClasses = {
+    default: {
+      card: "",
+      accent: "text-muted-foreground",
+      count: "text-foreground",
+    },
+    waiting: {
+      card: "border-sky-200 bg-sky-50/25",
+      accent: "text-sky-600",
+      count: "text-sky-700",
+    },
+    active: {
+      card: "border-emerald-200 bg-emerald-50/25",
+      accent: "text-emerald-600",
+      count: "text-emerald-700",
+    },
+    retired: {
+      card: "border-red-200 bg-red-50/20",
+      accent: "text-red-600",
+      count: "text-red-700",
+    },
+    primary: {
+      card: "border-primary/30 bg-primary/5",
+      accent: "text-primary",
+      count: "text-primary",
+    },
+    warning: {
+      card: "border-amber-200 bg-amber-50/30",
+      accent: "text-amber-600",
+      count: "text-amber-600",
+    },
+  }[variant]
+
   return (
     <Link href={href}>
-      <Card className={`hover:shadow-md transition-shadow cursor-pointer ${
-        variant === "warning" ? "border-amber-200 bg-amber-50/30" :
-        highlight ? "border-primary/30 bg-primary/5" :
-        ""
-      }`}>
+      <Card className={`hover:shadow-md transition-shadow cursor-pointer ${variantClasses.card}`}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
-            <span className={`${
-              variant === "warning" ? "text-amber-600" :
-              highlight ? "text-primary" :
-              "text-muted-foreground"
-            }`}>
+            <span className={variantClasses.accent}>
               {icon}
             </span>
-            <span className={`text-2xl font-bold ${
-              variant === "warning" ? "text-amber-600" :
-              highlight ? "text-primary" :
-              "text-foreground"
-            }`}>
+            <span className={`text-2xl font-bold ${variantClasses.count}`}>
               {count}
             </span>
           </div>

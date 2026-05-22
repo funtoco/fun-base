@@ -12,7 +12,8 @@ import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-po
 import { Search, FileText, Clock, X, ChevronDown, ChevronUp, Building2 } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
-import { cn, isExpiringSoon } from "@/lib/utils"
+import { cn, formatDate, isExpiringSoon } from "@/lib/utils"
+import { getLatestVisaActivityDate } from "@/lib/visa-display"
 import type { VisaStatus, Person, Visa } from "@/lib/models"
 
 const visaStatuses: VisaStatus[] = [
@@ -206,6 +207,7 @@ export default function VisasPage() {
 
         const isUrgent = visa.expiryDate && isExpiringSoon(visa.expiryDate, 7)
         const isWarning = visa.expiryDate && isExpiringSoon(visa.expiryDate, 30)
+        const latestActivityDate = getLatestVisaActivityDate(visa)
 
         return {
           id: visa.id,
@@ -220,6 +222,7 @@ export default function VisasPage() {
             manager: visa.manager,
             isUrgent,
             isWarning,
+            latestActivityDate,
           },
           visa,
         }
@@ -581,6 +584,11 @@ export default function VisasPage() {
                             {item.subtitle && (
                               <p className="text-xs text-muted-foreground mt-1">
                                 {item.subtitle}
+                              </p>
+                            )}
+                            {item.metadata.latestActivityDate && (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                最新対応: {formatDate(item.metadata.latestActivityDate)}
                               </p>
                             )}
                           </div>
