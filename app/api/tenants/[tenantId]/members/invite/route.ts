@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
-import { canManageTenant } from "@/lib/tenant-access"
+import { getInviteRedirectUrl } from "@/lib/supabase/invite-redirect"
+import {
+  canManageCompanyContacts,
+  canManageTenant,
+  isCompanyContactEmail,
+} from "@/lib/tenant-access"
+
+const INVITABLE_ROLES = new Set(["admin", "member", "guest"])
 
 export async function POST(
   request: NextRequest,
@@ -17,10 +24,25 @@ export async function POST(
 
     const body = await request.json()
     const { email, role } = body
+    const normalizedEmail = typeof email === "string" ? email.toLowerCase().trim() : ""
 
-    if (!email || !role) {
+    if (!normalizedEmail || !role) {
       return NextResponse.json(
         { error: "Email and role are required" },
+        { status: 400 }
+      )
+    }
+
+    if (!INVITABLE_ROLES.has(role)) {
+      return NextResponse.json(
+        { error: "Invalid role" },
+        { status: 400 }
+      )
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return NextResponse.json(
+        { error: "Invalid email" },
         { status: 400 }
       )
     }
@@ -41,11 +63,34 @@ export async function POST(
       )
     }
 
-    if (!currentUserMemberships || !canManageTenant(currentUserMemberships)) {
+    const actorMemberships = currentUserMemberships || []
+    const canManageAllMembers = canManageTenant(actorMemberships)
+    const canManageCompanyContactInvite = canManageCompanyContacts(
+      actorMemberships,
+      user.email
+    )
+
+    if (!canManageAllMembers && !canManageCompanyContactInvite) {
       return NextResponse.json(
         { error: "You don't have permission to invite members" },
         { status: 403 }
       )
+    }
+
+    if (!canManageAllMembers) {
+      if (role !== "member") {
+        return NextResponse.json(
+          { error: "You can only invite company contacts as members" },
+          { status: 403 }
+        )
+      }
+
+      if (!isCompanyContactEmail(normalizedEmail)) {
+        return NextResponse.json(
+          { error: "You can only invite external company contact emails" },
+          { status: 403 }
+        )
+      }
     }
 
     // Check if email is already a member
@@ -53,7 +98,7 @@ export async function POST(
       .from('user_tenants')
       .select('id, status, role')
       .eq('tenant_id', params.tenantId)
-      .eq('email', email)
+      .eq('email', normalizedEmail)
 
     if (existingMembershipsError) {
       console.error('Error checking existing memberships:', existingMembershipsError)
@@ -81,18 +126,29 @@ export async function POST(
         )
     }
 
+    let redirectTo: string
+    try {
+      redirectTo = getInviteRedirectUrl()
+    } catch (error) {
+      console.error("Error resolving invitation redirect URL:", error)
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Failed to resolve redirect URL" },
+        { status: 500 }
+      )
+    }
+
     // Use admin client to send invitation
     const adminSupabase = createAdminClient()
     
     try {
       // Use Supabase auth admin to send invitation email
-      const { data, error } = await adminSupabase.auth.admin.inviteUserByEmail(email, {
+      const { data, error } = await adminSupabase.auth.admin.inviteUserByEmail(normalizedEmail, {
         data: {
           tenant_id: params.tenantId,
           role: role,
           invited_by: user.id
         },
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/set-password`
+        redirectTo
       })
       
       if (error) {
@@ -109,7 +165,7 @@ export async function POST(
         .insert({
           user_id: data.user.id,
           tenant_id: params.tenantId,
-          email: email,
+          email: normalizedEmail,
           role: role,
           status: 'pending',
           invited_by: user.id,

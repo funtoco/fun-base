@@ -1,6 +1,6 @@
 "use client"
 
-import { MoreHorizontal, Trash2, UserX, UserCheck } from "lucide-react"
+import { MoreHorizontal, RefreshCw, Trash2 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   DropdownMenu,
@@ -16,15 +16,18 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { RoleBadge } from "./role-badge"
 import { StatusBadge } from "./status-badge"
 import type { UserTenant } from "@/lib/supabase/tenants"
+import { isCompanyContactEmail, isCompanyContactRole } from "@/lib/tenant-access"
 
 interface MembersTableProps {
   members: UserTenant[]
   selectedMembers: string[]
   onSelectMember: (memberId: string, selected: boolean) => void
-  onSelectAll: (selected: boolean) => void
+  onSelectAll: (memberIds: string[], selected: boolean) => void
   onChangeRole: (memberId: string, role: 'owner' | 'admin' | 'member' | 'guest') => void
   onDeleteMember: (memberId: string) => void
+  onResendInvite?: (memberId: string) => void
   currentUserRole: 'owner' | 'admin' | 'member' | 'guest'
+  canManageCompanyContacts?: boolean
   currentUserId?: string
 }
 
@@ -35,11 +38,13 @@ export function MembersTable({
   onSelectAll,
   onChangeRole,
   onDeleteMember,
+  onResendInvite,
   currentUserRole,
+  canManageCompanyContacts = false,
   currentUserId,
 }: MembersTableProps) {
-  const allSelected = members.length > 0 && selectedMembers.length === members.length
-  const someSelected = selectedMembers.length > 0 && selectedMembers.length < members.length
+  const canBulkDeleteMembers =
+    currentUserRole === "owner" || currentUserRole === "admin"
 
   const formatLastActive = (joinedAt?: string) => {
     if (!joinedAt) return "-"
@@ -60,26 +65,54 @@ export function MembersTable({
   }
 
   const canDeleteMember = (targetMember: UserTenant) => {
-    console.log('canDeleteMember check:', {
-      currentUserRole,
-      targetMemberRole: targetMember.role,
-      targetMemberUserId: targetMember.user_id,
-      currentUserId,
-      isSelf: targetMember.user_id === currentUserId
-    })
-    
-    if (currentUserRole === 'guest' || currentUserRole === 'member') return false
-    if (targetMember.user_id === currentUserId) return false // Can't delete self
-    if (targetMember.role === 'owner') return false // Can't delete owner
-    return true
+    if (targetMember.user_id === currentUserId) return false
+
+    if (currentUserRole === "owner" || currentUserRole === "admin") {
+      return targetMember.role !== "owner"
+    }
+
+    if (!canManageCompanyContacts) return false
+
+    return isCompanyContactEmail(targetMember.email) && isCompanyContactRole(targetMember.role)
   }
 
-  const canToggleStatus = (targetMember: UserTenant) => {
-    if (currentUserRole === 'guest' || currentUserRole === 'member') return false
-    if (targetMember.user_id === currentUserId) return false // Can't change own status
-    if (targetMember.role === 'owner') return false // Can't change owner status
-    return true
+  const canResendInvite = (targetMember: UserTenant) => {
+    if (!onResendInvite || targetMember.status !== "pending" || !targetMember.email) {
+      return false
+    }
+
+    if (currentUserRole === "owner" || currentUserRole === "admin") {
+      return true
+    }
+
+    if (!canManageCompanyContacts) return false
+
+    return isCompanyContactEmail(targetMember.email) && isCompanyContactRole(targetMember.role)
   }
+
+  const canSelectMember = (targetMember: UserTenant) =>
+    canBulkDeleteMembers && canDeleteMember(targetMember)
+
+  const selectableMemberIds = members
+    .filter((member) => canSelectMember(member))
+    .map((member) => member.id)
+
+  const selectedSelectableCount = selectableMemberIds.filter((memberId) =>
+    selectedMembers.includes(memberId)
+  ).length
+
+  const allSelected =
+    selectableMemberIds.length > 0 &&
+    selectedSelectableCount === selectableMemberIds.length
+
+  const someSelected =
+    selectedSelectableCount > 0 &&
+    selectedSelectableCount < selectableMemberIds.length
+
+  const hasRowActions = (targetMember: UserTenant) =>
+    canChangeRole(targetMember) ||
+    canResendInvite(targetMember) ||
+    canDeleteMember(targetMember)
 
   const handleRoleChange = (member: UserTenant, newRole: 'owner' | 'admin' | 'member' | 'guest') => {
     if (!canChangeRole(member)) return
@@ -91,19 +124,29 @@ export function MembersTable({
     onDeleteMember(member.id)
   }
 
+  const handleResendInvite = (member: UserTenant) => {
+    if (!canResendInvite(member)) return
+    onResendInvite?.(member.id)
+  }
+
   return (
     <div className="rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-12">
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={onSelectAll}
-                aria-label="すべて選択"
-                {...(someSelected && { "data-state": "indeterminate" })}
-              />
-            </TableHead>
+            {canBulkDeleteMembers ? (
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={allSelected}
+                  disabled={selectableMemberIds.length === 0}
+                  onCheckedChange={(checked) =>
+                    onSelectAll(selectableMemberIds, checked as boolean)
+                  }
+                  aria-label="削除可能なメンバーをすべて選択"
+                  {...(someSelected && { "data-state": "indeterminate" })}
+                />
+              </TableHead>
+            ) : null}
             <TableHead>メール</TableHead>
             <TableHead>ロール</TableHead>
             <TableHead>ステータス</TableHead>
@@ -118,13 +161,18 @@ export function MembersTable({
 
             return (
               <TableRow key={member.id}>
-                <TableCell>
-                  <Checkbox
-                    checked={selectedMembers.includes(member.id)}
-                    onCheckedChange={(checked) => onSelectMember(member.id, checked as boolean)}
-                    aria-label={`${email}を選択`}
-                  />
-                </TableCell>
+                {canBulkDeleteMembers ? (
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedMembers.includes(member.id)}
+                      disabled={!canSelectMember(member)}
+                      onCheckedChange={(checked) =>
+                        onSelectMember(member.id, checked as boolean)
+                      }
+                      aria-label={`${email}を選択`}
+                    />
+                  </TableCell>
+                ) : null}
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="h-8 w-8">
@@ -152,90 +200,76 @@ export function MembersTable({
                   {formatLastActive(member.joined_at)}
                 </TableCell>
                 <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="size-4" />
-                        <span className="sr-only">メニューを開く</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {canChangeRole(member) && (
-                        <>
-                          {member.role !== 'owner' && (
-                            <DropdownMenuItem
-                              onClick={() => handleRoleChange(member, 'owner')}
-                            >
-                              Ownerに変更
-                            </DropdownMenuItem>
-                          )}
-                          {member.role !== 'admin' && (
-                            <DropdownMenuItem
-                              onClick={() => handleRoleChange(member, 'admin')}
-                            >
-                              Adminに変更
-                            </DropdownMenuItem>
-                          )}
-                          {member.role !== 'member' && (
-                            <DropdownMenuItem
-                              onClick={() => handleRoleChange(member, 'member')}
-                            >
-                              Memberに変更
-                            </DropdownMenuItem>
-                          )}
-                          {member.role !== 'guest' && (
-                            <DropdownMenuItem
-                              onClick={() => handleRoleChange(member, 'guest')}
-                            >
-                              Guestに変更
-                            </DropdownMenuItem>
-                          )}
-                        </>
-                      )}
+                  {hasRowActions(member) ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="size-4" />
+                          <span className="sr-only">メニューを開く</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {canChangeRole(member) && (
+                          <>
+                            {member.role !== 'owner' && (
+                              <DropdownMenuItem
+                                onClick={() => handleRoleChange(member, 'owner')}
+                              >
+                                Ownerに変更
+                              </DropdownMenuItem>
+                            )}
+                            {member.role !== 'admin' && (
+                              <DropdownMenuItem
+                                onClick={() => handleRoleChange(member, 'admin')}
+                              >
+                                Adminに変更
+                              </DropdownMenuItem>
+                            )}
+                            {member.role !== 'member' && (
+                              <DropdownMenuItem
+                                onClick={() => handleRoleChange(member, 'member')}
+                              >
+                                Memberに変更
+                              </DropdownMenuItem>
+                            )}
+                            {member.role !== 'guest' && (
+                              <DropdownMenuItem
+                                onClick={() => handleRoleChange(member, 'guest')}
+                              >
+                                Guestに変更
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        )}
 
-                      {canChangeRole(member) && canToggleStatus(member) && <DropdownMenuSeparator />}
-
-                      {canToggleStatus(member) &&
-                        (member.status === "active" ? (
-                          <DropdownMenuItem onClick={() => {/* TODO: Implement status toggle */}}>
-                            <UserX className="size-4 mr-2" />
-                            一時無効化
-                          </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem onClick={() => {/* TODO: Implement status toggle */}}>
-                            <UserCheck className="size-4 mr-2" />
-                            有効化
-                          </DropdownMenuItem>
-                        ))}
-
-                      {canDeleteMember(member) && (
-                        <>
+                        {canChangeRole(member) && (canResendInvite(member) || canDeleteMember(member)) && (
                           <DropdownMenuSeparator />
+                        )}
+
+                        {canResendInvite(member) && (
+                          <>
+                            <DropdownMenuItem onClick={() => handleResendInvite(member)}>
+                              <RefreshCw className="size-4 mr-2" />
+                              招待メール再送
+                            </DropdownMenuItem>
+                            {canDeleteMember(member) && <DropdownMenuSeparator />}
+                          </>
+                        )}
+
+                        {canDeleteMember(member) && (
                           <DropdownMenuItem 
                             onClick={() => handleDeleteMember(member)} 
                             className="text-destructive"
                           >
                             <Trash2 className="size-4 mr-2" />
-                            削除
+                            {member.status === "pending" ? "招待をキャンセル" : "削除"}
                           </DropdownMenuItem>
-                        </>
-                      )}
-                      
-                      {/* Debug: Always show delete option for pending members */}
-                      {member.status === 'pending' && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteMember(member)} 
-                            className="text-destructive"
-                          >
-                            <Trash2 className="size-4 mr-2" />
-                            招待をキャンセル
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <span className="block text-center text-muted-foreground">-</span>
+                  )}
                 </TableCell>
               </TableRow>
             )
