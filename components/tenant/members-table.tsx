@@ -1,6 +1,6 @@
 "use client"
 
-import { MoreHorizontal, Trash2, UserX, UserCheck } from "lucide-react"
+import { MoreHorizontal, RefreshCw, Trash2, UserX, UserCheck } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   DropdownMenu,
@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { RoleBadge } from "./role-badge"
 import { StatusBadge } from "./status-badge"
 import type { UserTenant } from "@/lib/supabase/tenants"
+import { isCompanyContactEmail, isCompanyContactRole } from "@/lib/tenant-access"
 
 interface MembersTableProps {
   members: UserTenant[]
@@ -24,7 +25,9 @@ interface MembersTableProps {
   onSelectAll: (selected: boolean) => void
   onChangeRole: (memberId: string, role: 'owner' | 'admin' | 'member' | 'guest') => void
   onDeleteMember: (memberId: string) => void
+  onResendInvite?: (memberId: string) => void
   currentUserRole: 'owner' | 'admin' | 'member' | 'guest'
+  canManageCompanyContacts?: boolean
   currentUserId?: string
 }
 
@@ -35,7 +38,9 @@ export function MembersTable({
   onSelectAll,
   onChangeRole,
   onDeleteMember,
+  onResendInvite,
   currentUserRole,
+  canManageCompanyContacts = false,
   currentUserId,
 }: MembersTableProps) {
   const allSelected = members.length > 0 && selectedMembers.length === members.length
@@ -60,18 +65,15 @@ export function MembersTable({
   }
 
   const canDeleteMember = (targetMember: UserTenant) => {
-    console.log('canDeleteMember check:', {
-      currentUserRole,
-      targetMemberRole: targetMember.role,
-      targetMemberUserId: targetMember.user_id,
-      currentUserId,
-      isSelf: targetMember.user_id === currentUserId
-    })
-    
-    if (currentUserRole === 'guest' || currentUserRole === 'member') return false
-    if (targetMember.user_id === currentUserId) return false // Can't delete self
-    if (targetMember.role === 'owner') return false // Can't delete owner
-    return true
+    if (targetMember.user_id === currentUserId) return false
+
+    if (currentUserRole === "owner" || currentUserRole === "admin") {
+      return targetMember.role !== "owner"
+    }
+
+    if (!canManageCompanyContacts) return false
+
+    return isCompanyContactEmail(targetMember.email) && isCompanyContactRole(targetMember.role)
   }
 
   const canToggleStatus = (targetMember: UserTenant) => {
@@ -79,6 +81,20 @@ export function MembersTable({
     if (targetMember.user_id === currentUserId) return false // Can't change own status
     if (targetMember.role === 'owner') return false // Can't change owner status
     return true
+  }
+
+  const canResendInvite = (targetMember: UserTenant) => {
+    if (!onResendInvite || targetMember.status !== "pending" || !targetMember.email) {
+      return false
+    }
+
+    if (currentUserRole === "owner" || currentUserRole === "admin") {
+      return true
+    }
+
+    if (!canManageCompanyContacts) return false
+
+    return isCompanyContactEmail(targetMember.email) && isCompanyContactRole(targetMember.role)
   }
 
   const handleRoleChange = (member: UserTenant, newRole: 'owner' | 'admin' | 'member' | 'guest') => {
@@ -89,6 +105,11 @@ export function MembersTable({
   const handleDeleteMember = (member: UserTenant) => {
     if (!canDeleteMember(member)) return
     onDeleteMember(member.id)
+  }
+
+  const handleResendInvite = (member: UserTenant) => {
+    if (!canResendInvite(member)) return
+    onResendInvite?.(member.id)
   }
 
   return (
@@ -208,6 +229,16 @@ export function MembersTable({
                           </DropdownMenuItem>
                         ))}
 
+                      {canResendInvite(member) && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleResendInvite(member)}>
+                            <RefreshCw className="size-4 mr-2" />
+                            招待メール再送
+                          </DropdownMenuItem>
+                        </>
+                      )}
+
                       {canDeleteMember(member) && (
                         <>
                           <DropdownMenuSeparator />
@@ -216,21 +247,7 @@ export function MembersTable({
                             className="text-destructive"
                           >
                             <Trash2 className="size-4 mr-2" />
-                            削除
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                      
-                      {/* Debug: Always show delete option for pending members */}
-                      {member.status === 'pending' && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteMember(member)} 
-                            className="text-destructive"
-                          >
-                            <Trash2 className="size-4 mr-2" />
-                            招待をキャンセル
+                            {member.status === "pending" ? "招待をキャンセル" : "削除"}
                           </DropdownMenuItem>
                         </>
                       )}

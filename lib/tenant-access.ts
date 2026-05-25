@@ -9,11 +9,40 @@ export interface TenantRoleMembership {
   role: TenantAccessRole | null
 }
 
+const INTERNAL_STAFF_EMAIL_DOMAIN = "@funtoco.jp"
+
 export function canManageTenant(memberships: TenantRoleMembership[]): boolean {
   return memberships.some(
     (membership) =>
       membership.role === "owner" || membership.role === "admin"
   )
+}
+
+export function isInternalStaffEmail(email?: string | null): boolean {
+  return typeof email === "string" && email.toLowerCase().endsWith(INTERNAL_STAFF_EMAIL_DOMAIN)
+}
+
+export function isCompanyContactEmail(email?: string | null): boolean {
+  return typeof email === "string" && email.length > 0 && !isInternalStaffEmail(email)
+}
+
+export function isCompanyContactRole(role: TenantAccessRole | null): boolean {
+  return role === "member" || role === "guest"
+}
+
+export function canManageCompanyContacts(
+  memberships: TenantRoleMembership[],
+  actorEmail?: string | null
+): boolean {
+  if (canManageTenant(memberships)) {
+    return true
+  }
+
+  if (!isInternalStaffEmail(actorEmail)) {
+    return false
+  }
+
+  return memberships.some((membership) => membership.role === "member")
 }
 
 export function isTenantOwner(memberships: TenantRoleMembership[]): boolean {

@@ -303,6 +303,21 @@ export async function removeUserFromTenant(tenantId: string, userTenantId: strin
   }
 }
 
+export async function resendTenantInvitation(
+  tenantId: string,
+  userTenantId: string
+): Promise<void> {
+  const response = await fetch(`/api/tenants/${tenantId}/members/${userTenantId}/resend`, {
+    method: "POST",
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(result.error || "Failed to resend invitation")
+  }
+}
+
 export async function cancelTenantInvitation(invitationId: string): Promise<void> {
   const supabase = createClient()
   
