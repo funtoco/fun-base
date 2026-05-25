@@ -112,13 +112,17 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   const handleSelectMember = (memberId: string, selected: boolean) => {
     setSelectedMembers((prev) => 
       selected 
-        ? [...prev, memberId] 
+        ? (prev.includes(memberId) ? prev : [...prev, memberId])
         : prev.filter((id) => id !== memberId)
     )
   }
 
-  const handleSelectAll = (selected: boolean) => {
-    setSelectedMembers(selected ? filteredMembers.map((m) => m.id) : [])
+  const handleSelectAll = (memberIds: string[], selected: boolean) => {
+    setSelectedMembers((prev) =>
+      selected
+        ? Array.from(new Set([...prev, ...memberIds]))
+        : prev.filter((memberId) => !memberIds.includes(memberId))
+    )
   }
 
   // Handle role change
@@ -212,6 +216,17 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
 
   const pendingCount = members.filter((m) => m.status === "pending").length
   const activeCount = members.filter((m) => m.status === "active").length
+  const selectedMemberRecords = members.filter((member) =>
+    selectedMembers.includes(member.id)
+  )
+  const bulkDeleteLabel =
+    selectedMemberRecords.length > 0 &&
+    selectedMemberRecords.every((member) => member.status === "pending")
+      ? "一括キャンセル"
+      : "一括削除"
+  const inviteButtonLabel = canManageMembers
+    ? "メールで招待"
+    : "企業担当者を招待"
 
   if (loading) {
     return (
@@ -250,7 +265,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">{selectedMembers.length}件選択中</span>
               <Button variant="outline" size="sm" onClick={() => handleBulkAction("delete")}>
-                一括削除
+                {bulkDeleteLabel}
               </Button>
             </div>
           )}
@@ -293,7 +308,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
             disabled={!canManageCompanyContacts}
           >
             <Mail className="size-4 mr-2" />
-            招待を送信
+            {inviteButtonLabel}
           </Button>
         </div>
       </div>
@@ -301,9 +316,9 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="all">All ({members.length})</TabsTrigger>
-          <TabsTrigger value="pending">Pending ({pendingCount})</TabsTrigger>
-          <TabsTrigger value="active">Active ({activeCount})</TabsTrigger>
+          <TabsTrigger value="all">すべて ({members.length})</TabsTrigger>
+          <TabsTrigger value="pending">招待中 ({pendingCount})</TabsTrigger>
+          <TabsTrigger value="active">アクティブ ({activeCount})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="space-y-4">

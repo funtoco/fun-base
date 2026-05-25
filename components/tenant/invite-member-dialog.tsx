@@ -36,6 +36,11 @@ export function InviteMemberDialog({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
+  const dialogTitle = canChooseRole ? "メンバーをメールで招待" : "企業担当者を招待"
+  const dialogDescription = canChooseRole
+    ? "新しいメンバーをメールでテナントに招待します。"
+    : "企業担当者へ招待メールを送信します。招待完了までは招待中として表示されます。"
+  const submitLabel = loading ? "送信中..." : "招待メールを送信"
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -114,10 +119,8 @@ export function InviteMemberDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>メンバーを招待</DialogTitle>
-          <DialogDescription>
-            新しいメンバーをテナントに招待します。招待メールが送信されます。
-          </DialogDescription>
+          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
@@ -159,7 +162,7 @@ export function InviteMemberDialog({
               <div className="grid gap-2">
                 <Label>ロール</Label>
                 <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
-                  Member - 企業担当者は Member として招待されます
+                  member - 企業担当者は member として招待されます
                 </div>
               </div>
             )}
@@ -169,7 +172,7 @@ export function InviteMemberDialog({
               キャンセル
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? '送信中...' : '招待を送信'}
+              {submitLabel}
             </Button>
           </DialogFooter>
         </form>

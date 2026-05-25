@@ -16,11 +16,11 @@ export function EmptyState({ onAddMember, canAddMember = true }: EmptyStateProps
       </div>
       <h3 className="text-lg font-semibold mb-2">メンバーがいません</h3>
       <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-        テナントにメンバーを招待して、チームでの作業を始めましょう。
+        メール招待を送信して、社内メンバーや企業担当者の追加を始めましょう。
       </p>
       <Button onClick={onAddMember} disabled={!canAddMember}>
         <UserPlus className="h-4 w-4 mr-2" />
-        メンバーを招待
+        メールで招待
       </Button>
     </div>
   )
