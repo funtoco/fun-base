@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/client"
+import { getInviteRedirectUrl } from "@/lib/supabase/invite-redirect"
 import { createClient } from "@/lib/supabase/server"
 import {
   canManageCompanyContacts,
@@ -88,7 +89,17 @@ export async function POST(
       )
     }
 
-    const redirectTo = new URL("/auth/set-password", request.nextUrl.origin).toString()
+    let redirectTo: string
+    try {
+      redirectTo = getInviteRedirectUrl()
+    } catch (error) {
+      console.error("Error resolving resend redirect URL:", error)
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Failed to resolve redirect URL" },
+        { status: 500 }
+      )
+    }
+
     const adminSupabase = createAdminClient()
     const { error } = await adminSupabase.auth.admin.inviteUserByEmail(targetMember.email, {
       redirectTo,
