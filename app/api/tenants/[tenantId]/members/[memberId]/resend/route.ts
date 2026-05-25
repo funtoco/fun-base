@@ -9,7 +9,7 @@ import {
 } from "@/lib/tenant-access"
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { tenantId: string; memberId: string } }
 ) {
   try {
@@ -88,9 +88,10 @@ export async function POST(
       )
     }
 
+    const redirectTo = new URL("/auth/set-password", request.nextUrl.origin).toString()
     const adminSupabase = createAdminClient()
     const { error } = await adminSupabase.auth.admin.inviteUserByEmail(targetMember.email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/auth/set-password`,
+      redirectTo,
     })
 
     if (error) {

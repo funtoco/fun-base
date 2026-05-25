@@ -125,6 +125,8 @@ export async function POST(
         )
     }
 
+    const redirectTo = new URL("/auth/set-password", request.nextUrl.origin).toString()
+
     // Use admin client to send invitation
     const adminSupabase = createAdminClient()
     
@@ -136,7 +138,7 @@ export async function POST(
           role: role,
           invited_by: user.id
         },
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/set-password`
+        redirectTo
       })
       
       if (error) {

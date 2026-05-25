@@ -33,8 +33,10 @@ test("owner and admin retain company contact management access", () => {
 
 test("company contact detection distinguishes internal and external emails", () => {
   assert.equal(isInternalStaffEmail("member@funtoco.jp"), true)
+  assert.equal(isInternalStaffEmail(" Member@FUNToco.jp "), true)
   assert.equal(isCompanyContactEmail("member@funtoco.jp"), false)
   assert.equal(isCompanyContactEmail("contact@example.com"), true)
+  assert.equal(isCompanyContactEmail(" contact@example.com "), true)
 })
 
 test("company contact role is limited to member and guest", () => {

@@ -11,6 +11,15 @@ export interface TenantRoleMembership {
 
 const INTERNAL_STAFF_EMAIL_DOMAIN = "@funtoco.jp"
 
+function normalizeEmailForClassification(email?: string | null): string | null {
+  if (typeof email !== "string") {
+    return null
+  }
+
+  const normalizedEmail = email.trim().toLowerCase()
+  return normalizedEmail.length > 0 ? normalizedEmail : null
+}
+
 export function canManageTenant(memberships: TenantRoleMembership[]): boolean {
   return memberships.some(
     (membership) =>
@@ -19,11 +28,13 @@ export function canManageTenant(memberships: TenantRoleMembership[]): boolean {
 }
 
 export function isInternalStaffEmail(email?: string | null): boolean {
-  return typeof email === "string" && email.toLowerCase().endsWith(INTERNAL_STAFF_EMAIL_DOMAIN)
+  const normalizedEmail = normalizeEmailForClassification(email)
+  return normalizedEmail?.endsWith(INTERNAL_STAFF_EMAIL_DOMAIN) ?? false
 }
 
 export function isCompanyContactEmail(email?: string | null): boolean {
-  return typeof email === "string" && email.length > 0 && !isInternalStaffEmail(email)
+  const normalizedEmail = normalizeEmailForClassification(email)
+  return normalizedEmail !== null && !isInternalStaffEmail(normalizedEmail)
 }
 
 export function isCompanyContactRole(role: TenantAccessRole | null): boolean {

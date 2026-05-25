@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -58,11 +58,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
     onConfirm: () => {},
   })
 
-  useEffect(() => {
-    fetchData()
-  }, [tenantId])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true)
       const membersData = await getTenantMembers(tenantId)
@@ -72,7 +68,11 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [tenantId])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   // Get current user's role in this tenant
   const currentUserMember = members.find(m => m.user_id === user?.id)

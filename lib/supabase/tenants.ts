@@ -311,10 +311,26 @@ export async function resendTenantInvitation(
     method: "POST",
   })
 
-  const result = await response.json()
+  let result: { error?: string; message?: string } | null = null
+  let rawBody = ""
+
+  const contentType = response.headers.get("content-type") || ""
+  if (contentType.includes("application/json")) {
+    try {
+      result = await response.json()
+    } catch (error) {
+      console.error("Error parsing resend invitation response JSON:", error)
+    }
+  } else {
+    rawBody = await response.text()
+  }
 
   if (!response.ok) {
-    throw new Error(result.error || "Failed to resend invitation")
+    const fallbackMessage = rawBody.trim()
+      ? `${response.status} ${response.statusText}: ${rawBody.trim()}`
+      : `${response.status} ${response.statusText}`
+
+    throw new Error(result?.error || result?.message || fallbackMessage || "Failed to resend invitation")
   }
 }
 
