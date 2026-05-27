@@ -297,7 +297,7 @@ export default function PeoplePage() {
         columns={columns}
         csvColumns={csvColumns}
         filters={filters}
-        searchKeys={["name", "tenantName", "nationality"]}
+        searchKeys={["name", "kana", "company", "nationality", "employeeNumber"]}
         onRowClick={handleRowClick}
         initialSearchTerm={searchParams.get('search') || ''}
         initialActiveFilters={getFiltersFromUrl()}
