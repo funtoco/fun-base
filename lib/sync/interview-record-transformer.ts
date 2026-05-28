@@ -19,6 +19,9 @@ export interface ActivityEntry {
   chu: string
   shou: string
   notes?: string
+  funbaseVisibility?: string
+  salesReviewReasons?: string[]
+  salesReviewMemo?: string
 }
 
 export interface InterviewRecordPayload {
@@ -181,6 +184,28 @@ function pickSubtableValue(row: Record<string, any>, fieldCodes: string[]): any 
   return undefined
 }
 
+function toStringArray(value: any): string[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map(labelValue)
+    .map(nonEmptyStringOrNull)
+    .filter((item): item is string => item !== null)
+}
+
+function withActivityReviewFields(entry: ActivityEntry, source: Record<string, any>): ActivityEntry {
+  const funbaseVisibility = toStringOrNull(source.funbaseVisibility)
+  const salesReviewReasons = toStringArray(source.salesReviewReasons)
+  const salesReviewMemo = toStringOrNull(source.salesReviewMemo)
+
+  return {
+    ...entry,
+    ...(funbaseVisibility ? { funbaseVisibility } : {}),
+    ...(salesReviewReasons.length > 0 ? { salesReviewReasons } : {}),
+    ...(salesReviewMemo ? { salesReviewMemo } : {}),
+  }
+}
+
 export function parseActivityEntries(tableStorageDaily: any): ActivityEntry[] {
   const rawValue = tableStorageDaily?.value ?? tableStorageDaily
 
@@ -197,12 +222,12 @@ export function parseActivityEntries(tableStorageDaily: any): ActivityEntry[] {
 
             if (!dai && !chu && !shou && !notes) return null
 
-            return {
+            return withActivityReviewFields({
               dai: dai || '',
               chu: chu || '',
               shou: shou || '',
               ...(notes ? { notes } : {}),
-            }
+            }, row)
           })
           .filter((entry): entry is ActivityEntry => entry !== null)
       }
@@ -220,6 +245,9 @@ export function parseActivityEntries(tableStorageDaily: any): ActivityEntry[] {
       const chu = toStringOrNull(pickSubtableValue(values, ['chu', 'tableStorageDaily_中項目', '中分類']))
       const shou = toStringOrNull(pickSubtableValue(values, ['shou', 'tableStorageDaily_小項目', '小分類']))
       const notes = toStringOrNull(pickSubtableValue(values, ['notes', 'tableStorageDaily_内容', 'note', '備考', '対応内容']))
+      const funbaseVisibility = toStringOrNull(pickSubtableValue(values, ['funbaseVisibility']))
+      const salesReviewReasons = toStringArray(pickSubtableValue(values, ['salesReviewReasons']))
+      const salesReviewMemo = toStringOrNull(pickSubtableValue(values, ['salesReviewMemo']))
 
       if (!dai && !chu && !shou && !notes) return null
 
@@ -228,6 +256,9 @@ export function parseActivityEntries(tableStorageDaily: any): ActivityEntry[] {
         chu: chu || '',
         shou: shou || '',
         ...(notes ? { notes } : {}),
+        ...(funbaseVisibility ? { funbaseVisibility } : {}),
+        ...(salesReviewReasons.length > 0 ? { salesReviewReasons } : {}),
+        ...(salesReviewMemo ? { salesReviewMemo } : {}),
       }
     })
     .filter((entry: ActivityEntry | null): entry is ActivityEntry => entry !== null)

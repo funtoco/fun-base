@@ -142,20 +142,27 @@ function trimTime(value?: string | null): string | undefined {
   return value.slice(0, 5)
 }
 
+function isVisibleDailyEntry(entry: Record<string, unknown>): boolean {
+  return entry.funbaseVisibility === "visible"
+}
+
 function toDailyEntries(value: unknown): DailySupportEntry[] {
   if (!Array.isArray(value)) return []
 
-  return value.map((entry) => {
-    const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : {}
-    const shou = item.shou
+  return value
+    .map((entry) => (entry && typeof entry === "object" ? entry as Record<string, unknown> : {}))
+    .filter(isVisibleDailyEntry)
+    .map((item) => {
+      const shou = item.shou
+      const notes = item.notes ? String(item.notes) : undefined
 
-    return {
-      dai: String(item.dai || ""),
-      chu: String(item.chu || ""),
-      shou: Array.isArray(shou) ? shou.filter(Boolean).join(", ") : String(shou || ""),
-      notes: item.notes ? String(item.notes) : undefined,
-    }
-  })
+      return {
+        dai: String(item.dai || ""),
+        chu: String(item.chu || ""),
+        shou: Array.isArray(shou) ? shou.filter(Boolean).join(", ") : String(shou || ""),
+        ...(notes ? { notes } : {}),
+      }
+    })
 }
 
 function baseFields(row: InterviewRecordRow) {
@@ -200,4 +207,10 @@ export function mapInterviewRecordToDailySupportRecord(row: InterviewRecordRow):
     supportDate: row.interview_date,
     dailyEntries: toDailyEntries(row.activity_entries),
   }
+}
+
+export function mapInterviewRecordRowsToDailySupportRecords(rows: InterviewRecordRow[]): DailySupportRecord[] {
+  return rows
+    .map(mapInterviewRecordToDailySupportRecord)
+    .filter((record) => record.dailyEntries.length > 0)
 }

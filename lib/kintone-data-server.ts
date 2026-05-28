@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import {
   INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON,
   isMissingInterviewRecordsTableError,
+  mapInterviewRecordRowsToDailySupportRecords,
   mapInterviewRecordToDailySupportRecord,
   mapInterviewRecordToRegularInterview,
   type InterviewRecordRow,
@@ -55,9 +56,12 @@ export async function getInterviewRecordDetailById(recordId: string): Promise<In
   }
 
   if (row.record_type === "daily_support") {
+    const record = mapInterviewRecordToDailySupportRecord(row)
+    if (record.dailyEntries.length === 0) return null
+
     return {
       recordType: "daily_support",
-      record: mapInterviewRecordToDailySupportRecord(row),
+      record,
     }
   }
 
@@ -96,5 +100,5 @@ export async function getDailySupportRecordsByPersonId(personId: string): Promis
     return handleInterviewRecordsFetchError("fetch daily support records by person", error)
   }
 
-  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToDailySupportRecord)
+  return mapInterviewRecordRowsToDailySupportRecords((data || []) as InterviewRecordRow[])
 }

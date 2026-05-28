@@ -16,7 +16,7 @@ import {
 import {
   INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON,
   isMissingInterviewRecordsTableError,
-  mapInterviewRecordToDailySupportRecord,
+  mapInterviewRecordRowsToDailySupportRecords,
   mapInterviewRecordToRegularInterview,
   type InterviewRecordRow,
 } from "@/lib/interview-record-mapper"
@@ -114,7 +114,7 @@ export async function getDailySupportRecords(): Promise<DailySupportRecord[]> {
     return handleInterviewRecordsFetchError("fetch daily support records", error)
   }
 
-  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToDailySupportRecord)
+  return mapInterviewRecordRowsToDailySupportRecords((data || []) as InterviewRecordRow[])
 }
 
 /**
@@ -122,19 +122,20 @@ export async function getDailySupportRecords(): Promise<DailySupportRecord[]> {
  */
 export async function getLatestDailySupportRecords(limit = 5): Promise<DailySupportRecord[]> {
   const supabase = createClient()
+  const fetchLimit = Math.min(Math.max(limit * 5, limit), 100)
   const { data, error } = await supabase
     .from("interview_records")
     .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "daily_support")
     .order("interview_date", { ascending: false })
     .order("created_at", { ascending: false })
-    .limit(limit)
+    .limit(fetchLimit)
 
   if (error) {
     return handleInterviewRecordsFetchError("fetch latest daily support records", error)
   }
 
-  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToDailySupportRecord)
+  return mapInterviewRecordRowsToDailySupportRecords((data || []) as InterviewRecordRow[]).slice(0, limit)
 }
 
 /**
@@ -155,7 +156,7 @@ export async function getDailySupportRecordsByPersonId(personId: string): Promis
     return handleInterviewRecordsFetchError("fetch daily support records by person", error)
   }
 
-  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToDailySupportRecord)
+  return mapInterviewRecordRowsToDailySupportRecords((data || []) as InterviewRecordRow[])
 }
 
 /**

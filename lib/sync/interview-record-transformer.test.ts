@@ -263,3 +263,31 @@ test('parseActivityEntries normalizes serialized tableStorageDaily values', () =
     },
   ])
 })
+
+test('parseActivityEntries preserves row-level FunBase visibility review metadata', () => {
+  const entries = parseActivityEntries({
+    value: JSON.stringify([
+      {
+        dai: '日々の対応報告',
+        chu: '退職後対応',
+        shou: ['転出手続きの案内'],
+        notes: '退職日について案内済み',
+        funbaseVisibility: 'pending',
+        salesReviewReasons: ['job_change', 'health_mental_pregnancy'],
+        salesReviewMemo: '営業確認待ち',
+      },
+    ]),
+  })
+
+  assert.deepEqual(entries, [
+    {
+      dai: '日々の対応報告',
+      chu: '退職後対応',
+      shou: '転出手続きの案内',
+      notes: '退職日について案内済み',
+      funbaseVisibility: 'pending',
+      salesReviewReasons: ['job_change', 'health_mental_pregnancy'],
+      salesReviewMemo: '営業確認待ち',
+    },
+  ])
+})

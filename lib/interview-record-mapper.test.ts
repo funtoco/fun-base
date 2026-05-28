@@ -6,6 +6,7 @@ import {
   INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON,
   isMissingInterviewRecordsTableError,
   mapInterviewRecordToDailySupportRecord,
+  mapInterviewRecordRowsToDailySupportRecords,
   mapInterviewRecordToRegularInterview,
   type InterviewRecordRow,
 } from "@/lib/interview-record-mapper"
@@ -58,7 +59,13 @@ test("mapInterviewRecordToDailySupportRecord normalizes activity entries", () =>
     ...baseRow,
     record_type: "daily_support",
     activity_entries: [
-      { dai: "生活支援", chu: "銀行・送金", shou: ["口座開設", "海外送金"], notes: "案内済み" },
+      {
+        dai: "生活支援",
+        chu: "銀行・送金",
+        shou: ["口座開設", "海外送金"],
+        notes: "案内済み",
+        funbaseVisibility: "visible",
+      },
     ],
   })
 
@@ -71,6 +78,50 @@ test("mapInterviewRecordToDailySupportRecord normalizes activity entries", () =>
       notes: "案内済み",
     },
   ])
+})
+
+test("mapInterviewRecordToDailySupportRecord returns only visible daily support entries", () => {
+  const mapped = mapInterviewRecordToDailySupportRecord({
+    ...baseRow,
+    record_type: "daily_support",
+    activity_entries: [
+      { dai: "生活支援", chu: "銀行・送金", shou: ["口座開設"], funbaseVisibility: "visible" },
+      { dai: "就労支援", chu: "退職相談", shou: ["退職日確認"], funbaseVisibility: "pending" },
+      { dai: "就労支援", chu: "給与相談", shou: ["給与確認"], funbaseVisibility: "hidden" },
+      { dai: "生活支援", chu: "住居", shou: ["入居案内"] },
+    ],
+  })
+
+  assert.deepEqual(mapped.dailyEntries, [
+    {
+      dai: "生活支援",
+      chu: "銀行・送金",
+      shou: "口座開設",
+    },
+  ])
+})
+
+test("mapInterviewRecordRowsToDailySupportRecords drops records without visible entries", () => {
+  const records = mapInterviewRecordRowsToDailySupportRecords([
+    {
+      ...baseRow,
+      id: "record-visible",
+      record_type: "daily_support",
+      activity_entries: [
+        { dai: "生活支援", chu: "銀行・送金", shou: ["口座開設"], funbaseVisibility: "visible" },
+      ],
+    },
+    {
+      ...baseRow,
+      id: "record-pending",
+      record_type: "daily_support",
+      activity_entries: [
+        { dai: "就労支援", chu: "退職相談", shou: ["退職日確認"], funbaseVisibility: "pending" },
+      ],
+    },
+  ])
+
+  assert.deepEqual(records.map((record) => record.id), ["record-visible"])
 })
 
 test("mapInterviewRecordToRegularInterview falls back for unknown enum-like values", () => {
