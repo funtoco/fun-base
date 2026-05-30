@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,13 +15,14 @@ import { ConfirmDialog } from "./confirm-dialog"
 import { EmptyState } from "./empty-state"
 import { 
   getTenantMembers, 
-  getTenantInvitations, 
+  resendTenantInvitation,
   updateUserTenantRole,
   removeUserFromTenant,
-  cancelTenantInvitation,
   type UserTenant
 } from "@/lib/supabase/tenants"
 import { useAuth } from "@/contexts/auth-context"
+import { useToast } from "@/lib/hooks/use-toast"
+import { canManageCompanyContacts as canManageCompanyContactsForActor } from "@/lib/tenant-access"
 
 interface TenantMembersPageProps {
   tenantId: string
@@ -29,8 +30,8 @@ interface TenantMembersPageProps {
 
 export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   const { user } = useAuth()
+  const { toast } = useToast()
   const [members, setMembers] = useState<UserTenant[]>([])
-  const [invitations, setInvitations] = useState<UserTenant[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState("all")
@@ -46,39 +47,41 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
     open: boolean
     title: string
     description: string
+    confirmText?: string
     onConfirm: () => void
     variant?: "default" | "destructive"
   }>({
     open: false,
     title: "",
     description: "",
+    confirmText: "削除",
     onConfirm: () => {},
   })
 
-  useEffect(() => {
-    fetchData()
-  }, [tenantId])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const [membersData, invitationsData] = await Promise.all([
-        getTenantMembers(tenantId),
-        getTenantInvitations(tenantId)
-      ])
+      const membersData = await getTenantMembers(tenantId)
       setMembers(membersData)
-      setInvitations(invitationsData)
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [tenantId])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   // Get current user's role in this tenant
   const currentUserMember = members.find(m => m.user_id === user?.id)
   const currentUserRole = currentUserMember?.role || 'guest'
   const canManageMembers = currentUserRole === 'owner' || currentUserRole === 'admin'
+  const canManageCompanyContacts = canManageCompanyContactsForActor(
+    currentUserMember ? [{ role: currentUserMember.role }] : [],
+    user?.email
+  )
   const canCreateUser = currentUserRole === 'owner'
 
   // Filtered members based on search and tab
@@ -109,13 +112,17 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   const handleSelectMember = (memberId: string, selected: boolean) => {
     setSelectedMembers((prev) => 
       selected 
-        ? [...prev, memberId] 
+        ? (prev.includes(memberId) ? prev : [...prev, memberId])
         : prev.filter((id) => id !== memberId)
     )
   }
 
-  const handleSelectAll = (selected: boolean) => {
-    setSelectedMembers(selected ? filteredMembers.map((m) => m.id) : [])
+  const handleSelectAll = (memberIds: string[], selected: boolean) => {
+    setSelectedMembers((prev) =>
+      selected
+        ? Array.from(new Set([...prev, ...memberIds]))
+        : prev.filter((memberId) => !memberIds.includes(memberId))
+    )
   }
 
   // Handle role change
@@ -134,8 +141,35 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
       await removeUserFromTenant(tenantId, memberId)
       await fetchData()
       setSelectedMembers(prev => prev.filter(id => id !== memberId))
+      toast({
+        title: "完了",
+        description: "メンバーの更新が完了しました",
+      })
     } catch (error) {
       console.error('Error removing member:', error)
+      toast({
+        title: "エラー",
+        description: error instanceof Error ? error.message : "メンバーの削除に失敗しました",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleResendInvite = async (memberId: string) => {
+    try {
+      await resendTenantInvitation(tenantId, memberId)
+      toast({
+        title: "招待メールを再送しました",
+        description: "対象メンバーに最新の招待メールを送信しました",
+      })
+      await fetchData()
+    } catch (error) {
+      console.error("Error resending invitation:", error)
+      toast({
+        title: "エラー",
+        description: error instanceof Error ? error.message : "招待メールの再送に失敗しました",
+        variant: "destructive",
+      })
     }
   }
 
@@ -146,8 +180,17 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
         await Promise.all(selectedMembers.map(id => removeUserFromTenant(tenantId, id)))
         await fetchData()
         setSelectedMembers([])
+        toast({
+          title: "完了",
+          description: "選択したメンバーを更新しました",
+        })
       } catch (error) {
         console.error('Error bulk deleting members:', error)
+        toast({
+          title: "エラー",
+          description: "メンバーの一括削除に失敗しました",
+          variant: "destructive",
+        })
       }
     }
   }
@@ -160,8 +203,12 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
 
     setConfirmDialog({
       open: true,
-      title: "メンバーを削除",
-      description: `${member.email || 'このメンバー'}さんをテナントから削除しますか？この操作は取り消せません。`,
+      title: member.status === "pending" ? "招待をキャンセル" : "メンバーを削除",
+      description:
+        member.status === "pending"
+          ? `${member.email || 'このメンバー'}さんの招待をキャンセルしますか？`
+          : `${member.email || 'このメンバー'}さんをテナントから削除しますか？この操作は取り消せません。`,
+      confirmText: member.status === "pending" ? "キャンセルする" : "削除",
       onConfirm: () => handleDeleteMember(memberId),
       variant: "destructive",
     })
@@ -169,6 +216,17 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
 
   const pendingCount = members.filter((m) => m.status === "pending").length
   const activeCount = members.filter((m) => m.status === "active").length
+  const selectedMemberRecords = members.filter((member) =>
+    selectedMembers.includes(member.id)
+  )
+  const bulkDeleteLabel =
+    selectedMemberRecords.length > 0 &&
+    selectedMemberRecords.every((member) => member.status === "pending")
+      ? "一括キャンセル"
+      : "一括削除"
+  const inviteButtonLabel = canManageMembers
+    ? "メールで招待"
+    : "企業担当者を招待"
 
   if (loading) {
     return (
@@ -207,7 +265,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">{selectedMembers.length}件選択中</span>
               <Button variant="outline" size="sm" onClick={() => handleBulkAction("delete")}>
-                一括削除
+                {bulkDeleteLabel}
               </Button>
             </div>
           )}
@@ -247,10 +305,10 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
           </Button>
           <Button 
             onClick={() => setIsInviteDialogOpen(true)} 
-            disabled={!canManageMembers}
+            disabled={!canManageCompanyContacts}
           >
             <Mail className="size-4 mr-2" />
-            招待を送信
+            {inviteButtonLabel}
           </Button>
         </div>
       </div>
@@ -258,9 +316,9 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="all">All ({members.length})</TabsTrigger>
-          <TabsTrigger value="pending">Pending ({pendingCount})</TabsTrigger>
-          <TabsTrigger value="active">Active ({activeCount})</TabsTrigger>
+          <TabsTrigger value="all">すべて ({members.length})</TabsTrigger>
+          <TabsTrigger value="pending">招待中 ({pendingCount})</TabsTrigger>
+          <TabsTrigger value="active">アクティブ ({activeCount})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="space-y-4">
@@ -270,7 +328,10 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
                 <p className="text-muted-foreground">検索条件に一致するメンバーが見つかりません</p>
               </div>
             ) : (
-              <EmptyState onAddMember={() => setIsInviteDialogOpen(true)} />
+              <EmptyState
+                onAddMember={() => setIsInviteDialogOpen(true)}
+                canAddMember={canManageCompanyContacts}
+              />
             )
           ) : (
             <MembersTable
@@ -280,7 +341,9 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
               onDeleteMember={showDeleteConfirm}
+              onResendInvite={handleResendInvite}
               currentUserRole={currentUserRole}
+              canManageCompanyContacts={canManageCompanyContacts}
               currentUserId={user?.id}
             />
           )}
@@ -299,7 +362,9 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
               onDeleteMember={showDeleteConfirm}
+              onResendInvite={handleResendInvite}
               currentUserRole={currentUserRole}
+              canManageCompanyContacts={canManageCompanyContacts}
               currentUserId={user?.id}
             />
           )}
@@ -318,7 +383,9 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
               onDeleteMember={showDeleteConfirm}
+              onResendInvite={handleResendInvite}
               currentUserRole={currentUserRole}
+              canManageCompanyContacts={canManageCompanyContacts}
               currentUserId={user?.id}
             />
           )}
@@ -331,6 +398,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
         open={isInviteDialogOpen}
         onOpenChange={setIsInviteDialogOpen}
         onInviteSent={fetchData}
+        canChooseRole={canManageMembers}
       />
 
       <AddExistingMemberDialog
@@ -360,7 +428,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
         description={confirmDialog.description}
         onConfirm={confirmDialog.onConfirm}
         variant={confirmDialog.variant}
-        confirmText="削除"
+        confirmText={confirmDialog.confirmText}
       />
 
       {/* Permission Rules Dialog */}
@@ -401,7 +469,8 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               <h3 className="font-semibold">Member（メンバー）</h3>
               <ul className="text-sm space-y-1">
                 <li>✓ データの閲覧・編集</li>
-                <li>✗ メンバー管理不可</li>
+                <li>△ 社内担当者の場合、企業担当者の招待・再送・削除のみ対応可</li>
+                <li>✗ internal member のロール変更・追加は不可</li>
                 <li>✗ 設定変更不可</li>
               </ul>
             </div>

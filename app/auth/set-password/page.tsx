@@ -384,7 +384,7 @@ export default function SetPasswordPage() {
                 href="/auth/resend-invite" 
                 className="text-sm text-blue-600 hover:text-blue-800"
               >
-                リンクが期限切れの場合はこちら（再送）
+                招待メール再送のご案内はこちら
               </Link>
               <div>
                 <Link
@@ -526,7 +526,7 @@ export default function SetPasswordPage() {
               href="/auth/resend-invite" 
               className="text-sm text-blue-600 hover:text-blue-800"
             >
-              リンクが期限切れの場合はこちら（再送）
+              招待メール再送のご案内はこちら
             </Link>
           </div>
         </CardContent>

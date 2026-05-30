@@ -20,13 +20,15 @@ interface InviteMemberDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onInviteSent: () => void
+  canChooseRole?: boolean
 }
 
 export function InviteMemberDialog({ 
   tenantId, 
   open, 
   onOpenChange, 
-  onInviteSent 
+  onInviteSent,
+  canChooseRole = true,
 }: InviteMemberDialogProps) {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -34,13 +36,14 @@ export function InviteMemberDialog({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
+  const dialogTitle = canChooseRole ? "メンバーをメールで招待" : "企業担当者を招待"
+  const dialogDescription = canChooseRole
+    ? "新しいメンバーをメールでテナントに招待します。"
+    : "企業担当者へ招待メールを送信します。招待完了までは招待中として表示されます。"
+  const submitLabel = loading ? "送信中..." : "招待メールを送信"
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
-
-    if (!name.trim()) {
-      newErrors.name = "名前を入力してください"
-    }
 
     if (!email.trim()) {
       newErrors.email = "メールアドレスを入力してください"
@@ -61,6 +64,8 @@ export function InviteMemberDialog({
 
     setLoading(true)
     try {
+      const inviteRole = canChooseRole ? role : "member"
+
       const response = await fetch(`/api/tenants/${tenantId}/members/invite`, {
         method: 'POST',
         headers: {
@@ -68,7 +73,7 @@ export function InviteMemberDialog({
         },
         body: JSON.stringify({
           email: email.toLowerCase().trim(),
-          role: role
+          role: inviteRole
         })
       })
 
@@ -114,22 +119,19 @@ export function InviteMemberDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>メンバーを招待</DialogTitle>
-          <DialogDescription>
-            新しいメンバーをテナントに招待します。招待メールが送信されます。
-          </DialogDescription>
+          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="name">名前</Label>
+              <Label htmlFor="name">名前（任意）</Label>
               <Input 
                 id="name" 
                 value={name} 
                 onChange={(e) => setName(e.target.value)} 
                 placeholder="田中太郎" 
               />
-              {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="email">メールアドレス</Label>
@@ -142,26 +144,35 @@ export function InviteMemberDialog({
               />
               {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="role">ロール</Label>
-              <Select value={role} onValueChange={(value: 'admin' | 'member' | 'guest') => setRole(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="guest">Guest - 閲覧のみ</SelectItem>
-                  <SelectItem value="member">Member - 一般権限</SelectItem>
-                  <SelectItem value="admin">Admin - 管理権限</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {canChooseRole ? (
+              <div className="grid gap-2">
+                <Label htmlFor="role">ロール</Label>
+                <Select value={role} onValueChange={(value: 'admin' | 'member' | 'guest') => setRole(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="guest">Guest - 閲覧のみ</SelectItem>
+                    <SelectItem value="member">Member - 一般権限</SelectItem>
+                    <SelectItem value="admin">Admin - 管理権限</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label>ロール</Label>
+                <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
+                  member - 企業担当者は member として招待されます
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
               キャンセル
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? '送信中...' : '招待を送信'}
+              {submitLabel}
             </Button>
           </DialogFooter>
         </form>
