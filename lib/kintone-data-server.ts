@@ -71,6 +71,7 @@ export async function getInterviewRecordDetailById(recordId: string): Promise<In
 
 export async function getRegularInterviewsByPersonId(personId: string): Promise<RegularInterview[]> {
   const supabase = await createClient()
+  console.log("[interview-records] getRegularInterviewsByPersonId fetch start", { personId })
   const { data, error } = await supabase
     .from("interview_records")
     .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
@@ -83,11 +84,14 @@ export async function getRegularInterviewsByPersonId(personId: string): Promise<
     return handleInterviewRecordsFetchError("fetch regular interviews by person", error)
   }
 
-  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToRegularInterview)
+  const records = ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToRegularInterview)
+  console.log("[interview-records] getRegularInterviewsByPersonId fetch success", { personId, count: records.length })
+  return records
 }
 
 export async function getDailySupportRecordsByPersonId(personId: string): Promise<DailySupportRecord[]> {
   const supabase = await createClient()
+  console.log("[interview-records] getDailySupportRecordsByPersonId fetch start", { personId })
   const { data, error } = await supabase
     .from("interview_records")
     .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
@@ -100,5 +104,7 @@ export async function getDailySupportRecordsByPersonId(personId: string): Promis
     return handleInterviewRecordsFetchError("fetch daily support records by person", error)
   }
 
-  return mapInterviewRecordRowsToDailySupportRecords((data || []) as InterviewRecordRow[])
+  const records = mapInterviewRecordRowsToDailySupportRecords((data || []) as InterviewRecordRow[])
+  console.log("[interview-records] getDailySupportRecordsByPersonId fetch success", { personId, count: records.length })
+  return records
 }
