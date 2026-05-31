@@ -26,6 +26,8 @@ import {
 // These functions define the interface for fetching normalized interview data.
 // ============================================================================
 
+const INTERVIEW_RECORD_PAGE_SIZE = 1000
+
 function handleInterviewRecordsFetchError<T>(context: string, error: { code?: string; message?: string }): T[] {
   if (isMissingInterviewRecordsTableError(error)) {
     console.warn(`[interview-records] ${context}: interview_records table is not ready yet`)
@@ -36,24 +38,41 @@ function handleInterviewRecordsFetchError<T>(context: string, error: { code?: st
   throw error
 }
 
+async function fetchInterviewRecordRowsByType(recordType: "regular_interview" | "daily_support"): Promise<InterviewRecordRow[]> {
+  const supabase = createClient()
+  const rows: InterviewRecordRow[] = []
+  let offset = 0
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("interview_records")
+      .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
+      .eq("record_type", recordType)
+      .order("interview_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .range(offset, offset + INTERVIEW_RECORD_PAGE_SIZE - 1)
+
+    if (error) {
+      return handleInterviewRecordsFetchError(`fetch ${recordType} records`, error)
+    }
+
+    const batch = (data || []) as InterviewRecordRow[]
+    rows.push(...batch)
+
+    if (batch.length < INTERVIEW_RECORD_PAGE_SIZE) break
+    offset += INTERVIEW_RECORD_PAGE_SIZE
+  }
+
+  return rows
+}
+
 /**
  * Get all regular interview records (定期面談)
  * Main content: 企業提出用レポート (companyReport)
  */
 export async function getRegularInterviews(): Promise<RegularInterview[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("interview_records")
-    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
-    .eq("record_type", "regular_interview")
-    .order("interview_date", { ascending: false })
-    .order("created_at", { ascending: false })
-
-  if (error) {
-    return handleInterviewRecordsFetchError("fetch regular interviews", error)
-  }
-
-  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToRegularInterview)
+  const rows = await fetchInterviewRecordRowsByType("regular_interview")
+  return rows.map(mapInterviewRecordToRegularInterview)
 }
 
 /**
@@ -102,19 +121,8 @@ export async function getRegularInterviewsByPersonId(personId: string): Promise<
  * Main content: tableStorageDaily entries (dailyEntries)
  */
 export async function getDailySupportRecords(): Promise<DailySupportRecord[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("interview_records")
-    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
-    .eq("record_type", "daily_support")
-    .order("interview_date", { ascending: false })
-    .order("created_at", { ascending: false })
-
-  if (error) {
-    return handleInterviewRecordsFetchError("fetch daily support records", error)
-  }
-
-  return mapInterviewRecordRowsToDailySupportRecords((data || []) as InterviewRecordRow[])
+  const rows = await fetchInterviewRecordRowsByType("daily_support")
+  return mapInterviewRecordRowsToDailySupportRecords(rows)
 }
 
 /**
