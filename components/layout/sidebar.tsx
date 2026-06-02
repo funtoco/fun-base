@@ -4,7 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Home, Users, FileText, FolderOpen, Calendar, Clock, CheckSquare } from "lucide-react"
+import { Home, Users, FileText, FolderOpen, ExternalLink } from "lucide-react"
 
 const navigation = [
   {
@@ -46,6 +46,7 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const funEduLogoUrl = process.env.NEXT_PUBLIC_FUNEDU_LOGO_URL
 
   return (
     <div className="flex h-full w-64 flex-col bg-sidebar border-r border-sidebar-border">
@@ -83,6 +84,26 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="border-t border-sidebar-border p-4">
+        <a
+          href="/api/funedu/sso/start"
+          target="_blank"
+          rel="noreferrer"
+          className="mb-3 flex items-center gap-3 rounded-lg border border-sidebar-border bg-background px-3 py-2.5 text-sm transition-colors hover:bg-muted"
+        >
+          {funEduLogoUrl ? (
+            // FunEdu asset is hosted by the FunEdu app; keep this as a plain img to avoid remote image config.
+            <img src={funEduLogoUrl} alt="" className="h-8 w-8 rounded-md object-contain" />
+          ) : (
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#00a6b8] text-xs font-semibold text-white">
+              FE
+            </span>
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="block font-medium leading-5">FunEdu</span>
+            <span className="block truncate text-xs text-muted-foreground">ログイン連携で開く</span>
+          </span>
+          <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </a>
         <div className="text-xs text-muted-foreground">FunBase v1.0</div>
       </div>
     </div>
