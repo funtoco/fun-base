@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { PersonAvatar } from "@/components/ui/person-avatar"
+import { useNavigationProgress } from "@/components/navigation-progress"
 import { getAllPersonDocuments, type PersonDocumentWithPerson } from "@/lib/supabase/person-documents"
 import type { DocumentType } from "@/lib/models"
 
@@ -34,6 +35,7 @@ function formatDate(dateString?: string): string {
 
 export default function DocumentsPage() {
   const router = useRouter()
+  const { startNavigation } = useNavigationProgress()
   const searchParams = useSearchParams()
   const [documents, setDocuments] = useState<PersonDocumentWithPerson[]>([])
   const [loading, setLoading] = useState(false)
@@ -158,6 +160,7 @@ export default function DocumentsPage() {
   ]
 
   const handleRowClick = (doc: PersonDocumentWithPerson) => {
+    startNavigation()
     router.push(`/people/${doc.personId}`)
   }
 

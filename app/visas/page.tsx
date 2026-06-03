@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
+import { useNavigationProgress } from "@/components/navigation-progress"
 import { Search, FileText, Clock, X, ChevronDown, ChevronUp, Building2 } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
@@ -35,6 +36,7 @@ interface ExtendedKanbanColumn {
 
 export default function VisasPage() {
   const router = useRouter()
+  const { startNavigation } = useNavigationProgress()
   const searchParams = useSearchParams()
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
@@ -294,7 +296,8 @@ export default function VisasPage() {
   }
 
   const handleItemClick = (item: any) => {
-    window.location.href = `/people/${item.metadata.personId}`
+    startNavigation()
+    router.push(`/people/${item.metadata.personId}`)
   }
 
   const clearAllFilters = () => {
