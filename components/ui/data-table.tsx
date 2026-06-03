@@ -26,7 +26,8 @@ interface DataTableProps<T> {
   columns: Column<T>[]
   csvColumns?: Column<T>[]
   filters?: Filter[]
-  searchKeys?: (keyof T)[]
+  searchKeys?: readonly (keyof T)[]
+  searchPlaceholder?: string
   onRowClick?: (row: T) => void
   className?: string
   // URLパラメータ永続化用
@@ -48,6 +49,7 @@ export function DataTable<T extends Record<string, any>>({
   csvColumns,
   filters = [],
   searchKeys = [],
+  searchPlaceholder = "検索...",
   onRowClick,
   className,
   initialSearchTerm = "",
@@ -193,7 +195,7 @@ export function DataTable<T extends Record<string, any>>({
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="検索..."
+                placeholder={searchPlaceholder}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"

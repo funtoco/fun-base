@@ -26,9 +26,15 @@ import {
   markAllAnnouncementsAsRead,
 } from "@/lib/supabase/announcements"
 import { getPeople } from "@/lib/supabase/people"
+import { matchesPersonSearch, normalizePersonSearchText as normalizeSearchText } from "@/lib/person-search"
 import type { Announcement, Person } from "@/lib/models"
 
 type OfficeSuggestion = {
+  name: string
+  count: number
+}
+
+type LegalEntitySuggestion = {
   name: string
   count: number
 }
@@ -37,13 +43,12 @@ type SearchHistoryItem = {
   id: string
   label: string
   href: string
-  kind: "person" | "office" | "query"
+  kind: "person" | "legalEntity" | "office" | "query"
   description?: string
 }
 
 const SEARCH_HISTORY_STORAGE_KEY = "funbase:global-search-history"
 const MAX_SEARCH_HISTORY_ITEMS = 8
-const normalizeSearchText = (value?: string | null) => value?.toLowerCase().trim() ?? ""
 
 export function Header() {
   const { user, role, signOut, refreshUser } = useAuth()
@@ -162,14 +167,7 @@ export function Header() {
   const personSuggestions = useMemo(() => {
     const source = searchText
       ? people.filter((person) => {
-          const fields = [
-            person.name,
-            person.kana,
-            person.company,
-            person.nationality,
-            person.employeeNumber,
-          ]
-          return fields.some((field) => normalizeSearchText(field).includes(searchText))
+          return matchesPersonSearch(person, searchText)
         })
       : people.filter((person) => ["入社待ち", "在籍中"].includes(person.workingStatus ?? ""))
 
@@ -185,6 +183,26 @@ export function Header() {
         return bNameStarts - aNameStarts
       })
       .slice(0, 5)
+  }, [people, searchText])
+
+  const legalEntitySuggestions = useMemo(() => {
+    const counts = new Map<string, LegalEntitySuggestion>()
+
+    people.forEach((person) => {
+      const name = person.tenantName
+      if (!name) return
+      if (searchText && !normalizeSearchText(name).includes(searchText)) return
+
+      const current = counts.get(name)
+      counts.set(name, {
+        name,
+        count: (current?.count ?? 0) + 1,
+      })
+    })
+
+    return Array.from(counts.values())
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ja"))
+      .slice(0, searchText ? 4 : 3)
   }, [people, searchText])
 
   const companySuggestions = useMemo(() => {
@@ -229,9 +247,21 @@ export function Header() {
       label: person.name,
       href: `/people/${person.id}`,
       kind: "person",
-      description: [person.kana, person.company].filter(Boolean).join(" / ") || undefined,
+      description: [person.kana, person.tenantName, person.company].filter(Boolean).join(" / ") || undefined,
     })
     router.push(`/people/${person.id}`)
+  }
+
+  const goToLegalEntity = (suggestion: LegalEntitySuggestion) => {
+    setSearchOpen(false)
+    saveSearchHistory({
+      id: `legalEntity:${suggestion.name}`,
+      label: suggestion.name,
+      href: `/people?tenantName=${encodeURIComponent(suggestion.name)}`,
+      kind: "legalEntity",
+      description: `${suggestion.count}名`,
+    })
+    router.push(`/people?tenantName=${encodeURIComponent(suggestion.name)}`)
   }
 
   const goToCompany = (suggestion: OfficeSuggestion) => {
@@ -252,7 +282,11 @@ export function Header() {
     router.push(item.href)
   }
 
-  const hasSuggestions = historySuggestions.length > 0 || personSuggestions.length > 0 || companySuggestions.length > 0
+  const hasSuggestions =
+    historySuggestions.length > 0 ||
+    personSuggestions.length > 0 ||
+    legalEntitySuggestions.length > 0 ||
+    companySuggestions.length > 0
 
   const handleMarkAsRead = async (id: string) => {
     try {
@@ -286,7 +320,7 @@ export function Header() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             id="global-search-input"
-            placeholder="人材名、事業所名で検索... (/ でフォーカス)"
+            placeholder="人材名、法人名、事業所名で検索... (/ でフォーカス)"
             className="pl-10 pr-3 w-80"
             value={searchQuery}
             onFocus={() => setSearchOpen(true)}
@@ -355,7 +389,7 @@ export function Header() {
                           <div className="min-w-0">
                             <div className="truncate text-sm font-medium">{person.name}</div>
                             <div className="truncate text-xs text-muted-foreground">
-                              {[person.kana, person.company].filter(Boolean).join(" / ") || "事業所情報なし"}
+                              {[person.kana, person.tenantName, person.company].filter(Boolean).join(" / ") || "法人・事業所情報なし"}
                             </div>
                           </div>
                           {person.workingStatus && (
@@ -367,8 +401,28 @@ export function Header() {
                       ))}
                     </div>
                   )}
-                  {companySuggestions.length > 0 && (
+                  {legalEntitySuggestions.length > 0 && (
                     <div className={cn("py-1", (historySuggestions.length > 0 || personSuggestions.length > 0) && "border-t")}>
+                      <div className="px-3 py-1 text-[11px] font-medium text-muted-foreground">法人</div>
+                      {legalEntitySuggestions.map((legalEntity) => (
+                        <button
+                          key={legalEntity.name}
+                          type="button"
+                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => goToLegalEntity(legalEntity)}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <span className="truncate text-sm font-medium">{legalEntity.name}</span>
+                          </div>
+                          <span className="shrink-0 text-xs text-muted-foreground">{legalEntity.count}名</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {companySuggestions.length > 0 && (
+                    <div className={cn("py-1", (historySuggestions.length > 0 || personSuggestions.length > 0 || legalEntitySuggestions.length > 0) && "border-t")}>
                       <div className="px-3 py-1 text-[11px] font-medium text-muted-foreground">事業所</div>
                       {companySuggestions.map((company) => (
                         <button
