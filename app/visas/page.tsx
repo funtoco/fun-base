@@ -11,6 +11,7 @@ import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-po
 import { Search, FileText, Clock, X, ChevronDown, ChevronUp, Building2 } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
+import { matchesPersonSearch } from "@/lib/person-search"
 import { cn, isExpiringSoon } from "@/lib/utils"
 import type { VisaStatus, Person, Visa } from "@/lib/models"
 
@@ -171,8 +172,7 @@ export default function VisasPage() {
 
     // Search filter
     if (searchTerm) {
-      const searchMatch = person.name.toLowerCase().includes(searchTerm.toLowerCase())
-      if (!searchMatch) return false
+      if (!matchesPersonSearch(person, searchTerm)) return false
     }
 
     // Type filter
@@ -272,8 +272,7 @@ export default function VisasPage() {
 
       // Search filter
       if (searchTerm) {
-        const searchMatch = person.name.toLowerCase().includes(searchTerm.toLowerCase())
-        if (!searchMatch) return false
+        if (!matchesPersonSearch(person, searchTerm)) return false
       }
 
       // Type filter
@@ -428,7 +427,7 @@ export default function VisasPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="人材名で検索..."
+              placeholder="人材名、法人名、事業所名で検索..."
               value={searchTerm}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-10 w-64"
