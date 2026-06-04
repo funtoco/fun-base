@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
+import { FunBaseLoading } from "@/components/ui/funbase-loading"
 import { Search, FileText, Clock, X, ChevronDown, ChevronUp, Building2 } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
@@ -392,9 +393,11 @@ export default function VisasPage() {
           <h1 className="text-3xl font-bold text-foreground">ビザ進捗管理</h1>
           <p className="text-muted-foreground mt-2">ビザ申請の進捗状況確認</p>
         </div>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-muted-foreground">読み込み中...</div>
-        </div>
+        <FunBaseLoading
+          variant="inline"
+          title="ビザ進捗を読み込み中"
+          description="ステータス別の件数と期限を整理しています"
+        />
       </div>
     )
   }

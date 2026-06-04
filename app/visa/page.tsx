@@ -5,6 +5,7 @@ import { DataTable, type Column } from "@/components/ui/data-table"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { Badge } from "@/components/ui/badge"
+import { FunBaseLoading } from "@/components/ui/funbase-loading"
 import { getVisas } from "@/lib/supabase/visas"
 import { VisaDataSource } from "@/components/kintone/visa-data-source"
 
@@ -119,9 +120,11 @@ export default function VisaPage() {
           <h1 className="text-3xl font-bold text-foreground">ビザ申請一覧</h1>
           <p className="text-muted-foreground mt-2">ビザ申請の進捗と管理</p>
         </div>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-muted-foreground">読み込み中...</div>
-        </div>
+        <FunBaseLoading
+          variant="inline"
+          title="ビザ申請を読み込み中"
+          description="進捗と期限の情報を取得しています"
+        />
       </div>
     )
   }

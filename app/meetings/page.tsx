@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { TreeNoteView } from "@/components/ui/tree-note-view"
+import { FunBaseLoading } from "@/components/ui/funbase-loading"
 import { Calendar, List, Search, Filter, Clock, User } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getMeetings } from "@/lib/supabase/meetings"
@@ -105,9 +106,11 @@ export default function MeetingsPage() {
             <h1 className="text-3xl font-bold text-foreground">面談記録</h1>
             <p className="text-muted-foreground mt-2">面談の記録と内容を管理</p>
           </div>
-          <div className="flex items-center justify-center py-8">
-            <div className="text-muted-foreground">読み込み中...</div>
-          </div>
+          <FunBaseLoading
+            variant="inline"
+            title="面談記録を読み込み中"
+            description="人材情報と面談メモを照合しています"
+          />
         </div>
       </AuthGuard>
     )

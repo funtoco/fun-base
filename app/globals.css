@@ -152,3 +152,73 @@
     font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
   }
 }
+
+@layer components {
+  .funbase-loader-mark::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: conic-gradient(
+      from 0deg,
+      rgb(var(--color-primary) / 0),
+      rgb(var(--color-primary) / 0.9),
+      rgb(var(--color-accent) / 0.9),
+      rgb(var(--color-primary) / 0)
+    );
+    animation: funbase-loader-spin 1.6s linear infinite;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    padding: 1px;
+  }
+
+  .funbase-loader-progress {
+    animation: funbase-loader-progress 1.35s ease-in-out infinite;
+  }
+
+  .funbase-loader-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .funbase-loader-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(var(--color-primary) / 0.18), transparent);
+    animation: funbase-loader-shimmer 1.45s ease-in-out infinite;
+  }
+}
+
+@keyframes funbase-loader-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes funbase-loader-progress {
+  0% {
+    transform: translateX(-90%);
+  }
+  55% {
+    transform: translateX(110%);
+  }
+  100% {
+    transform: translateX(110%);
+  }
+}
+
+@keyframes funbase-loader-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .funbase-loader-mark::before,
+  .funbase-loader-progress,
+  .funbase-loader-shimmer::after {
+    animation: none;
+  }
+}

@@ -5,6 +5,7 @@ import { DataTable, type Column } from "@/components/ui/data-table"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { PersonAvatar } from "@/components/ui/person-avatar"
+import { FunBaseLoading } from "@/components/ui/funbase-loading"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
 import type { Person } from "@/lib/models"
@@ -259,9 +260,11 @@ export default function PeoplePage() {
           <h1 className="text-3xl font-bold text-foreground">人材一覧</h1>
           <p className="text-muted-foreground mt-2">人材の一覧と基本情報</p>
         </div>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-muted-foreground">読み込み中...</div>
-        </div>
+        <FunBaseLoading
+          variant="inline"
+          title="人材情報を読み込み中"
+          description="在留資格と基本情報を照合しています"
+        />
       </div>
     )
   }

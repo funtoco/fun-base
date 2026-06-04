@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
+import { FunBaseLoading } from "@/components/ui/funbase-loading"
 import { 
   RefreshCw, 
   Clock, 
@@ -436,9 +437,11 @@ function DashboardLoading() {
         <h1 className="text-2xl font-bold text-foreground">ホーム</h1>
         <p className="text-muted-foreground text-sm mt-1">今日見るべき状況をまとめて確認</p>
       </div>
-      <div className="flex items-center justify-center py-12">
-        <div className="text-muted-foreground">読み込み中...</div>
-      </div>
+      <FunBaseLoading
+        variant="inline"
+        title="ホームを読み込み中"
+        description="今日見るべき状況を集計しています"
+      />
     </div>
   )
 }

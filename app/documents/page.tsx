@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { PersonAvatar } from "@/components/ui/person-avatar"
+import { FunBaseLoading } from "@/components/ui/funbase-loading"
 import { getAllPersonDocuments, type PersonDocumentWithPerson } from "@/lib/supabase/person-documents"
 import type { DocumentType } from "@/lib/models"
 
@@ -168,9 +169,11 @@ export default function DocumentsPage() {
           <h1 className="text-3xl font-bold text-foreground">書類管理</h1>
           <p className="text-muted-foreground mt-2">アップロードされた書類の一覧</p>
         </div>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-muted-foreground">読み込み中...</div>
-        </div>
+        <FunBaseLoading
+          variant="inline"
+          title="書類一覧を読み込み中"
+          description="アップロード済み書類を確認しています"
+        />
       </div>
     )
   }
