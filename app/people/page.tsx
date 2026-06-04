@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { PersonAvatar } from "@/components/ui/person-avatar"
 import { FunBaseLoading } from "@/components/ui/funbase-loading"
+import { useNavigationProgress } from "@/components/layout/navigation-progress"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
 import type { Person } from "@/lib/models"
@@ -22,6 +23,7 @@ interface PersonWithVisa extends Person {
 export default function PeoplePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { startNavigation } = useNavigationProgress()
   const [people, setPeople] = useState<Person[]>([])
   const [visas, setVisas] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -250,6 +252,7 @@ export default function PeoplePage() {
   ]
 
   const handleRowClick = (person: PersonWithVisa) => {
+    startNavigation()
     router.push(`/people/${person.id}`)
   }
 

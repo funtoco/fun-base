@@ -4,6 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { useNavigationProgress } from "@/components/layout/navigation-progress"
 import { Home, Users, FileText, FolderOpen, Calendar, Clock, CheckSquare } from "lucide-react"
 
 const navigation = [
@@ -46,6 +47,7 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { startNavigation } = useNavigationProgress()
 
   return (
     <div className="flex h-full w-64 flex-col bg-sidebar border-r border-sidebar-border">
@@ -65,6 +67,11 @@ export function Sidebar() {
               <li key={item.name}>
                 <Link
                   href={item.href}
+                  onClick={(event) => {
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                    if (pathname === item.href) return
+                    startNavigation()
+                  }}
                   className={cn(
                     "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors",
                     isActive

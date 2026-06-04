@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
+import { useNavigationProgress } from "@/components/layout/navigation-progress"
 import { useRouter } from "next/navigation"
 import { currentUser } from "@/data/users"
 import { cn, formatDate } from "@/lib/utils"
@@ -48,6 +49,7 @@ const normalizeSearchText = (value?: string | null) => value?.toLowerCase().trim
 export function Header() {
   const { user, role, signOut, refreshUser } = useAuth()
   const router = useRouter()
+  const { startNavigation } = useNavigationProgress()
   const [searchQuery, setSearchQuery] = useState("")
   const [people, setPeople] = useState<Person[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
@@ -57,6 +59,11 @@ export function Header() {
   const [announcementsOpen, setAnnouncementsOpen] = useState(false)
 
   const unreadCount = announcements.filter(a => !readIds.includes(a.id)).length
+
+  const navigate = useCallback((href: string) => {
+    startNavigation()
+    router.push(href)
+  }, [router, startNavigation])
 
   const loadAnnouncements = useCallback(async () => {
     try {
@@ -219,7 +226,7 @@ export function Header() {
         description: "人材一覧を検索",
       })
     }
-    router.push(trimmed ? `/people?search=${encodeURIComponent(trimmed)}` : "/people")
+    navigate(trimmed ? `/people?search=${encodeURIComponent(trimmed)}` : "/people")
   }
 
   const goToPerson = (person: Person) => {
@@ -231,7 +238,7 @@ export function Header() {
       kind: "person",
       description: [person.kana, person.company].filter(Boolean).join(" / ") || undefined,
     })
-    router.push(`/people/${person.id}`)
+    navigate(`/people/${person.id}`)
   }
 
   const goToCompany = (suggestion: OfficeSuggestion) => {
@@ -243,13 +250,13 @@ export function Header() {
       kind: "office",
       description: `${suggestion.count}名`,
     })
-    router.push(`/people?company=${encodeURIComponent(suggestion.name)}`)
+    navigate(`/people?company=${encodeURIComponent(suggestion.name)}`)
   }
 
   const goToHistoryItem = (item: SearchHistoryItem) => {
     setSearchOpen(false)
     saveSearchHistory(item)
-    router.push(item.href)
+    navigate(item.href)
   }
 
   const hasSuggestions = historySuggestions.length > 0 || personSuggestions.length > 0 || companySuggestions.length > 0
@@ -458,7 +465,7 @@ export function Header() {
                         onClick={() => {
                           if (!isRead) handleMarkAsRead(a.id)
                           setAnnouncementsOpen(false)
-                          router.push(`/announcements?id=${a.id}`)
+                          navigate(`/announcements?id=${a.id}`)
                         }}
                       >
                         <div className="flex items-start gap-2">
@@ -491,7 +498,7 @@ export function Header() {
                   className="w-full text-xs text-muted-foreground"
                   onClick={() => {
                     setAnnouncementsOpen(false)
-                    router.push("/announcements")
+                    navigate("/announcements")
                   }}
                 >
                   すべてのお知らせを見る
@@ -509,22 +516,22 @@ export function Header() {
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel>管理者設定</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push('/admin/tenants')}>
+              <DropdownMenuItem onClick={() => navigate('/admin/tenants')}>
                 <Users className="mr-2 h-4 w-4" />
                 テナント管理
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push('/admin/connectors/dashboard')}>
+              <DropdownMenuItem onClick={() => navigate('/admin/connectors/dashboard')}>
                 <Cable className="mr-2 h-4 w-4" />
                 コネクター管理
               </DropdownMenuItem>
               {user?.email?.endsWith("@funtoco.jp") && (
-                <DropdownMenuItem onClick={() => router.push('/admin/announcements')}>
+                <DropdownMenuItem onClick={() => navigate('/admin/announcements')}>
                   <Megaphone className="mr-2 h-4 w-4" />
                   お知らせ管理
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push('/admin/access-logs')}>
+              <DropdownMenuItem onClick={() => navigate('/admin/access-logs')}>
                 <ShieldCheck className="mr-2 h-4 w-4" />
                 アクセスログ
               </DropdownMenuItem>

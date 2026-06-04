@@ -154,26 +154,12 @@
 }
 
 @layer components {
-  .funbase-loader-mark::before {
-    content: "";
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    background: conic-gradient(
-      from 0deg,
-      rgb(var(--color-primary) / 0),
-      rgb(var(--color-primary) / 0.9),
-      rgb(var(--color-accent) / 0.9),
-      rgb(var(--color-primary) / 0)
-    );
-    animation: funbase-loader-spin 1.6s linear infinite;
-    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    mask-composite: exclude;
-    padding: 1px;
-  }
-
   .funbase-loader-progress {
     animation: funbase-loader-progress 1.35s ease-in-out infinite;
+  }
+
+  .funbase-route-progress {
+    animation: funbase-route-progress 1.2s ease-in-out infinite;
   }
 
   .funbase-loader-shimmer {
@@ -191,12 +177,6 @@
   }
 }
 
-@keyframes funbase-loader-spin {
-  to {
-    transform: rotate(1turn);
-  }
-}
-
 @keyframes funbase-loader-progress {
   0% {
     transform: translateX(-90%);
@@ -209,6 +189,18 @@
   }
 }
 
+@keyframes funbase-route-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+  55% {
+    transform: translateX(150%);
+  }
+  100% {
+    transform: translateX(150%);
+  }
+}
+
 @keyframes funbase-loader-shimmer {
   to {
     transform: translateX(100%);
@@ -216,8 +208,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .funbase-loader-mark::before,
   .funbase-loader-progress,
+  .funbase-route-progress,
   .funbase-loader-shimmer::after {
     animation: none;
   }
