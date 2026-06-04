@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Timeline } from "@/components/ui/timeline"
-import { FunBaseLoading } from "@/components/ui/funbase-loading"
+import { ListPanelLoadingSkeleton } from "@/components/ui/funbase-loading"
 import { Search, Filter, Calendar, FileText, CheckSquare } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
@@ -120,11 +120,7 @@ export default function TimelinePage() {
           <h1 className="text-3xl font-bold text-foreground">タイムライン</h1>
           <p className="text-muted-foreground mt-2">すべての活動を時系列で確認</p>
         </div>
-        <FunBaseLoading
-          variant="inline"
-          title="タイムラインを読み込み中"
-          description="活動履歴を時系列に並べています"
-        />
+        <ListPanelLoadingSkeleton />
       </div>
     )
   }

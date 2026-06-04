@@ -5,7 +5,7 @@ import { DataTable, type Column } from "@/components/ui/data-table"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { Badge } from "@/components/ui/badge"
-import { FunBaseLoading } from "@/components/ui/funbase-loading"
+import { useNavigationProgress } from "@/components/layout/navigation-progress"
 import { getVisas } from "@/lib/supabase/visas"
 import { VisaDataSource } from "@/components/kintone/visa-data-source"
 
@@ -22,6 +22,7 @@ interface Visa {
 
 export default function VisaPage() {
   const router = useRouter()
+  const { startNavigation } = useNavigationProgress()
   const [visas, setVisas] = useState<Visa[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -110,23 +111,8 @@ export default function VisaPage() {
   ]
 
   const handleRowClick = (visa: Visa) => {
+    startNavigation()
     router.push(`/visa/${visa.id}`)
-  }
-
-  if (loading) {
-    return (
-      <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">ビザ申請一覧</h1>
-          <p className="text-muted-foreground mt-2">ビザ申請の進捗と管理</p>
-        </div>
-        <FunBaseLoading
-          variant="inline"
-          title="ビザ申請を読み込み中"
-          description="進捗と期限の情報を取得しています"
-        />
-      </div>
-    )
   }
 
   if (error) {
@@ -170,6 +156,7 @@ export default function VisaPage() {
         filters={filters}
         searchKeys={["personId", "type", "status"]}
         onRowClick={handleRowClick}
+        loading={loading}
       />
     </div>
   )

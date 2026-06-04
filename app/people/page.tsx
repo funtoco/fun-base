@@ -5,7 +5,6 @@ import { DataTable, type Column } from "@/components/ui/data-table"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { PersonAvatar } from "@/components/ui/person-avatar"
-import { FunBaseLoading } from "@/components/ui/funbase-loading"
 import { useNavigationProgress } from "@/components/layout/navigation-progress"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
@@ -256,22 +255,6 @@ export default function PeoplePage() {
     router.push(`/people/${person.id}`)
   }
 
-  if (loading) {
-    return (
-      <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">人材一覧</h1>
-          <p className="text-muted-foreground mt-2">人材の一覧と基本情報</p>
-        </div>
-        <FunBaseLoading
-          variant="inline"
-          title="人材情報を読み込み中"
-          description="在留資格と基本情報を照合しています"
-        />
-      </div>
-    )
-  }
-
   if (error) {
     return (
       <div className="p-6 space-y-6">
@@ -305,6 +288,7 @@ export default function PeoplePage() {
         filters={filters}
         searchKeys={["name", "kana", "company", "nationality", "employeeNumber"]}
         onRowClick={handleRowClick}
+        loading={loading}
         initialSearchTerm={searchParams.get('search') || ''}
         initialActiveFilters={getFiltersFromUrl()}
         onFilterChange={updateUrl}

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { FunBaseLoading } from "@/components/ui/funbase-loading"
+import { ListPanelLoadingSkeleton } from "@/components/ui/funbase-loading"
 import { ArrowLeft, Megaphone } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { formatDate } from "@/lib/utils"
@@ -69,7 +69,11 @@ export default function AnnouncementsPage() {
   }
 
   if (loading) {
-    return <FunBaseLoading title="お知らせを読み込み中" description="最新のお知らせと既読状況を確認しています" />
+    return (
+      <div className="container mx-auto py-6 px-4 max-w-5xl">
+        <ListPanelLoadingSkeleton />
+      </div>
+    )
   }
 
   return (

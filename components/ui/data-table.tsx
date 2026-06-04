@@ -29,6 +29,8 @@ interface DataTableProps<T> {
   searchKeys?: (keyof T)[]
   onRowClick?: (row: T) => void
   className?: string
+  loading?: boolean
+  skeletonRowCount?: number
   // URLパラメータ永続化用
   initialSearchTerm?: string
   initialActiveFilters?: Record<string, string[]>
@@ -50,6 +52,8 @@ export function DataTable<T extends Record<string, any>>({
   searchKeys = [],
   onRowClick,
   className,
+  loading = false,
+  skeletonRowCount = 6,
   initialSearchTerm = "",
   initialActiveFilters = {},
   onFilterChange,
@@ -303,7 +307,25 @@ export function DataTable<T extends Record<string, any>>({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedData.length === 0 ? (
+            {loading ? (
+              Array.from({ length: skeletonRowCount }).map((_, rowIndex) => (
+                <TableRow key={`skeleton-${rowIndex}`}>
+                  {columns.map((column, columnIndex) => (
+                    <TableCell key={column.key.toString()}>
+                      <div
+                        className={cn(
+                          "funbase-loader-shimmer h-4 rounded-full bg-muted",
+                          columnIndex === 0 && "h-9 w-36",
+                          columnIndex !== 0 && columnIndex % 3 === 0 && "w-20",
+                          columnIndex !== 0 && columnIndex % 3 === 1 && "w-28",
+                          columnIndex !== 0 && columnIndex % 3 === 2 && "w-16",
+                        )}
+                      />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : sortedData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
                   データがありません
@@ -331,7 +353,9 @@ export function DataTable<T extends Record<string, any>>({
       {/* Results count */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <div>
-          {data.length !== sortedData.length ? (
+          {loading ? (
+            <span>読み込み中</span>
+          ) : data.length !== sortedData.length ? (
             <>
               <span className="font-medium text-foreground">{sortedData.length}</span> 件を表示 
               <span className="mx-1">•</span> 

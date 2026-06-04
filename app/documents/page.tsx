@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { PersonAvatar } from "@/components/ui/person-avatar"
-import { FunBaseLoading } from "@/components/ui/funbase-loading"
+import { useNavigationProgress } from "@/components/layout/navigation-progress"
 import { getAllPersonDocuments, type PersonDocumentWithPerson } from "@/lib/supabase/person-documents"
 import type { DocumentType } from "@/lib/models"
 
@@ -36,6 +36,7 @@ function formatDate(dateString?: string): string {
 export default function DocumentsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { startNavigation } = useNavigationProgress()
   const [documents, setDocuments] = useState<PersonDocumentWithPerson[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -159,23 +160,8 @@ export default function DocumentsPage() {
   ]
 
   const handleRowClick = (doc: PersonDocumentWithPerson) => {
+    startNavigation()
     router.push(`/people/${doc.personId}`)
-  }
-
-  if (loading) {
-    return (
-      <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">書類管理</h1>
-          <p className="text-muted-foreground mt-2">アップロードされた書類の一覧</p>
-        </div>
-        <FunBaseLoading
-          variant="inline"
-          title="書類一覧を読み込み中"
-          description="アップロード済み書類を確認しています"
-        />
-      </div>
-    )
   }
 
   if (error) {
@@ -210,6 +196,7 @@ export default function DocumentsPage() {
         initialSearchTerm={searchParams.get("search") || ""}
         initialActiveFilters={getFiltersFromUrl()}
         onFilterChange={updateUrl}
+        loading={loading}
       />
     </div>
   )
