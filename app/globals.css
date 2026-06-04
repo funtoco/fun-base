@@ -153,6 +153,68 @@
   }
 }
 
+@layer components {
+  .funbase-loader-progress {
+    animation: funbase-loader-progress 1.35s ease-in-out infinite;
+  }
+
+  .funbase-route-progress {
+    animation: funbase-route-progress 1.2s ease-in-out infinite;
+  }
+
+  .funbase-loader-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .funbase-loader-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(var(--color-primary) / 0.18), transparent);
+    animation: funbase-loader-shimmer 1.45s ease-in-out infinite;
+  }
+}
+
+@keyframes funbase-loader-progress {
+  0% {
+    transform: translateX(-90%);
+  }
+  55% {
+    transform: translateX(110%);
+  }
+  100% {
+    transform: translateX(110%);
+  }
+}
+
+@keyframes funbase-route-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+  55% {
+    transform: translateX(150%);
+  }
+  100% {
+    transform: translateX(150%);
+  }
+}
+
+@keyframes funbase-loader-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .funbase-loader-progress,
+  .funbase-route-progress,
+  .funbase-loader-shimmer::after {
+    animation: none;
+  }
+}
+
 @keyframes navigation-progress {
   0% {
     transform: translateX(-100%) scaleX(0.45);

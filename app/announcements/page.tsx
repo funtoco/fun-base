@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ListPanelLoadingSkeleton } from "@/components/ui/funbase-loading"
 import { ArrowLeft, Megaphone } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { formatDate } from "@/lib/utils"
@@ -69,8 +70,8 @@ export default function AnnouncementsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="container mx-auto py-6 px-4 max-w-5xl">
+        <ListPanelLoadingSkeleton />
       </div>
     )
   }

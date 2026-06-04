@@ -22,8 +22,8 @@ interface PersonWithVisa extends Person {
 
 export default function PeoplePage() {
   const router = useRouter()
-  const { startNavigation } = useNavigationProgress()
   const searchParams = useSearchParams()
+  const { startNavigation } = useNavigationProgress()
   const [people, setPeople] = useState<Person[]>([])
   const [visas, setVisas] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -256,20 +256,6 @@ export default function PeoplePage() {
     router.push(`/people/${person.id}`)
   }
 
-  if (loading) {
-    return (
-      <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">人材一覧</h1>
-          <p className="text-muted-foreground mt-2">人材の一覧と基本情報</p>
-        </div>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-muted-foreground">読み込み中...</div>
-        </div>
-      </div>
-    )
-  }
-
   if (error) {
     return (
       <div className="p-6 space-y-6">
@@ -304,6 +290,7 @@ export default function PeoplePage() {
         searchKeys={PERSON_SEARCH_KEYS}
         searchPlaceholder="人材名、法人名、事業所名で検索..."
         onRowClick={handleRowClick}
+        loading={loading}
         initialSearchTerm={searchParams.get('search') || ''}
         initialActiveFilters={getFiltersFromUrl()}
         onFilterChange={updateUrl}

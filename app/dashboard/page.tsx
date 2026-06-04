@@ -430,14 +430,93 @@ function KPICard({
 
 // Loading state
 function DashboardLoading() {
+  const listCards = ["最近の面談", "日々のサポート", "お知らせ"]
+  const reportCards = ["国籍別レポート", "事業所別レポート"]
+
   return (
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">ホーム</h1>
         <p className="text-muted-foreground text-sm mt-1">今日見るべき状況をまとめて確認</p>
       </div>
-      <div className="flex items-center justify-center py-12">
-        <div className="text-muted-foreground">読み込み中...</div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <Card key={index}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="funbase-loader-shimmer h-4 w-4 rounded-full bg-muted" />
+                <div className="funbase-loader-shimmer h-7 w-12 rounded-full bg-muted" />
+              </div>
+              <div className="funbase-loader-shimmer mt-3 h-4 w-20 rounded-full bg-muted" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="funbase-loader-shimmer h-5 w-28 rounded-full bg-muted" />
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: 7 }).map((_, index) => (
+              <div key={index} className="funbase-loader-shimmer h-9 w-28 rounded-lg bg-muted" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {listCards.map((title) => (
+          <Card key={title}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className="funbase-loader-shimmer h-4 w-4 rounded-full bg-muted" />
+                <CardTitle className="text-base">{title}</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="flex items-start justify-between gap-3">
+                    <div className="flex-1 space-y-2">
+                      <div className="funbase-loader-shimmer h-4 w-2/3 rounded-full bg-muted" />
+                      <div className="funbase-loader-shimmer h-3 w-1/2 rounded-full bg-muted" />
+                    </div>
+                    <div className="funbase-loader-shimmer h-6 w-16 rounded-full bg-muted" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {reportCards.map((title) => (
+          <Card key={title}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">{title}</CardTitle>
+              <div className="funbase-loader-shimmer h-3 w-32 rounded-full bg-muted" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="funbase-loader-shimmer h-4 w-24 rounded-full bg-muted" />
+                      <div className="funbase-loader-shimmer h-4 w-16 rounded-full bg-muted" />
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div className="funbase-loader-shimmer h-full w-2/3 rounded-full bg-muted-foreground/15" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   )
