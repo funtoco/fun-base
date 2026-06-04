@@ -47,6 +47,18 @@ npm start
 
 開発サーバーは http://localhost:3000 で起動します。
 
+## FunEdu 連携
+
+FunBase のサイドバー下部に FunEdu へのサービス切替リンクを表示します。ログイン済みユーザーがリンクを開くと `/api/funedu/sso/start` 経由で FunEdu に遷移します。
+
+### 環境変数
+
+- `FUNEDU_URL` または `NEXT_PUBLIC_FUNEDU_URL`: FunEdu のベース URL
+- `FUNEDU_SSO_SECRET`: 設定すると FunEdu 向けに 60 秒有効な SSO JWT を発行します
+- `FUNEDU_SSO_CALLBACK_PATH`: FunEdu 側の SSO 受け口。未設定時は `/auth/funbase/callback`
+
+`FUNEDU_SSO_SECRET` 未設定時は FunEdu へ通常遷移します。同一 Supabase セッション Cookie を共有できる構成では、そのままログイン状態を引き継げます。
+
 # ローカルのデータ投入
 
 https://github.com/funtoco/fun-docs/issues/237

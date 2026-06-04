@@ -5,9 +5,10 @@ import { DataTable, type Column } from "@/components/ui/data-table"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { PersonAvatar } from "@/components/ui/person-avatar"
-import { useNavigationProgress } from "@/components/layout/navigation-progress"
+import { useNavigationProgress } from "@/components/navigation-progress"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
+import { PERSON_SEARCH_KEYS } from "@/lib/person-search"
 import type { Person } from "@/lib/models"
 
 interface PersonWithVisa extends Person {
@@ -286,7 +287,8 @@ export default function PeoplePage() {
         columns={columns}
         csvColumns={csvColumns}
         filters={filters}
-        searchKeys={["name", "kana", "company", "nationality", "employeeNumber"]}
+        searchKeys={PERSON_SEARCH_KEYS}
+        searchPlaceholder="人材名、法人名、事業所名で検索..."
         onRowClick={handleRowClick}
         loading={loading}
         initialSearchTerm={searchParams.get('search') || ''}

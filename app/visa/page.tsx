@@ -5,7 +5,7 @@ import { DataTable, type Column } from "@/components/ui/data-table"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { Badge } from "@/components/ui/badge"
-import { useNavigationProgress } from "@/components/layout/navigation-progress"
+import { useNavigationProgress } from "@/components/navigation-progress"
 import { getVisas } from "@/lib/supabase/visas"
 import { VisaDataSource } from "@/components/kintone/visa-data-source"
 

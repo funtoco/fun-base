@@ -5,7 +5,6 @@ import { useEffect } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
-import { NavigationProgressBar, NavigationProgressProvider } from "@/components/layout/navigation-progress"
 import { FunBaseLoading } from "@/components/ui/funbase-loading"
 import { isPublicRoute } from "@/lib/auth-route-guards"
 import { usePathname, useRouter } from "next/navigation"
@@ -45,17 +44,14 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   // ログイン済みの場合、サイドバーとヘッダーを表示
   // ミドルウェアで認証チェック済みなので、ここに来る場合は必ずログイン済み
   return (
-    <NavigationProgressProvider>
-      <NavigationProgressBar />
-      <div className="flex h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Header />
-          <main className="flex-1 overflow-auto bg-background">
-            {children}
-          </main>
-        </div>
+    <div className="flex h-screen bg-background">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-auto bg-background">
+          {children}
+        </main>
       </div>
-    </NavigationProgressProvider>
+    </div>
   )
 }

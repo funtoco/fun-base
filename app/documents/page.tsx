@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { PersonAvatar } from "@/components/ui/person-avatar"
-import { useNavigationProgress } from "@/components/layout/navigation-progress"
+import { useNavigationProgress } from "@/components/navigation-progress"
 import { getAllPersonDocuments, type PersonDocumentWithPerson } from "@/lib/supabase/person-documents"
 import type { DocumentType } from "@/lib/models"
 
