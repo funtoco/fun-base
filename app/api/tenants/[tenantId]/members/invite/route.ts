@@ -128,7 +128,7 @@ export async function POST(
 
     let redirectTo: string
     try {
-      redirectTo = getInviteRedirectUrl()
+      redirectTo = getInviteRedirectUrl(request.nextUrl.origin)
     } catch (error) {
       console.error("Error resolving invitation redirect URL:", error)
       return NextResponse.json(
