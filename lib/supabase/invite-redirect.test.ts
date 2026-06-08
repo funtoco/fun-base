@@ -4,9 +4,12 @@ import { getInviteRedirectUrl } from "./invite-redirect"
 
 const ENV_KEYS = [
   "NEXT_PUBLIC_APP_URL",
+  "INVITE_REDIRECT_ALLOWED_ORIGINS",
+  "NEXT_PUBLIC_ALLOWED_ORIGINS",
   "VERCEL_PROJECT_PRODUCTION_URL",
   "VERCEL_URL",
 ] as const
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV
 
 const ORIGINAL_ENV = Object.fromEntries(
   ENV_KEYS.map((key) => [key, process.env[key]])
@@ -20,6 +23,7 @@ function clearInviteUrlEnv() {
 
 function restoreInviteUrlEnv() {
   clearInviteUrlEnv()
+  process.env.NODE_ENV = ORIGINAL_NODE_ENV
 
   for (const key of ENV_KEYS) {
     const value = ORIGINAL_ENV[key]
@@ -43,8 +47,9 @@ describe("getInviteRedirectUrl", () => {
     )
   })
 
-  it("falls back to the current request origin when app URL env is missing", () => {
+  it("falls back to the current request origin outside production", () => {
     clearInviteUrlEnv()
+    process.env.NODE_ENV = "development"
 
     expect(getInviteRedirectUrl({ requestOrigin: "https://funbase.funtoco.jp" })).toBe(
       "https://funbase.funtoco.jp/auth/set-password"
@@ -58,6 +63,25 @@ describe("getInviteRedirectUrl", () => {
     expect(getInviteRedirectUrl()).toBe(
       "https://funbase-git-main-funtoco.vercel.app/auth/set-password"
     )
+  })
+
+  it("uses an allowlisted request origin in production", () => {
+    clearInviteUrlEnv()
+    process.env.NODE_ENV = "production"
+    process.env.INVITE_REDIRECT_ALLOWED_ORIGINS = "https://funbase.funtoco.jp"
+
+    expect(getInviteRedirectUrl({ requestOrigin: "https://funbase.funtoco.jp" })).toBe(
+      "https://funbase.funtoco.jp/auth/set-password"
+    )
+  })
+
+  it("rejects an untrusted request origin in production", () => {
+    clearInviteUrlEnv()
+    process.env.NODE_ENV = "production"
+
+    expect(() =>
+      getInviteRedirectUrl({ requestOrigin: "https://attacker.example.com" })
+    ).toThrow("Invitation redirect URL is not configured")
   })
 
   it("rejects an invalid configured app URL even when request origin exists", () => {
@@ -79,6 +103,7 @@ describe("getInviteRedirectUrl", () => {
 
   it("fails clearly when no app URL source is available", () => {
     clearInviteUrlEnv()
+    process.env.NODE_ENV = "production"
 
     expect(() => getInviteRedirectUrl()).toThrow(
       "Invitation redirect URL is not configured"

@@ -3,6 +3,10 @@ interface InviteRedirectUrlOptions {
 }
 
 const INVITE_REDIRECT_PATH = "/auth/set-password"
+const ALLOWED_ORIGINS_ENV_KEYS = [
+  "INVITE_REDIRECT_ALLOWED_ORIGINS",
+  "NEXT_PUBLIC_ALLOWED_ORIGINS",
+] as const
 
 function normalizeBaseUrl(value: string, source: string): string {
   const trimmedValue = value.trim()
@@ -41,13 +45,46 @@ function getConfiguredAppUrl(): { source: string; value: string } | null {
   return null
 }
 
+function getAllowedRequestOrigins(): Set<string> {
+  const allowedOrigins = new Set<string>()
+
+  for (const envKey of ALLOWED_ORIGINS_ENV_KEYS) {
+    const envValue = process.env[envKey]
+    if (!envValue?.trim()) {
+      continue
+    }
+
+    for (const origin of envValue.split(",")) {
+      if (origin.trim()) {
+        allowedOrigins.add(normalizeBaseUrl(origin, envKey))
+      }
+    }
+  }
+
+  return allowedOrigins
+}
+
+function getTrustedRequestOrigin(requestOrigin?: string | null): { source: string; value: string } | null {
+  if (!requestOrigin?.trim()) {
+    return null
+  }
+
+  const normalizedRequestOrigin = normalizeBaseUrl(requestOrigin, "request origin")
+
+  if (process.env.NODE_ENV !== "production") {
+    return { source: "request origin", value: normalizedRequestOrigin }
+  }
+
+  if (getAllowedRequestOrigins().has(normalizedRequestOrigin)) {
+    return { source: "request origin", value: normalizedRequestOrigin }
+  }
+
+  return null
+}
+
 export function getInviteRedirectUrl(options: InviteRedirectUrlOptions = {}): string {
   const configuredAppUrl = getConfiguredAppUrl()
-  const baseUrl = configuredAppUrl ?? (
-    options.requestOrigin?.trim()
-      ? { source: "request origin", value: options.requestOrigin }
-      : null
-  )
+  const baseUrl = configuredAppUrl ?? getTrustedRequestOrigin(options.requestOrigin)
 
   if (!baseUrl) {
     throw new Error("Invitation redirect URL is not configured")
