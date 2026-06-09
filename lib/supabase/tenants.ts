@@ -11,12 +11,30 @@ export interface Tenant {
   updated_at: string
 }
 
+export interface TenantOffice {
+  id: string
+  tenant_id: string
+  name: string
+  slug?: string | null
+  address?: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface UserTenant {
   id: string
   user_id: string
   tenant_id: string
   email?: string
-  role: 'owner' | 'admin' | 'member' | 'guest'
+  user?: {
+    email?: string
+    user_metadata?: {
+      name?: string
+      [key: string]: any
+    }
+  }
+  role: 'owner' | 'admin' | 'member' | 'guest' | 'supporter'
   status: 'active' | 'pending' | 'suspended'
   invited_by?: string
   invited_at?: string
@@ -24,8 +42,13 @@ export interface UserTenant {
   created_at: string
   updated_at: string
   tenant?: Tenant
+  offices?: TenantOffice[]
 }
 
+interface UserTenantOfficeAssignment {
+  user_tenant_id: string
+  tenant_office_id: string
+}
 
 export async function getTenants(): Promise<Tenant[]> {
   const supabase = createClient()
@@ -131,7 +154,55 @@ export async function getTenantMembers(tenantId: string): Promise<UserTenant[]> 
     return []
   }
 
-  return members
+  const memberIds = members.map((member: UserTenant) => member.id)
+
+  const { data: assignments, error: assignmentsError } = await supabase
+    .from('user_tenant_offices')
+    .select('user_tenant_id, tenant_office_id')
+    .eq('tenant_id', tenantId)
+    .in('user_tenant_id', memberIds)
+
+  if (assignmentsError) {
+    console.error('Error fetching tenant member office assignments:', assignmentsError)
+    throw assignmentsError
+  }
+
+  const assignmentRecords = (assignments || []) as UserTenantOfficeAssignment[]
+  const officeIds = Array.from(
+    new Set(assignmentRecords.map((assignment) => assignment.tenant_office_id))
+  )
+
+  const officesById = new Map<string, TenantOffice>()
+  if (officeIds.length > 0) {
+    const { data: officeRecords, error: officesError } = await supabase
+      .from('tenant_offices')
+      .select('id, tenant_id, name, slug, address, is_active, created_at, updated_at')
+      .eq('tenant_id', tenantId)
+      .in('id', officeIds)
+
+    if (officesError) {
+      console.error('Error fetching tenant member offices:', officesError)
+      throw officesError
+    }
+
+    for (const office of officeRecords || []) {
+      officesById.set(office.id, office)
+    }
+  }
+
+  const officeIdsByMemberId = new Map<string, string[]>()
+  for (const assignment of assignmentRecords) {
+    const currentOfficeIds = officeIdsByMemberId.get(assignment.user_tenant_id) || []
+    currentOfficeIds.push(assignment.tenant_office_id)
+    officeIdsByMemberId.set(assignment.user_tenant_id, currentOfficeIds)
+  }
+
+  return members.map((member: UserTenant) => ({
+    ...member,
+    offices: (officeIdsByMemberId.get(member.id) || [])
+      .map((officeId) => officesById.get(officeId))
+      .filter((office): office is TenantOffice => Boolean(office)),
+  }))
 }
 
 export async function getTenantInvitations(tenantId: string): Promise<UserTenant[]> {
@@ -152,10 +223,26 @@ export async function getTenantInvitations(tenantId: string): Promise<UserTenant
   return data || []
 }
 
+export async function getTenantOffices(tenantId: string): Promise<TenantOffice[]> {
+  if (!tenantId || tenantId === 'null') {
+    return []
+  }
+
+  const response = await fetch(`/api/tenants/${tenantId}/offices`)
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(result.error || 'Failed to fetch affiliations')
+  }
+
+  return result.offices || []
+}
+
 export async function createTenantInvitation(
   tenantId: string,
   email: string,
-  role: 'admin' | 'member' | 'guest'
+  role: 'admin' | 'member' | 'guest',
+  officeIds: string[] = []
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Call the API route instead of using admin client directly
@@ -166,7 +253,8 @@ export async function createTenantInvitation(
       },
       body: JSON.stringify({
         email,
-        role
+        role,
+        officeIds,
       })
     })
 
@@ -288,6 +376,26 @@ export async function updateUserTenantRole(
 
   if (!response.ok) {
     throw new Error(result.error || 'Failed to update user tenant role')
+  }
+}
+
+export async function updateUserTenantOffices(
+  tenantId: string,
+  userTenantId: string,
+  officeIds: string[]
+): Promise<void> {
+  const response = await fetch(`/api/tenants/${tenantId}/members/${userTenantId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ officeIds }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(result.error || 'Failed to update member affiliations')
   }
 }
 

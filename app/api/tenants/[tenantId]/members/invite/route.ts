@@ -10,6 +10,21 @@ import {
 
 const INVITABLE_ROLES = new Set(["admin", "member", "guest"])
 
+function normalizeOfficeIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .filter((id): id is string => typeof id === "string")
+        .map((id) => id.trim())
+        .filter(Boolean)
+    )
+  )
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { tenantId: string } }
@@ -24,6 +39,7 @@ export async function POST(
 
     const body = await request.json()
     const { email, role } = body
+    const officeIds = normalizeOfficeIds(body.officeIds)
     const normalizedEmail = typeof email === "string" ? email.toLowerCase().trim() : ""
 
     if (!normalizedEmail || !role) {
@@ -93,6 +109,30 @@ export async function POST(
       }
     }
 
+    if (officeIds.length > 0) {
+      const { data: offices, error: officesError } = await supabase
+        .from("tenant_offices")
+        .select("id")
+        .eq("tenant_id", params.tenantId)
+        .eq("is_active", true)
+        .in("id", officeIds)
+
+      if (officesError) {
+        console.error("Error verifying invitation offices:", officesError)
+        return NextResponse.json(
+          { error: "Failed to verify affiliations" },
+          { status: 500 }
+        )
+      }
+
+      if ((offices || []).length !== officeIds.length) {
+        return NextResponse.json(
+          { error: "Invalid officeIds" },
+          { status: 400 }
+        )
+      }
+    }
+
     // Check if email is already a member
     const { data: existingMemberships, error: existingMembershipsError } = await supabase
       .from('user_tenants')
@@ -146,7 +186,8 @@ export async function POST(
         data: {
           tenant_id: params.tenantId,
           role: role,
-          invited_by: user.id
+          invited_by: user.id,
+          office_ids: officeIds,
         },
         redirectTo
       })
@@ -160,7 +201,7 @@ export async function POST(
       }
       
       // Store the invitation metadata in user_tenants with pending status
-      const { error: userTenantError } = await supabase
+      const { data: userTenant, error: userTenantError } = await adminSupabase
         .from('user_tenants')
         .insert({
           user_id: data.user.id,
@@ -171,6 +212,8 @@ export async function POST(
           invited_by: user.id,
           invited_at: new Date().toISOString()
         })
+        .select("id")
+        .single()
       
       if (userTenantError) {
         console.error('Error creating user tenant record:', userTenantError)
@@ -185,6 +228,24 @@ export async function POST(
           { error: "Failed to create user tenant record" },
           { status: 500 }
         )
+      }
+
+      if (officeIds.length > 0) {
+        const { error: officeAssignmentError } = await adminSupabase
+          .from("user_tenant_offices")
+          .insert(officeIds.map((officeId) => ({
+            tenant_id: params.tenantId,
+            user_tenant_id: userTenant.id,
+            tenant_office_id: officeId,
+          })))
+
+        if (officeAssignmentError) {
+          console.error("Error creating user tenant office assignments:", officeAssignmentError)
+          return NextResponse.json(
+            { error: "Failed to assign affiliations" },
+            { status: 500 }
+          )
+        }
       }
       
       return NextResponse.json({ 
