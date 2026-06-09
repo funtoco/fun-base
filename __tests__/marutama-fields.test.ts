@@ -88,7 +88,7 @@ describe('DocumentType: 新規書類タイプ', () => {
     'passport_front', 'passport_back',
     'residence_card_front', 'residence_card_back',
     'coe_copy', 'flight_ticket_copy', 'bank_card_copy',
-    'resume', 'designation_document',
+    'resume', 'designation_document', 'employment_insurance_notice',
   ]
 
   it('既存の4タイプが含まれること', () => {
@@ -104,17 +104,18 @@ describe('DocumentType: 新規書類タイプ', () => {
     expect(VALID_DOCUMENT_TYPES).toContain('bank_card_copy')
   })
 
-  it('入社後書類の2タイプが含まれること', () => {
+  it('入社後書類の3タイプが含まれること', () => {
     expect(VALID_DOCUMENT_TYPES).toContain('resume')
     expect(VALID_DOCUMENT_TYPES).toContain('designation_document')
+    expect(VALID_DOCUMENT_TYPES).toContain('employment_insurance_notice')
   })
 
   it('住民票写しは書類タイプに含まれないこと', () => {
     expect(VALID_DOCUMENT_TYPES).not.toContain('resident_card_copy')
   })
 
-  it('合計9タイプであること', () => {
-    expect(VALID_DOCUMENT_TYPES).toHaveLength(9)
+  it('合計10タイプであること', () => {
+    expect(VALID_DOCUMENT_TYPES).toHaveLength(10)
   })
 })
 
@@ -324,6 +325,7 @@ describe('書類セクション: 入社前・入社後書類の構成', () => {
       types: [
         { type: 'resume', label: '履歴書' },
         { type: 'designation_document', label: '指定書写し' },
+        { type: 'employment_insurance_notice', label: '雇用保険通知書' },
       ],
     },
   ]
@@ -341,18 +343,18 @@ describe('書類セクション: 入社前・入社後書類の構成', () => {
     ])
   })
 
-  it('入社後書類セクションに2つの書類タイプがあること', () => {
+  it('入社後書類セクションに3つの書類タイプがあること', () => {
     const postEmployment = DOCUMENT_SECTIONS.find(s => s.title === '入社後書類')
     expect(postEmployment).toBeDefined()
-    expect(postEmployment!.types).toHaveLength(2)
+    expect(postEmployment!.types).toHaveLength(3)
     expect(postEmployment!.types.map(t => t.type)).toEqual([
-      'resume', 'designation_document',
+      'resume', 'designation_document', 'employment_insurance_notice',
     ])
   })
 
-  it('全書類タイプの合計が9であること', () => {
+  it('全書類タイプの合計が10であること', () => {
     const allTypes = DOCUMENT_SECTIONS.flatMap(s => s.types)
-    expect(allTypes).toHaveLength(9)
+    expect(allTypes).toHaveLength(10)
   })
 
   it('住民票写しがどのセクションにも表示されないこと', () => {

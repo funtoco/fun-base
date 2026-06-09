@@ -38,6 +38,7 @@ const DOCUMENT_SECTIONS: { title: string; types: { type: DocumentType; label: st
     types: [
       { type: "resume", label: "履歴書" },
       { type: "designation_document", label: "指定書写し" },
+      { type: "employment_insurance_notice", label: "雇用保険通知書" },
     ],
   },
 ]
