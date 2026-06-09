@@ -41,6 +41,12 @@ const DOCUMENT_SECTIONS: { title: string; types: { type: DocumentType; label: st
       { type: "employment_insurance_notice", label: "雇用保険通知書" },
     ],
   },
+  {
+    title: "その他書類",
+    types: [
+      { type: "other", label: "その他書類" },
+    ],
+  },
 ]
 
 export function PersonDocumentsTab({ personId, personDocuments: initialDocuments }: PersonDocumentsTabProps) {
@@ -61,8 +67,26 @@ export function PersonDocumentsTab({ personId, personDocuments: initialDocuments
   const getExistingDocument = (docType: DocumentType) => {
     const doc = documents.find((d) => d.documentType === docType)
     if (!doc) return null
-    return { id: doc.id, storagePath: doc.storagePath, fileName: doc.fileName, contentType: doc.contentType }
+    return {
+      id: doc.id,
+      storagePath: doc.storagePath,
+      title: doc.title,
+      fileName: doc.fileName,
+      contentType: doc.contentType,
+    }
   }
+
+  const getExistingDocuments = (docType: DocumentType) => (
+    documents
+      .filter((d) => d.documentType === docType)
+      .map((doc) => ({
+        id: doc.id,
+        storagePath: doc.storagePath,
+        title: doc.title,
+        fileName: doc.fileName,
+        contentType: doc.contentType,
+      }))
+  )
 
   return (
     <div className="space-y-6">
@@ -79,7 +103,9 @@ export function PersonDocumentsTab({ personId, personDocuments: initialDocuments
                   label={label}
                   personId={personId}
                   documentType={type}
-                  existingDocument={getExistingDocument(type)}
+                  existingDocument={type === "other" ? null : getExistingDocument(type)}
+                  existingDocuments={type === "other" ? getExistingDocuments(type) : undefined}
+                  allowMultiple={type === "other"}
                   onUploadComplete={refreshDocuments}
                   onDeleteComplete={refreshDocuments}
                 />

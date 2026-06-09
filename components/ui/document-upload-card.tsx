@@ -1,17 +1,28 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useMemo, useRef, type ChangeEvent, type FormEvent } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
-import { Upload, Trash2, RefreshCw, Loader2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Upload, Trash2, RefreshCw, Loader2, Pencil } from "lucide-react"
 import { getDocumentSignedUrl, uploadDocumentDirect } from "@/lib/supabase/person-documents"
+
+type ExistingDocument = {
+  id: string
+  storagePath: string
+  title?: string
+  fileName?: string
+  contentType?: string
+}
 
 interface DocumentUploadCardProps {
   label: string
   personId: string
   documentType: string
-  existingDocument?: { id: string; storagePath: string; fileName?: string; contentType?: string } | null
+  existingDocument?: ExistingDocument | null
+  existingDocuments?: ExistingDocument[]
+  allowMultiple?: boolean
   onUploadComplete?: () => void
   onDeleteComplete?: () => void
 }
@@ -21,33 +32,57 @@ export function DocumentUploadCard({
   personId,
   documentType,
   existingDocument,
+  existingDocuments,
+  allowMultiple = false,
   onUploadComplete,
   onDeleteComplete,
 }: DocumentUploadCardProps) {
   const [uploading, setUploading] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [signedUrl, setSignedUrl] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null)
+  const [savingTitleId, setSavingTitleId] = useState<string | null>(null)
+  const [titleDraft, setTitleDraft] = useState("")
+  const [titleDialogOpen, setTitleDialogOpen] = useState(false)
+  const [newDocumentTitle, setNewDocumentTitle] = useState("")
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const replaceDocumentIdRef = useRef<string | null>(null)
+  const uploadTitleRef = useRef<string | null>(null)
 
-  const isPdf = existingDocument?.contentType === 'application/pdf'
+  const documents = useMemo(
+    () => existingDocuments ?? (existingDocument ? [existingDocument] : []),
+    [existingDocument, existingDocuments]
+  )
+  const hasDocuments = documents.length > 0
 
   useEffect(() => {
-    if (!existingDocument?.storagePath) {
-      setSignedUrl(null)
+    if (documents.length === 0) {
+      setSignedUrls({})
       return
     }
 
     let active = true
-    const fetchUrl = async () => {
-      const url = await getDocumentSignedUrl(existingDocument.storagePath)
-      if (active) setSignedUrl(url)
+    const fetchUrls = async () => {
+      const entries = await Promise.all(
+        documents.map(async (document) => {
+          const url = await getDocumentSignedUrl(document.storagePath)
+          return [document.id, url] as const
+        })
+      )
+      if (!active) return
+      setSignedUrls(
+        entries.reduce<Record<string, string>>((acc, [id, url]) => {
+          if (url) acc[id] = url
+          return acc
+        }, {})
+      )
     }
-    fetchUrl()
+    fetchUrls()
     return () => { active = false }
-  }, [existingDocument?.storagePath])
+  }, [documents])
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -59,7 +94,10 @@ export function DocumentUploadCard({
     setErrorMessage(null)
     setUploading(true)
     try {
-      const result = await uploadDocumentDirect(personId, documentType, file)
+      const result = await uploadDocumentDirect(personId, documentType, file, {
+        replaceDocumentId: replaceDocumentIdRef.current,
+        title: uploadTitleRef.current,
+      })
       if (!result.success) throw new Error(result.error || 'Upload failed')
       onUploadComplete?.()
     } catch (error) {
@@ -67,16 +105,17 @@ export function DocumentUploadCard({
       setErrorMessage(error instanceof Error ? error.message : "アップロードに失敗しました")
     } finally {
       setUploading(false)
+      replaceDocumentIdRef.current = null
+      uploadTitleRef.current = null
       if (fileInputRef.current) fileInputRef.current.value = ""
     }
   }
 
-  const handleDelete = async () => {
-    if (!existingDocument) return
+  const handleDelete = async (documentId: string) => {
+    setDeletingId(documentId)
 
-    setDeleting(true)
     try {
-      const res = await fetch(`/api/people/${personId}/documents/${existingDocument.id}`, {
+      const res = await fetch(`/api/people/${personId}/documents/${documentId}`, {
         method: "DELETE",
       })
 
@@ -84,17 +123,90 @@ export function DocumentUploadCard({
       onDeleteComplete?.()
     } catch (error) {
       console.error("Delete error:", error)
+      setErrorMessage("削除に失敗しました")
     } finally {
-      setDeleting(false)
+      setDeletingId(null)
     }
   }
 
-  const triggerFileInput = () => {
+  const handleUpdateTitle = async (documentId: string) => {
+    const nextTitle = titleDraft.trim()
+
+    if (!nextTitle) {
+      setErrorMessage("タイトルを入力してください")
+      return
+    }
+
+    setSavingTitleId(documentId)
+    setErrorMessage(null)
+    try {
+      const res = await fetch(`/api/people/${personId}/documents/${documentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: nextTitle }),
+      })
+
+      if (!res.ok) throw new Error(`Update failed: ${res.statusText}`)
+      setEditingTitleId(null)
+      setTitleDraft("")
+      onUploadComplete?.()
+    } catch (error) {
+      console.error("Update title error:", error)
+      setErrorMessage("タイトルの更新に失敗しました")
+    } finally {
+      setSavingTitleId(null)
+    }
+  }
+
+  const startEditingTitle = (document: ExistingDocument, fallbackTitle: string) => {
+    setEditingTitleId(document.id)
+    setTitleDraft(document.title || fallbackTitle)
+    setErrorMessage(null)
+  }
+
+  const triggerFileInput = (replaceDocumentId?: string, title?: string | null) => {
+    replaceDocumentIdRef.current = replaceDocumentId ?? null
+    uploadTitleRef.current = title?.trim() || null
     fileInputRef.current?.click()
   }
 
+  const handleStartAdd = () => {
+    if (!allowMultiple) {
+      triggerFileInput()
+      return
+    }
+
+    setNewDocumentTitle("")
+    setErrorMessage(null)
+    setTitleDialogOpen(true)
+  }
+
+  const handleSubmitNewDocumentTitle = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const title = newDocumentTitle.trim()
+    if (!title) {
+      setErrorMessage("タイトルを入力してください")
+      return
+    }
+
+    setTitleDialogOpen(false)
+    triggerFileInput(undefined, title)
+  }
+
+  const renderEmptyUploadButton = () => (
+    <button
+      type="button"
+      onClick={handleStartAdd}
+      className="flex h-32 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-muted-foreground/25 text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground"
+    >
+      <Upload className="h-6 w-6" />
+      <span className="text-xs">{allowMultiple ? `${label}を追加` : label}</span>
+    </button>
+  )
+
   return (
-    <Card className="p-3 gap-2">
+    <Card className="p-3 gap-3">
       <input
         ref={fileInputRef}
         type="file"
@@ -107,87 +219,182 @@ export function DocumentUploadCard({
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : existingDocument && signedUrl ? (
-        <div className="space-y-2">
-          <Dialog>
-            <DialogTrigger asChild>
-              <button className="w-full cursor-pointer">
-                {isPdf ? (
-                  <div className="flex h-32 w-full items-center justify-center rounded-md bg-muted">
-                    <span className="text-sm text-muted-foreground">PDF</span>
-                  </div>
-                ) : (
-                  <img
-                    src={signedUrl}
-                    alt={label}
-                    className="h-32 w-full rounded-md object-cover"
-                  />
-                )}
-              </button>
-            </DialogTrigger>
-            <DialogContent className="max-w-3xl">
-              {isPdf ? (
-                <object
-                  data={signedUrl}
-                  type="application/pdf"
-                  className="h-[80vh] w-full rounded-md"
-                  aria-label={label}
-                >
-                  <p>PDFを表示できません。<a href={signedUrl} target="_blank" rel="noopener noreferrer">ダウンロード</a></p>
-                </object>
-              ) : (
-                <img
-                  src={signedUrl}
-                  alt={label}
-                  className="w-full rounded-md object-contain"
-                />
-              )}
-            </DialogContent>
-          </Dialog>
-
-          {existingDocument.fileName && (
-            <p className="truncate text-xs text-muted-foreground">
-              {existingDocument.fileName}
-            </p>
+      ) : hasDocuments ? (
+        <div className="space-y-3">
+          {allowMultiple && (
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">{label}</p>
+              <Button type="button" variant="outline" size="sm" onClick={handleStartAdd}>
+                <Upload className="mr-1 h-3 w-3" />
+                追加
+              </Button>
+            </div>
           )}
 
-          <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={triggerFileInput}
-            >
-              <RefreshCw className="mr-1 h-3 w-3" />
-              再アップロード
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              {deleting ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Trash2 className="h-3 w-3" />
-              )}
-            </Button>
+          <div className="space-y-3">
+            {documents.map((document, index) => {
+              const signedUrl = signedUrls[document.id]
+              const isPdf = document.contentType === 'application/pdf'
+              const fallbackTitle = allowMultiple ? `${label} ${index + 1}` : label
+              const title = document.title || fallbackTitle
+
+              return (
+                <div key={document.id} className="space-y-2 rounded-md border border-border p-2">
+                  {signedUrl ? (
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <button type="button" className="w-full cursor-pointer">
+                          {isPdf ? (
+                            <div className="flex h-32 w-full items-center justify-center rounded-md bg-muted">
+                              <span className="text-sm text-muted-foreground">PDF</span>
+                            </div>
+                          ) : (
+                            <img
+                              src={signedUrl}
+                              alt={title}
+                              className="h-32 w-full rounded-md object-cover"
+                            />
+                          )}
+                        </button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-3xl">
+                        {isPdf ? (
+                          <object
+                            data={signedUrl}
+                            type="application/pdf"
+                            className="h-[80vh] w-full rounded-md"
+                            aria-label={title}
+                          >
+                            <p>PDFを表示できません。<a href={signedUrl} target="_blank" rel="noopener noreferrer">ダウンロード</a></p>
+                          </object>
+                        ) : (
+                          <img
+                            src={signedUrl}
+                            alt={title}
+                            className="w-full rounded-md object-contain"
+                          />
+                        )}
+                      </DialogContent>
+                    </Dialog>
+                  ) : (
+                    <div className="flex h-32 w-full items-center justify-center rounded-md bg-muted">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0 space-y-1">
+                    {allowMultiple && editingTitleId === document.id ? (
+                      <form className="flex gap-1" onSubmit={(event) => {
+                        event.preventDefault()
+                        handleUpdateTitle(document.id)
+                      }}>
+                        <Input
+                          value={titleDraft}
+                          onChange={(event) => setTitleDraft(event.target.value)}
+                          className="h-8 text-xs"
+                          disabled={savingTitleId === document.id}
+                          aria-label={`${fallbackTitle}のタイトル`}
+                        />
+                        <Button type="submit" size="sm" disabled={savingTitleId === document.id}>
+                          {savingTitleId === document.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            "保存"
+                          )}
+                        </Button>
+                      </form>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <p className="min-w-0 flex-1 truncate text-xs font-medium">{title}</p>
+                        {allowMultiple && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => startEditingTitle(document, fallbackTitle)}
+                          >
+                            <Pencil className="h-3 w-3" />
+                            <span className="sr-only">タイトル変更</span>
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                    {document.fileName && (
+                      <p className="truncate text-xs text-muted-foreground">{document.fileName}</p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => triggerFileInput(document.id, document.title || fallbackTitle)}
+                    >
+                      <RefreshCw className="mr-1 h-3 w-3" />
+                      差し替え
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDelete(document.id)}
+                      disabled={deletingId === document.id}
+                    >
+                      {deletingId === document.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       ) : (
-        <button
-          onClick={triggerFileInput}
-          className="flex h-32 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-muted-foreground/25 text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground"
-        >
-          <Upload className="h-6 w-6" />
-          <span className="text-xs">{label}</span>
-        </button>
+        <>
+          {allowMultiple && (
+            <p className="text-sm font-medium">{label}</p>
+          )}
+          {renderEmptyUploadButton()}
+        </>
       )}
 
       {errorMessage && (
         <p className="text-xs text-destructive">{errorMessage}</p>
       )}
+
+      <Dialog open={titleDialogOpen} onOpenChange={setTitleDialogOpen}>
+        <DialogContent>
+          <form onSubmit={handleSubmitNewDocumentTitle} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>その他書類を追加</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="other-document-title">
+                タイトル
+              </label>
+              <Input
+                id="other-document-title"
+                value={newDocumentTitle}
+                onChange={(event) => setNewDocumentTitle(event.target.value)}
+                placeholder="例: 健康診断書"
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setTitleDialogOpen(false)}>
+                キャンセル
+              </Button>
+              <Button type="submit">ファイルを選択</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

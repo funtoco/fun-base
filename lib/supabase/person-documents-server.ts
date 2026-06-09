@@ -21,6 +21,7 @@ export async function getPersonDocumentsByPersonId(personId: string): Promise<Pe
     tenantId: row.tenant_id,
     documentType: row.document_type,
     storagePath: row.storage_path,
+    title: row.title,
     fileName: row.file_name,
     contentType: row.content_type,
     fileSizeBytes: row.file_size_bytes,

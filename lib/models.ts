@@ -166,6 +166,7 @@ export type DocumentType =
   | 'resume'
   | 'designation_document'
   | 'employment_insurance_notice'
+  | 'other'
 
 export type PersonDocument = {
   id: string
@@ -173,6 +174,7 @@ export type PersonDocument = {
   tenantId: string
   documentType: DocumentType
   storagePath: string
+  title?: string
   fileName?: string
   contentType?: string
   fileSizeBytes?: number

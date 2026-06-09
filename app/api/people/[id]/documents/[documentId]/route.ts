@@ -5,6 +5,94 @@ import { deleteFileFromStorage } from '@/lib/storage/file-uploader'
 
 const BUCKET_NAME = 'person-documents'
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string; documentId: string } }
+) {
+  try {
+    const { id: personId, documentId } = params
+
+    if (!personId || !documentId) {
+      return NextResponse.json(
+        { error: 'Person ID and Document ID are required' },
+        { status: 400 }
+      )
+    }
+
+    const body = await request.json()
+    const title = typeof body.title === 'string' ? body.title.trim() : ''
+
+    if (!title) {
+      return NextResponse.json(
+        { error: 'Title is required' },
+        { status: 400 }
+      )
+    }
+
+    const supabase = await createClient()
+
+    const { data: document, error: fetchError } = await supabase
+      .from('person_documents')
+      .select('id, document_type')
+      .eq('id', documentId)
+      .eq('person_id', personId)
+      .single()
+
+    if (fetchError || !document) {
+      return NextResponse.json(
+        { error: 'Document not found' },
+        { status: 404 }
+      )
+    }
+
+    if (document.document_type !== 'other') {
+      return NextResponse.json(
+        { error: 'Only other documents can be renamed' },
+        { status: 400 }
+      )
+    }
+
+    const { data, error: updateError } = await supabase
+      .from('person_documents')
+      .update({ title, updated_at: new Date().toISOString() })
+      .eq('id', documentId)
+      .eq('person_id', personId)
+      .select()
+      .single()
+
+    if (updateError) {
+      console.error('Error updating person document:', updateError)
+      return NextResponse.json(
+        { error: 'Failed to update document' },
+        { status: 500 }
+      )
+    }
+
+    revalidatePath(`/people/${personId}`)
+
+    return NextResponse.json({
+      id: data.id,
+      personId: data.person_id,
+      tenantId: data.tenant_id,
+      documentType: data.document_type,
+      storagePath: data.storage_path,
+      title: data.title,
+      fileName: data.file_name,
+      contentType: data.content_type,
+      fileSizeBytes: data.file_size_bytes,
+      uploadedBy: data.uploaded_by,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    })
+  } catch (error) {
+    console.error('Error updating person document:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update document' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string; documentId: string } }
