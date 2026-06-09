@@ -73,6 +73,7 @@ export function PersonDocumentsTab({ personId, personDocuments: initialDocuments
       title: doc.title,
       fileName: doc.fileName,
       contentType: doc.contentType,
+      note: doc.note,
     }
   }
 
@@ -85,6 +86,7 @@ export function PersonDocumentsTab({ personId, personDocuments: initialDocuments
         title: doc.title,
         fileName: doc.fileName,
         contentType: doc.contentType,
+        note: doc.note,
       }))
   )
 

@@ -179,6 +179,7 @@ export type PersonDocument = {
   contentType?: string
   fileSizeBytes?: number
   uploadedBy?: string
+  note?: string
   createdAt: string
   updatedAt: string
 }

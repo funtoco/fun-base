@@ -1,8 +1,21 @@
 import { createClient } from './client'
 import type { PersonDocument } from '@/lib/models'
+import { resolveReplacementDocumentNote } from '@/lib/document-notes'
 
 const REMOVED_DOCUMENT_TYPE = 'resident_card_copy'
-const VALID_DOCUMENT_TYPES = ['passport_front', 'passport_back', 'residence_card_front', 'residence_card_back', 'coe_copy', 'flight_ticket_copy', 'bank_card_copy', 'resume', 'designation_document']
+const VALID_DOCUMENT_TYPES = [
+  'passport_front',
+  'passport_back',
+  'residence_card_front',
+  'residence_card_back',
+  'coe_copy',
+  'flight_ticket_copy',
+  'bank_card_copy',
+  'resume',
+  'designation_document',
+  'employment_insurance_notice',
+  'other',
+]
 
 export async function getPersonDocuments(personId: string): Promise<PersonDocument[]> {
   const supabase = createClient()
@@ -68,7 +81,7 @@ export async function uploadDocumentDirect(
   personId: string,
   documentType: string,
   file: File,
-  options: { replaceDocumentId?: string | null; title?: string | null } = {}
+  options: { replaceDocumentId?: string | null; title?: string | null; note?: string | null } = {}
 ): Promise<{ success: boolean; error?: string }> {
   if (!VALID_DOCUMENT_TYPES.includes(documentType)) {
     return { success: false, error: '対応していない書類種別です' }
@@ -99,12 +112,12 @@ export async function uploadDocumentDirect(
   const timestamp = Date.now()
   const filePath = `${tenantId}/${documentType}/${documentType}_${personId}_${timestamp}.${extension}`
   const allowMultiple = documentType === 'other'
-  let documentToReplace: { id: string; storage_path: string; title?: string | null } | null = null
+  let documentToReplace: { id: string; storage_path: string; title?: string | null; note?: string | null } | null = null
 
   if (options.replaceDocumentId) {
     const { data: replaceDoc, error: replaceDocError } = await supabase
       .from('person_documents')
-      .select('id, storage_path, title')
+      .select('id, storage_path, title, note')
       .eq('id', options.replaceDocumentId)
       .eq('person_id', personId)
       .eq('document_type', documentType)
@@ -119,7 +132,7 @@ export async function uploadDocumentDirect(
     // Preserve the existing one-document-per-type behavior for fixed document types.
     const { data: existingDoc } = await supabase
       .from('person_documents')
-      .select('id, storage_path, title')
+      .select('id, storage_path, title, note')
       .eq('person_id', personId)
       .eq('document_type', documentType)
       .maybeSingle()
@@ -163,6 +176,7 @@ export async function uploadDocumentDirect(
       content_type: file.type,
       file_size_bytes: file.size,
       uploaded_by: user?.id || null,
+      note: resolveReplacementDocumentNote(options.note ?? undefined, documentToReplace?.note),
     })
 
   if (insertError) {
@@ -192,6 +206,7 @@ function mapToPersonDocument(data: any): PersonDocument {
     contentType: data.content_type,
     fileSizeBytes: data.file_size_bytes,
     uploadedBy: data.uploaded_by,
+    note: data.note,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   }

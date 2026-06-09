@@ -4,8 +4,10 @@ import { useState, useEffect, useMemo, useRef, type ChangeEvent, type FormEvent 
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Upload, Trash2, RefreshCw, Loader2, Pencil } from "lucide-react"
+import { Upload, Trash2, RefreshCw, Loader2, Pencil, Save } from "lucide-react"
 import { getDocumentSignedUrl, uploadDocumentDirect } from "@/lib/supabase/person-documents"
 
 type ExistingDocument = {
@@ -14,6 +16,7 @@ type ExistingDocument = {
   title?: string
   fileName?: string
   contentType?: string
+  note?: string
 }
 
 interface DocumentUploadCardProps {
@@ -41,20 +44,27 @@ export function DocumentUploadCard({
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null)
   const [savingTitleId, setSavingTitleId] = useState<string | null>(null)
+  const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
   const [titleDraft, setTitleDraft] = useState("")
   const [titleDialogOpen, setTitleDialogOpen] = useState(false)
   const [newDocumentTitle, setNewDocumentTitle] = useState("")
+  const [newDocumentNote, setNewDocumentNote] = useState("")
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({})
+  const [savedNotes, setSavedNotes] = useState<Record<string, string>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [noteMessageId, setNoteMessageId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const replaceDocumentIdRef = useRef<string | null>(null)
   const uploadTitleRef = useRef<string | null>(null)
+  const uploadNoteRef = useRef<string | null>(null)
 
   const documents = useMemo(
     () => existingDocuments ?? (existingDocument ? [existingDocument] : []),
     [existingDocument, existingDocuments]
   )
   const hasDocuments = documents.length > 0
+  const newDocumentNoteInputId = `document-note-new-${personId}-${documentType}`
 
   useEffect(() => {
     if (documents.length === 0) {
@@ -82,6 +92,16 @@ export function DocumentUploadCard({
     return () => { active = false }
   }, [documents])
 
+  useEffect(() => {
+    const nextNotes = documents.reduce<Record<string, string>>((acc, document) => {
+      acc[document.id] = document.note || ""
+      return acc
+    }, {})
+    setNoteDrafts(nextNotes)
+    setSavedNotes(nextNotes)
+    setNoteMessageId(null)
+  }, [documents])
+
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -97,8 +117,10 @@ export function DocumentUploadCard({
       const result = await uploadDocumentDirect(personId, documentType, file, {
         replaceDocumentId: replaceDocumentIdRef.current,
         title: uploadTitleRef.current,
+        note: uploadNoteRef.current ?? undefined,
       })
       if (!result.success) throw new Error(result.error || 'Upload failed')
+      setNewDocumentNote("")
       onUploadComplete?.()
     } catch (error) {
       console.error("Upload error:", error)
@@ -107,6 +129,7 @@ export function DocumentUploadCard({
       setUploading(false)
       replaceDocumentIdRef.current = null
       uploadTitleRef.current = null
+      uploadNoteRef.current = null
       if (fileInputRef.current) fileInputRef.current.value = ""
     }
   }
@@ -158,25 +181,56 @@ export function DocumentUploadCard({
     }
   }
 
+  const handleSaveNote = async (documentId: string) => {
+    const note = noteDrafts[documentId] || ""
+
+    setSavingNoteId(documentId)
+    setErrorMessage(null)
+    setNoteMessageId(null)
+    try {
+      const res = await fetch(`/api/people/${personId}/documents/${documentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || `Save note failed: ${res.statusText}`)
+      }
+
+      setSavedNotes((current) => ({ ...current, [documentId]: note.trim() }))
+      setNoteMessageId(documentId)
+      onUploadComplete?.()
+    } catch (error) {
+      console.error("Save note error:", error)
+      setErrorMessage(error instanceof Error ? error.message : "メモの保存に失敗しました")
+    } finally {
+      setSavingNoteId(null)
+    }
+  }
+
   const startEditingTitle = (document: ExistingDocument, fallbackTitle: string) => {
     setEditingTitleId(document.id)
     setTitleDraft(document.title || fallbackTitle)
     setErrorMessage(null)
   }
 
-  const triggerFileInput = (replaceDocumentId?: string, title?: string | null) => {
+  const triggerFileInput = (replaceDocumentId?: string, title?: string | null, note?: string | null) => {
     replaceDocumentIdRef.current = replaceDocumentId ?? null
     uploadTitleRef.current = title?.trim() || null
+    uploadNoteRef.current = note ?? null
     fileInputRef.current?.click()
   }
 
   const handleStartAdd = () => {
     if (!allowMultiple) {
-      triggerFileInput()
+      triggerFileInput(undefined, undefined, newDocumentNote)
       return
     }
 
     setNewDocumentTitle("")
+    setNewDocumentNote("")
     setErrorMessage(null)
     setTitleDialogOpen(true)
   }
@@ -191,7 +245,7 @@ export function DocumentUploadCard({
     }
 
     setTitleDialogOpen(false)
-    triggerFileInput(undefined, title)
+    triggerFileInput(undefined, title, newDocumentNote)
   }
 
   const renderEmptyUploadButton = () => (
@@ -237,6 +291,9 @@ export function DocumentUploadCard({
               const isPdf = document.contentType === 'application/pdf'
               const fallbackTitle = allowMultiple ? `${label} ${index + 1}` : label
               const title = document.title || fallbackTitle
+              const noteInputId = `document-note-${personId}-${document.id}`
+              const noteDraft = noteDrafts[document.id] || ""
+              const savedNote = savedNotes[document.id] || ""
 
               return (
                 <div key={document.id} className="space-y-2 rounded-md border border-border p-2">
@@ -325,6 +382,23 @@ export function DocumentUploadCard({
                     )}
                   </div>
 
+                  <div className="space-y-2">
+                    <Label htmlFor={noteInputId} className="text-xs">
+                      メモ
+                    </Label>
+                    <Textarea
+                      id={noteInputId}
+                      value={noteDraft}
+                      onChange={(event) => {
+                        setNoteDrafts((current) => ({ ...current, [document.id]: event.target.value }))
+                        setNoteMessageId(null)
+                      }}
+                      placeholder="確認事項や対応メモを入力"
+                      className="min-h-20 resize-none text-xs"
+                      disabled={savingNoteId === document.id}
+                    />
+                  </div>
+
                   <div className="flex gap-1">
                     <Button
                       type="button"
@@ -340,6 +414,20 @@ export function DocumentUploadCard({
                       type="button"
                       variant="outline"
                       size="sm"
+                      onClick={() => handleSaveNote(document.id)}
+                      disabled={savingNoteId === document.id || noteDraft.trim() === savedNote.trim()}
+                    >
+                      {savingNoteId === document.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Save className="h-3 w-3" />
+                      )}
+                      保存
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleDelete(document.id)}
                       disabled={deletingId === document.id}
                     >
@@ -350,6 +438,10 @@ export function DocumentUploadCard({
                       )}
                     </Button>
                   </div>
+
+                  {noteMessageId === document.id && (
+                    <p className="text-xs text-muted-foreground">メモを保存しました</p>
+                  )}
                 </div>
               )
             })}
@@ -362,6 +454,21 @@ export function DocumentUploadCard({
           )}
           {renderEmptyUploadButton()}
         </>
+      )}
+
+      {!hasDocuments && !allowMultiple && !uploading && (
+        <div className="space-y-2">
+          <Label htmlFor={newDocumentNoteInputId} className="text-xs">
+            登録時メモ（任意）
+          </Label>
+          <Textarea
+            id={newDocumentNoteInputId}
+            value={newDocumentNote}
+            onChange={(event) => setNewDocumentNote(event.target.value)}
+            placeholder="アップロード時に一緒に残すメモ"
+            className="min-h-20 resize-none text-xs"
+          />
+        </div>
       )}
 
       {errorMessage && (
@@ -384,6 +491,18 @@ export function DocumentUploadCard({
                 onChange={(event) => setNewDocumentTitle(event.target.value)}
                 placeholder="例: 健康診断書"
                 autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="other-document-note" className="text-sm font-medium">
+                メモ（任意）
+              </Label>
+              <Textarea
+                id="other-document-note"
+                value={newDocumentNote}
+                onChange={(event) => setNewDocumentNote(event.target.value)}
+                placeholder="アップロード時に一緒に残すメモ"
+                className="min-h-20 resize-none text-sm"
               />
             </div>
             <DialogFooter>
