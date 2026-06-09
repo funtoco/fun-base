@@ -1,16 +1,41 @@
 import { createClient } from './server'
 import type { Person } from '@/lib/models'
+import {
+  applyPeopleAccessFilter,
+  canAccessPersonByCompany,
+  getCompanyAccessForUser,
+} from './people-access'
 
 export async function getPersonById(id: string): Promise<Person | null> {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return null
+  }
+
+  let companyAccess
+  try {
+    companyAccess = await getCompanyAccessForUser(supabase, user.id)
+  } catch (error) {
+    console.error("Error fetching current user company access:", error)
+    return null
+  }
 
   console.log('Fetching person with ID:', id)
 
-  const { data, error } = await supabase
-    .from('people')
-    .select('*')
-    .eq('id', id)
-    .single()
+  const query = applyPeopleAccessFilter(
+    supabase
+      .from('people')
+      .select('*')
+      .eq('id', id),
+    companyAccess
+  )
+
+  if (!query) {
+    return null
+  }
+
+  const { data, error } = await query.single()
 
   console.log('Query result:', { data, error })
 
@@ -21,6 +46,10 @@ export async function getPersonById(id: string): Promise<Person | null> {
 
   if (!data) {
     console.log('No person found with ID:', id)
+    return null
+  }
+
+  if (!canAccessPersonByCompany(data, companyAccess)) {
     return null
   }
 
@@ -76,5 +105,3 @@ export async function getPersonById(id: string): Promise<Person | null> {
     updatedAt: data.updated_at,
   }
 }
-
-
