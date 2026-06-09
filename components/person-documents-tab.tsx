@@ -31,7 +31,6 @@ const DOCUMENT_SECTIONS: { title: string; types: { type: DocumentType; label: st
       { type: "coe_copy", label: "COE写し" },
       { type: "flight_ticket_copy", label: "フライト写し" },
       { type: "bank_card_copy", label: "口座カード写し" },
-      { type: "resident_card_copy", label: "住民票写し" },
     ],
   },
   {

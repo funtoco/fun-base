@@ -7,6 +7,7 @@ export async function getPersonDocumentsByPersonId(personId: string): Promise<Pe
     .from('person_documents')
     .select('*')
     .eq('person_id', personId)
+    .neq('document_type', 'resident_card_copy')
     .order('created_at', { ascending: true })
 
   if (error) {
