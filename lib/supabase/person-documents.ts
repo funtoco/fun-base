@@ -67,7 +67,8 @@ const BUCKET_NAME = 'person-documents'
 export async function uploadDocumentDirect(
   personId: string,
   documentType: string,
-  file: File
+  file: File,
+  options: { replaceDocumentId?: string | null; title?: string | null } = {}
 ): Promise<{ success: boolean; error?: string }> {
   if (!VALID_DOCUMENT_TYPES.includes(documentType)) {
     return { success: false, error: '対応していない書類種別です' }
@@ -97,14 +98,34 @@ export async function uploadDocumentDirect(
   const extension = file.name.split('.').pop() || ''
   const timestamp = Date.now()
   const filePath = `${tenantId}/${documentType}/${documentType}_${personId}_${timestamp}.${extension}`
+  const allowMultiple = documentType === 'other'
+  let documentToReplace: { id: string; storage_path: string; title?: string | null } | null = null
 
-  // Check for existing document of the same type
-  const { data: existingDoc } = await supabase
-    .from('person_documents')
-    .select('id, storage_path')
-    .eq('person_id', personId)
-    .eq('document_type', documentType)
-    .single()
+  if (options.replaceDocumentId) {
+    const { data: replaceDoc, error: replaceDocError } = await supabase
+      .from('person_documents')
+      .select('id, storage_path, title')
+      .eq('id', options.replaceDocumentId)
+      .eq('person_id', personId)
+      .eq('document_type', documentType)
+      .single()
+
+    if (replaceDocError || !replaceDoc) {
+      return { success: false, error: '差し替え対象の書類が見つかりません' }
+    }
+
+    documentToReplace = replaceDoc
+  } else if (!allowMultiple) {
+    // Preserve the existing one-document-per-type behavior for fixed document types.
+    const { data: existingDoc } = await supabase
+      .from('person_documents')
+      .select('id, storage_path, title')
+      .eq('person_id', personId)
+      .eq('document_type', documentType)
+      .maybeSingle()
+
+    documentToReplace = existingDoc
+  }
 
   // Upload file directly to Supabase Storage
   const { error: uploadError } = await supabase.storage
@@ -120,10 +141,10 @@ export async function uploadDocumentDirect(
     return { success: false, error: 'ファイルのアップロードに失敗しました' }
   }
 
-  // Delete old document before insert (unique constraint on person_id + document_type)
-  if (existingDoc) {
-    await supabase.from('person_documents').delete().eq('id', existingDoc.id)
-    await supabase.storage.from(BUCKET_NAME).remove([existingDoc.storage_path])
+  // Delete fixed document types before insert for compatibility with the existing unique constraint.
+  if (documentToReplace && !allowMultiple) {
+    await supabase.from('person_documents').delete().eq('id', documentToReplace.id)
+    await supabase.storage.from(BUCKET_NAME).remove([documentToReplace.storage_path])
   }
 
   // Get authenticated user
@@ -137,6 +158,7 @@ export async function uploadDocumentDirect(
       tenant_id: tenantId,
       document_type: documentType,
       storage_path: filePath,
+      title: options.title?.trim() || documentToReplace?.title || null,
       file_name: file.name,
       content_type: file.type,
       file_size_bytes: file.size,
@@ -150,6 +172,11 @@ export async function uploadDocumentDirect(
     return { success: false, error: 'ドキュメントの保存に失敗しました' }
   }
 
+  if (documentToReplace && allowMultiple) {
+    await supabase.from('person_documents').delete().eq('id', documentToReplace.id)
+    await supabase.storage.from(BUCKET_NAME).remove([documentToReplace.storage_path])
+  }
+
   return { success: true }
 }
 
@@ -160,6 +187,7 @@ function mapToPersonDocument(data: any): PersonDocument {
     tenantId: data.tenant_id,
     documentType: data.document_type,
     storagePath: data.storage_path,
+    title: data.title,
     fileName: data.file_name,
     contentType: data.content_type,
     fileSizeBytes: data.file_size_bytes,
