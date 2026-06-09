@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Upload, Trash2, RefreshCw, Loader2, Pencil, Save } from "lucide-react"
 import { getDocumentSignedUrl, uploadDocumentDirect } from "@/lib/supabase/person-documents"
+import { cn } from "@/lib/utils"
 
 type ExistingDocument = {
   id: string
@@ -26,6 +27,7 @@ interface DocumentUploadCardProps {
   existingDocument?: ExistingDocument | null
   existingDocuments?: ExistingDocument[]
   allowMultiple?: boolean
+  className?: string
   onUploadComplete?: () => void
   onDeleteComplete?: () => void
 }
@@ -37,6 +39,7 @@ export function DocumentUploadCard({
   existingDocument,
   existingDocuments,
   allowMultiple = false,
+  className,
   onUploadComplete,
   onDeleteComplete,
 }: DocumentUploadCardProps) {
@@ -259,8 +262,247 @@ export function DocumentUploadCard({
     </button>
   )
 
+  const renderTitleDialog = () => (
+    <Dialog open={titleDialogOpen} onOpenChange={setTitleDialogOpen}>
+      <DialogContent>
+        <form onSubmit={handleSubmitNewDocumentTitle} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>その他書類を追加</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="other-document-title">
+              タイトル
+            </label>
+            <Input
+              id="other-document-title"
+              value={newDocumentTitle}
+              onChange={(event) => setNewDocumentTitle(event.target.value)}
+              placeholder="例: 健康診断書"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="other-document-note" className="text-sm font-medium">
+              メモ（任意）
+            </Label>
+            <Textarea
+              id="other-document-note"
+              value={newDocumentNote}
+              onChange={(event) => setNewDocumentNote(event.target.value)}
+              placeholder="アップロード時に一緒に残すメモ"
+              className="min-h-20 resize-none text-sm"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setTitleDialogOpen(false)}>
+              キャンセル
+            </Button>
+            <Button type="submit">ファイルを選択</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+
+  if (allowMultiple) {
+    return (
+      <div className={cn("space-y-3", className)}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/heic,image/heif,application/pdf"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" size="sm" onClick={handleStartAdd} disabled={uploading}>
+            {uploading ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <Upload className="mr-1 h-3 w-3" />
+            )}
+            追加
+          </Button>
+        </div>
+
+        {hasDocuments ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {documents.map((document, index) => {
+              const signedUrl = signedUrls[document.id]
+              const isPdf = document.contentType === 'application/pdf'
+              const fallbackTitle = `${label} ${index + 1}`
+              const title = document.title || fallbackTitle
+              const noteInputId = `document-note-${personId}-${document.id}`
+              const noteDraft = noteDrafts[document.id] || ""
+              const savedNote = savedNotes[document.id] || ""
+
+              return (
+                <Card key={document.id} className="space-y-2 p-3">
+                  {signedUrl ? (
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <button type="button" className="w-full cursor-pointer">
+                          {isPdf ? (
+                            <div className="flex h-32 w-full items-center justify-center rounded-md bg-muted">
+                              <span className="text-sm text-muted-foreground">PDF</span>
+                            </div>
+                          ) : (
+                            <img
+                              src={signedUrl}
+                              alt={title}
+                              className="h-32 w-full rounded-md object-cover"
+                            />
+                          )}
+                        </button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-3xl">
+                        {isPdf ? (
+                          <object
+                            data={signedUrl}
+                            type="application/pdf"
+                            className="h-[80vh] w-full rounded-md"
+                            aria-label={title}
+                          >
+                            <p>PDFを表示できません。<a href={signedUrl} target="_blank" rel="noopener noreferrer">ダウンロード</a></p>
+                          </object>
+                        ) : (
+                          <img
+                            src={signedUrl}
+                            alt={title}
+                            className="w-full rounded-md object-contain"
+                          />
+                        )}
+                      </DialogContent>
+                    </Dialog>
+                  ) : (
+                    <div className="flex h-32 w-full items-center justify-center rounded-md bg-muted">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0 space-y-1">
+                    {editingTitleId === document.id ? (
+                      <form className="flex gap-1" onSubmit={(event) => {
+                        event.preventDefault()
+                        handleUpdateTitle(document.id)
+                      }}>
+                        <Input
+                          value={titleDraft}
+                          onChange={(event) => setTitleDraft(event.target.value)}
+                          className="h-8 text-xs"
+                          disabled={savingTitleId === document.id}
+                          aria-label={`${fallbackTitle}のタイトル`}
+                        />
+                        <Button type="submit" size="sm" disabled={savingTitleId === document.id}>
+                          {savingTitleId === document.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            "保存"
+                          )}
+                        </Button>
+                      </form>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <p className="min-w-0 flex-1 truncate text-xs font-medium">{title}</p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2"
+                          onClick={() => startEditingTitle(document, fallbackTitle)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                          <span className="sr-only">タイトル変更</span>
+                        </Button>
+                      </div>
+                    )}
+                    {document.fileName && (
+                      <p className="truncate text-xs text-muted-foreground">{document.fileName}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor={noteInputId} className="text-xs">
+                      メモ
+                    </Label>
+                    <Textarea
+                      id={noteInputId}
+                      value={noteDraft}
+                      onChange={(event) => {
+                        setNoteDrafts((current) => ({ ...current, [document.id]: event.target.value }))
+                        setNoteMessageId(null)
+                      }}
+                      placeholder="確認事項や対応メモを入力"
+                      className="min-h-20 resize-none text-xs"
+                      disabled={savingNoteId === document.id}
+                    />
+                  </div>
+
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => triggerFileInput(document.id, document.title || fallbackTitle, noteDraft)}
+                    >
+                      <RefreshCw className="mr-1 h-3 w-3" />
+                      差し替え
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSaveNote(document.id)}
+                      disabled={savingNoteId === document.id || noteDraft.trim() === savedNote.trim()}
+                    >
+                      {savingNoteId === document.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Save className="h-3 w-3" />
+                      )}
+                      保存
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDelete(document.id)}
+                      disabled={deletingId === document.id}
+                    >
+                      {deletingId === document.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" />
+                      )}
+                    </Button>
+                  </div>
+
+                  {noteMessageId === document.id && (
+                    <p className="text-xs text-muted-foreground">メモを保存しました</p>
+                  )}
+                </Card>
+              )
+            })}
+          </div>
+        ) : (
+          <Card className="p-3 sm:w-1/2">
+            {renderEmptyUploadButton()}
+          </Card>
+        )}
+
+        {errorMessage && (
+          <p className="text-xs text-destructive">{errorMessage}</p>
+        )}
+
+        {renderTitleDialog()}
+      </div>
+    )
+  }
+
   return (
-    <Card className="p-3 gap-3">
+    <Card className={cn("p-3 gap-3", className)}>
       <input
         ref={fileInputRef}
         type="file"
@@ -475,45 +717,7 @@ export function DocumentUploadCard({
         <p className="text-xs text-destructive">{errorMessage}</p>
       )}
 
-      <Dialog open={titleDialogOpen} onOpenChange={setTitleDialogOpen}>
-        <DialogContent>
-          <form onSubmit={handleSubmitNewDocumentTitle} className="space-y-4">
-            <DialogHeader>
-              <DialogTitle>その他書類を追加</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="other-document-title">
-                タイトル
-              </label>
-              <Input
-                id="other-document-title"
-                value={newDocumentTitle}
-                onChange={(event) => setNewDocumentTitle(event.target.value)}
-                placeholder="例: 健康診断書"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="other-document-note" className="text-sm font-medium">
-                メモ（任意）
-              </Label>
-              <Textarea
-                id="other-document-note"
-                value={newDocumentNote}
-                onChange={(event) => setNewDocumentNote(event.target.value)}
-                placeholder="アップロード時に一緒に残すメモ"
-                className="min-h-20 resize-none text-sm"
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setTitleDialogOpen(false)}>
-                キャンセル
-              </Button>
-              <Button type="submit">ファイルを選択</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {renderTitleDialog()}
     </Card>
   )
 }
