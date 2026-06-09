@@ -26,6 +26,7 @@ export async function getPersonDocumentsByPersonId(personId: string): Promise<Pe
     contentType: row.content_type,
     fileSizeBytes: row.file_size_bytes,
     uploadedBy: row.uploaded_by,
+    note: row.note,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }))

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { deleteFileFromStorage } from '@/lib/storage/file-uploader'
+import { normalizeDocumentNote } from '@/lib/document-notes'
 
 const BUCKET_NAME = 'person-documents'
 
@@ -20,11 +21,12 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const title = typeof body.title === 'string' ? body.title.trim() : ''
+    const hasTitle = Object.prototype.hasOwnProperty.call(body, 'title')
+    const hasNote = Object.prototype.hasOwnProperty.call(body, 'note')
 
-    if (!title) {
+    if (!hasTitle && !hasNote) {
       return NextResponse.json(
-        { error: 'Title is required' },
+        { error: 'title or note is required' },
         { status: 400 }
       )
     }
@@ -45,16 +47,37 @@ export async function PATCH(
       )
     }
 
-    if (document.document_type !== 'other') {
-      return NextResponse.json(
-        { error: 'Only other documents can be renamed' },
-        { status: 400 }
-      )
+    const updates: Record<string, string | null> = {
+      updated_at: new Date().toISOString(),
+    }
+
+    if (hasTitle) {
+      const title = typeof body.title === 'string' ? body.title.trim() : ''
+
+      if (!title) {
+        return NextResponse.json(
+          { error: 'Title is required' },
+          { status: 400 }
+        )
+      }
+
+      if (document.document_type !== 'other') {
+        return NextResponse.json(
+          { error: 'Only other documents can be renamed' },
+          { status: 400 }
+        )
+      }
+
+      updates.title = title
+    }
+
+    if (hasNote) {
+      updates.note = normalizeDocumentNote(body.note)
     }
 
     const { data, error: updateError } = await supabase
       .from('person_documents')
-      .update({ title, updated_at: new Date().toISOString() })
+      .update(updates)
       .eq('id', documentId)
       .eq('person_id', personId)
       .select()
@@ -69,6 +92,7 @@ export async function PATCH(
     }
 
     revalidatePath(`/people/${personId}`)
+    revalidatePath('/documents')
 
     return NextResponse.json({
       id: data.id,
@@ -81,6 +105,7 @@ export async function PATCH(
       contentType: data.content_type,
       fileSizeBytes: data.file_size_bytes,
       uploadedBy: data.uploaded_by,
+      note: data.note,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     })

@@ -134,6 +134,16 @@ export default function DocumentsPage() {
       ),
     },
     {
+      key: "note",
+      label: "メモ",
+      sortable: true,
+      render: (value) => (
+        <span className="line-clamp-2 max-w-[260px] text-sm text-muted-foreground">
+          {value || "-"}
+        </span>
+      ),
+    },
+    {
       key: "contentType",
       label: "形式",
       sortable: true,
@@ -208,7 +218,7 @@ export default function DocumentsPage() {
         data={documentsWithLabel}
         columns={columns}
         filters={filters}
-        searchKeys={["personName", "title", "fileName", "documentTypeLabel"]}
+        searchKeys={["personName", "title", "fileName", "documentTypeLabel", "note"]}
         onRowClick={handleRowClick}
         initialSearchTerm={searchParams.get("search") || ""}
         initialActiveFilters={getFiltersFromUrl()}

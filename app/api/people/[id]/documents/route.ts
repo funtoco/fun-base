@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { uploadFileToStorage, generateFilePath, deleteFileFromStorage } from '@/lib/storage/file-uploader'
+import { normalizeDocumentNote, resolveReplacementDocumentNote } from '@/lib/document-notes'
 
 const VALID_DOCUMENT_TYPES = [
   'passport_front',
@@ -62,6 +63,7 @@ export async function GET(
       contentType: row.content_type,
       fileSizeBytes: row.file_size_bytes,
       uploadedBy: row.uploaded_by,
+      note: row.note,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }))
@@ -95,6 +97,7 @@ export async function POST(
     const documentType = formData.get('documentType') as string | null
     const replaceDocumentId = formData.get('replaceDocumentId') as string | null
     const title = formData.get('title') as string | null
+    const note = formData.has('note') ? normalizeDocumentNote(formData.get('note')) : undefined
 
     // Validate file
     if (!file) {
@@ -155,7 +158,7 @@ export async function POST(
 
     const tenantId = person.tenant_id
     const allowMultiple = documentType === 'other'
-    let documentToReplace: { id: string; storage_path: string; title?: string | null } | null = null
+    let documentToReplace: { id: string; storage_path: string; title?: string | null; note?: string | null } | null = null
 
     if (allowMultiple && !replaceDocumentId && !title?.trim()) {
       return NextResponse.json(
@@ -167,7 +170,7 @@ export async function POST(
     if (replaceDocumentId) {
       const { data: replaceDoc, error: replaceDocError } = await supabase
         .from('person_documents')
-        .select('id, storage_path, title')
+        .select('id, storage_path, title, note')
         .eq('id', replaceDocumentId)
         .eq('person_id', personId)
         .eq('document_type', documentType)
@@ -185,7 +188,7 @@ export async function POST(
       // Preserve the existing one-document-per-type behavior for fixed document types.
       const { data: existingDoc } = await supabase
         .from('person_documents')
-        .select('id, storage_path, title')
+        .select('id, storage_path, title, note')
         .eq('person_id', personId)
         .eq('document_type', documentType)
         .maybeSingle()
@@ -241,6 +244,7 @@ export async function POST(
         content_type: contentType,
         file_size_bytes: file.size,
         uploaded_by: user.id,
+        note: resolveReplacementDocumentNote(note, documentToReplace?.note),
       })
       .select()
       .single()
