@@ -12,6 +12,23 @@ import {
 const MANAGEABLE_ROLES = ["owner", "admin", "member", "guest"] as const
 type ManageableRole = (typeof MANAGEABLE_ROLES)[number]
 
+function normalizeOfficeIds(value: unknown): string[] | null {
+  if (typeof value === "undefined") {
+    return null
+  }
+
+  if (!Array.isArray(value)) {
+    return null
+  }
+
+  const normalizedIds = value
+    .filter((id): id is string => typeof id === "string")
+    .map((id) => id.trim())
+    .filter(Boolean)
+
+  return Array.from(new Set(normalizedIds))
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { tenantId: string; memberId: string } }
@@ -26,17 +43,27 @@ export async function PATCH(
 
     const body = await request.json()
     const { role } = body
+    const officeIds = normalizeOfficeIds(body.officeIds)
+    const hasRoleUpdate = typeof role !== "undefined"
+    const hasOfficeUpdate = typeof body.officeIds !== "undefined"
 
-    if (!role) {
+    if (!hasRoleUpdate && !hasOfficeUpdate) {
       return NextResponse.json(
-        { error: "Role is required" },
+        { error: "Role or officeIds is required" },
         { status: 400 }
       )
     }
 
-    if (!MANAGEABLE_ROLES.includes(role)) {
+    if (hasRoleUpdate && (typeof role !== "string" || !MANAGEABLE_ROLES.includes(role as ManageableRole))) {
       return NextResponse.json(
         { error: "Invalid role" },
+        { status: 400 }
+      )
+    }
+
+    if (hasOfficeUpdate && officeIds === null) {
+      return NextResponse.json(
+        { error: "Invalid officeIds" },
         { status: 400 }
       )
     }
@@ -71,8 +98,9 @@ export async function PATCH(
       )
     }
 
+    const memberships = actorMemberships || []
     let activeOwnerCount = 0
-    if (targetMember.role === "owner" && role !== "owner") {
+    if (hasRoleUpdate && targetMember.role === "owner" && role !== "owner") {
       const { count, error: ownerCountError } = await supabase
         .from("user_tenants")
         .select("id", { count: "exact", head: true })
@@ -91,37 +119,108 @@ export async function PATCH(
       activeOwnerCount = count ?? 0
     }
 
-    const permissionError = getTenantMemberRoleUpdateError({
-      currentUserId: user.id,
-      targetUserId: targetMember.user_id,
-      targetRole: targetMember.role,
-      actorMemberships: actorMemberships || [],
-      nextRole: role as ManageableRole,
-      activeOwnerCount,
-    })
+    if (hasRoleUpdate) {
+      const permissionError = getTenantMemberRoleUpdateError({
+        currentUserId: user.id,
+        targetUserId: targetMember.user_id,
+        targetRole: targetMember.role,
+        actorMemberships: memberships,
+        nextRole: role as ManageableRole,
+        activeOwnerCount,
+      })
 
-    if (permissionError) {
-      const status =
-        permissionError === "ロールを変更する権限がありません" ||
-        permissionError === "オーナーのロールは変更できません"
-          ? 403
-          : 400
+      if (permissionError) {
+        const status =
+          permissionError === "ロールを変更する権限がありません" ||
+          permissionError === "オーナーのロールは変更できません"
+            ? 403
+            : 400
 
-      return NextResponse.json({ error: permissionError }, { status })
+        return NextResponse.json({ error: permissionError }, { status })
+      }
     }
 
-    const { error: updateError } = await supabase
-      .from("user_tenants")
-      .update({ role: role as ManageableRole })
-      .eq("id", params.memberId)
-      .eq("tenant_id", params.tenantId)
-
-    if (updateError) {
-      console.error("Error updating member role:", updateError)
+    if (hasOfficeUpdate && !canManageTenant(memberships)) {
       return NextResponse.json(
-        { error: "Failed to update member role" },
-        { status: 500 }
+        { error: "所属先を変更する権限がありません" },
+        { status: 403 }
       )
+    }
+
+    if (hasRoleUpdate) {
+      const { error: updateError } = await supabase
+        .from("user_tenants")
+        .update({ role: role as ManageableRole })
+        .eq("id", params.memberId)
+        .eq("tenant_id", params.tenantId)
+
+      if (updateError) {
+        console.error("Error updating member role:", updateError)
+        return NextResponse.json(
+          { error: "Failed to update member role" },
+          { status: 500 }
+        )
+      }
+    }
+
+    if (hasOfficeUpdate) {
+      const nextOfficeIds = officeIds || []
+
+      if (nextOfficeIds.length > 0) {
+        const { data: offices, error: officesError } = await supabase
+          .from("tenant_offices")
+          .select("id")
+          .eq("tenant_id", params.tenantId)
+          .eq("is_active", true)
+          .in("id", nextOfficeIds)
+
+        if (officesError) {
+          console.error("Error verifying member offices:", officesError)
+          return NextResponse.json(
+            { error: "Failed to verify affiliations" },
+            { status: 500 }
+          )
+        }
+
+        if ((offices || []).length !== nextOfficeIds.length) {
+          return NextResponse.json(
+            { error: "Invalid officeIds" },
+            { status: 400 }
+          )
+        }
+      }
+
+      const { error: deleteOfficeError } = await supabase
+        .from("user_tenant_offices")
+        .delete()
+        .eq("tenant_id", params.tenantId)
+        .eq("user_tenant_id", params.memberId)
+
+      if (deleteOfficeError) {
+        console.error("Error deleting member office assignments:", deleteOfficeError)
+        return NextResponse.json(
+          { error: "Failed to update member affiliations" },
+          { status: 500 }
+        )
+      }
+
+      if (nextOfficeIds.length > 0) {
+        const { error: insertOfficeError } = await supabase
+          .from("user_tenant_offices")
+          .insert(nextOfficeIds.map((officeId) => ({
+            tenant_id: params.tenantId,
+            user_tenant_id: params.memberId,
+            tenant_office_id: officeId,
+          })))
+
+        if (insertOfficeError) {
+          console.error("Error inserting member office assignments:", insertOfficeError)
+          return NextResponse.json(
+            { error: "Failed to update member affiliations" },
+            { status: 500 }
+          )
+        }
+      }
     }
 
     return NextResponse.json({ success: true })

@@ -11,13 +11,17 @@ import { InviteMemberDialog } from "./invite-member-dialog"
 import { AddExistingMemberDialog } from "./add-existing-member-dialog"
 import { CreateUserDialog } from "./create-user-dialog"
 import { InviteLinkDialog } from "./invite-link-dialog"
+import { MemberOfficesDialog } from "./member-offices-dialog"
 import { ConfirmDialog } from "./confirm-dialog"
 import { EmptyState } from "./empty-state"
 import { 
   getTenantMembers, 
+  getTenantOffices,
   resendTenantInvitation,
   updateUserTenantRole,
+  updateUserTenantOffices,
   removeUserFromTenant,
+  type TenantOffice,
   type UserTenant
 } from "@/lib/supabase/tenants"
 import { useAuth } from "@/contexts/auth-context"
@@ -32,10 +36,12 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   const { user } = useAuth()
   const { toast } = useToast()
   const [members, setMembers] = useState<UserTenant[]>([])
+  const [offices, setOffices] = useState<TenantOffice[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState("all")
   const [loading, setLoading] = useState(true)
+  const [officeEditingMember, setOfficeEditingMember] = useState<UserTenant | null>(null)
 
   // Dialog states
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
@@ -61,8 +67,12 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const membersData = await getTenantMembers(tenantId)
+      const [membersData, officesData] = await Promise.all([
+        getTenantMembers(tenantId),
+        getTenantOffices(tenantId),
+      ])
       setMembers(membersData)
+      setOffices(officesData)
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
@@ -76,7 +86,10 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
 
   // Get current user's role in this tenant
   const currentUserMember = members.find(m => m.user_id === user?.id)
-  const currentUserRole = currentUserMember?.role || 'guest'
+  const currentUserRole =
+    currentUserMember?.role && currentUserMember.role !== 'supporter'
+      ? currentUserMember.role
+      : 'guest'
   const canManageMembers = currentUserRole === 'owner' || currentUserRole === 'admin'
   const canManageCompanyContacts = canManageCompanyContactsForActor(
     currentUserMember ? [{ role: currentUserMember.role }] : [],
@@ -93,6 +106,9 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
       filtered = filtered.filter(
         (member) =>
           (member.email || '').toLowerCase().includes(searchQuery.toLowerCase())
+          || (member.offices || []).some((office) =>
+            office.name.toLowerCase().includes(searchQuery.toLowerCase())
+          )
       )
     }
 
@@ -133,6 +149,15 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
     } catch (error) {
       console.error('Error updating role:', error)
     }
+  }
+
+  const handleUpdateMemberOffices = async (memberId: string, officeIds: string[]) => {
+    await updateUserTenantOffices(tenantId, memberId, officeIds)
+    await fetchData()
+    toast({
+      title: "完了",
+      description: "所属先スコープを更新しました",
+    })
   }
 
   // Handle member removal
@@ -341,6 +366,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
               onDeleteMember={showDeleteConfirm}
+              onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
               currentUserRole={currentUserRole}
               canManageCompanyContacts={canManageCompanyContacts}
@@ -362,6 +388,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
               onDeleteMember={showDeleteConfirm}
+              onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
               currentUserRole={currentUserRole}
               canManageCompanyContacts={canManageCompanyContacts}
@@ -383,6 +410,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
               onDeleteMember={showDeleteConfirm}
+              onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
               currentUserRole={currentUserRole}
               canManageCompanyContacts={canManageCompanyContacts}
@@ -399,6 +427,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
         onOpenChange={setIsInviteDialogOpen}
         onInviteSent={fetchData}
         canChooseRole={canManageMembers}
+        offices={offices}
       />
 
       <AddExistingMemberDialog
@@ -406,6 +435,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         onAddMember={fetchData}
+        offices={offices}
       />
 
       <CreateUserDialog
@@ -413,6 +443,18 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
         open={isCreateUserDialogOpen}
         onOpenChange={setIsCreateUserDialogOpen}
         onUserCreated={fetchData}
+      />
+
+      <MemberOfficesDialog
+        member={officeEditingMember}
+        offices={offices}
+        open={Boolean(officeEditingMember)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOfficeEditingMember(null)
+          }
+        }}
+        onSave={handleUpdateMemberOffices}
       />
 
       <InviteLinkDialog

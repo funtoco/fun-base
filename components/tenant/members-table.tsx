@@ -1,6 +1,6 @@
 "use client"
 
-import { MoreHorizontal, RefreshCw, Trash2 } from "lucide-react"
+import { Building2, MoreHorizontal, Pencil, RefreshCw, Trash2 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   DropdownMenu,
@@ -18,6 +18,8 @@ import { StatusBadge } from "./status-badge"
 import type { UserTenant } from "@/lib/supabase/tenants"
 import { isCompanyContactEmail, isCompanyContactRole } from "@/lib/tenant-access"
 
+type DisplayRole = 'owner' | 'admin' | 'member' | 'guest'
+
 interface MembersTableProps {
   members: UserTenant[]
   selectedMembers: string[]
@@ -25,6 +27,7 @@ interface MembersTableProps {
   onSelectAll: (memberIds: string[], selected: boolean) => void
   onChangeRole: (memberId: string, role: 'owner' | 'admin' | 'member' | 'guest') => void
   onDeleteMember: (memberId: string) => void
+  onEditOffices?: (member: UserTenant) => void
   onResendInvite?: (memberId: string) => void
   currentUserRole: 'owner' | 'admin' | 'member' | 'guest'
   canManageCompanyContacts?: boolean
@@ -38,6 +41,7 @@ export function MembersTable({
   onSelectAll,
   onChangeRole,
   onDeleteMember,
+  onEditOffices,
   onResendInvite,
   currentUserRole,
   canManageCompanyContacts = false,
@@ -55,6 +59,9 @@ export function MembersTable({
       minute: "2-digit",
     })
   }
+
+  const getDisplayRole = (role: UserTenant["role"]): DisplayRole =>
+    role === "supporter" ? "member" : role
 
   // Permission checks
   const canChangeRole = (targetMember: UserTenant) => {
@@ -90,6 +97,11 @@ export function MembersTable({
     return isCompanyContactEmail(targetMember.email) && isCompanyContactRole(targetMember.role)
   }
 
+  const canEditOffices = (targetMember: UserTenant) =>
+    Boolean(onEditOffices) &&
+    (currentUserRole === "owner" || currentUserRole === "admin") &&
+    targetMember.user_id !== currentUserId
+
   const canSelectMember = (targetMember: UserTenant) =>
     canBulkDeleteMembers && canDeleteMember(targetMember)
 
@@ -111,6 +123,7 @@ export function MembersTable({
 
   const hasRowActions = (targetMember: UserTenant) =>
     canChangeRole(targetMember) ||
+    canEditOffices(targetMember) ||
     canResendInvite(targetMember) ||
     canDeleteMember(targetMember)
 
@@ -122,6 +135,11 @@ export function MembersTable({
   const handleDeleteMember = (member: UserTenant) => {
     if (!canDeleteMember(member)) return
     onDeleteMember(member.id)
+  }
+
+  const handleEditOffices = (member: UserTenant) => {
+    if (!canEditOffices(member)) return
+    onEditOffices?.(member)
   }
 
   const handleResendInvite = (member: UserTenant) => {
@@ -149,6 +167,7 @@ export function MembersTable({
             ) : null}
             <TableHead>メール</TableHead>
             <TableHead>ロール</TableHead>
+            <TableHead>所属先</TableHead>
             <TableHead>ステータス</TableHead>
             <TableHead>参加日</TableHead>
             <TableHead className="w-12"></TableHead>
@@ -191,7 +210,37 @@ export function MembersTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <RoleBadge role={member.role} />
+                  <RoleBadge role={getDisplayRole(member.role)} />
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    {member.offices && member.offices.length > 0 ? (
+                      <div className="flex max-w-64 flex-wrap gap-1">
+                        {member.offices.slice(0, 2).map((office) => (
+                          <Badge key={office.id} variant="outline" className="max-w-40 truncate">
+                            {office.name}
+                          </Badge>
+                        ))}
+                        {member.offices.length > 2 && (
+                          <Badge variant="outline">+{member.offices.length - 2}</Badge>
+                        )}
+                      </div>
+                    ) : (
+                      <Badge variant="secondary">全所属先</Badge>
+                    )}
+                    {canEditOffices(member) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 shrink-0 px-2 text-xs"
+                        onClick={() => handleEditOffices(member)}
+                      >
+                        <Pencil className="size-3.5" />
+                        変更
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={member.status} />
@@ -242,7 +291,18 @@ export function MembersTable({
                           </>
                         )}
 
-                        {canChangeRole(member) && (canResendInvite(member) || canDeleteMember(member)) && (
+                        {canChangeRole(member) && (canEditOffices(member) || canResendInvite(member) || canDeleteMember(member)) && (
+                          <DropdownMenuSeparator />
+                        )}
+
+                        {canEditOffices(member) && (
+                          <DropdownMenuItem onClick={() => handleEditOffices(member)}>
+                            <Building2 className="size-4 mr-2" />
+                            所属先を変更
+                          </DropdownMenuItem>
+                        )}
+
+                        {canEditOffices(member) && (canResendInvite(member) || canDeleteMember(member)) && (
                           <DropdownMenuSeparator />
                         )}
 
