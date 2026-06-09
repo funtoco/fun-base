@@ -108,6 +108,7 @@ export function PersonDocumentsTab({ personId, personDocuments: initialDocuments
                   existingDocument={type === "other" ? null : getExistingDocument(type)}
                   existingDocuments={type === "other" ? getExistingDocuments(type) : undefined}
                   allowMultiple={type === "other"}
+                  className={type === "other" ? "sm:col-span-2" : undefined}
                   onUploadComplete={refreshDocuments}
                   onDeleteComplete={refreshDocuments}
                 />
