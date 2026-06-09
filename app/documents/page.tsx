@@ -18,6 +18,7 @@ const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   bank_card_copy: "口座カード写し",
   resume: "履歴書",
   designation_document: "指定書写し",
+  employment_insurance_notice: "雇用保険通知書",
 }
 
 function formatFileSize(bytes?: number): string {
