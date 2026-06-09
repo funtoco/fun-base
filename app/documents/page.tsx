@@ -13,6 +13,11 @@ const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   passport_back: "パスポート（裏）",
   residence_card_front: "在留カード（表）",
   residence_card_back: "在留カード（裏）",
+  coe_copy: "COE写し",
+  flight_ticket_copy: "フライト写し",
+  bank_card_copy: "口座カード写し",
+  resume: "履歴書",
+  designation_document: "指定書写し",
 }
 
 function formatFileSize(bytes?: number): string {

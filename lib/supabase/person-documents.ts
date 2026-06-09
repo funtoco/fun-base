@@ -1,12 +1,16 @@
 import { createClient } from './client'
 import type { PersonDocument } from '@/lib/models'
 
+const REMOVED_DOCUMENT_TYPE = 'resident_card_copy'
+const VALID_DOCUMENT_TYPES = ['passport_front', 'passport_back', 'residence_card_front', 'residence_card_back', 'coe_copy', 'flight_ticket_copy', 'bank_card_copy', 'resume', 'designation_document']
+
 export async function getPersonDocuments(personId: string): Promise<PersonDocument[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('person_documents')
     .select('*')
     .eq('person_id', personId)
+    .neq('document_type', REMOVED_DOCUMENT_TYPE)
     .order('created_at', { ascending: true })
 
   if (error) {
@@ -27,6 +31,7 @@ export async function getAllPersonDocuments(): Promise<PersonDocumentWithPerson[
   const { data, error } = await supabase
     .from('person_documents')
     .select('*, people(name, kana)')
+    .neq('document_type', REMOVED_DOCUMENT_TYPE)
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -64,6 +69,10 @@ export async function uploadDocumentDirect(
   documentType: string,
   file: File
 ): Promise<{ success: boolean; error?: string }> {
+  if (!VALID_DOCUMENT_TYPES.includes(documentType)) {
+    return { success: false, error: '対応していない書類種別です' }
+  }
+
   if (file.size > MAX_FILE_SIZE) {
     return { success: false, error: 'ファイルサイズは10MB以下にしてください' }
   }

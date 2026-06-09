@@ -81,14 +81,14 @@ describe('Person型: マルタマ対応フィールド', () => {
   })
 })
 
-// --- DocumentType: 新規6タイプ ---
+// --- DocumentType: 書類タイプ ---
 
 describe('DocumentType: 新規書類タイプ', () => {
   const VALID_DOCUMENT_TYPES: DocumentType[] = [
     'passport_front', 'passport_back',
     'residence_card_front', 'residence_card_back',
     'coe_copy', 'flight_ticket_copy', 'bank_card_copy',
-    'resident_card_copy', 'resume', 'designation_document',
+    'resume', 'designation_document',
   ]
 
   it('既存の4タイプが含まれること', () => {
@@ -98,11 +98,10 @@ describe('DocumentType: 新規書類タイプ', () => {
     expect(VALID_DOCUMENT_TYPES).toContain('residence_card_back')
   })
 
-  it('入社前書類の4タイプが含まれること', () => {
+  it('入社前書類の3タイプが含まれること', () => {
     expect(VALID_DOCUMENT_TYPES).toContain('coe_copy')
     expect(VALID_DOCUMENT_TYPES).toContain('flight_ticket_copy')
     expect(VALID_DOCUMENT_TYPES).toContain('bank_card_copy')
-    expect(VALID_DOCUMENT_TYPES).toContain('resident_card_copy')
   })
 
   it('入社後書類の2タイプが含まれること', () => {
@@ -110,8 +109,12 @@ describe('DocumentType: 新規書類タイプ', () => {
     expect(VALID_DOCUMENT_TYPES).toContain('designation_document')
   })
 
-  it('合計10タイプであること', () => {
-    expect(VALID_DOCUMENT_TYPES).toHaveLength(10)
+  it('住民票写しは書類タイプに含まれないこと', () => {
+    expect(VALID_DOCUMENT_TYPES).not.toContain('resident_card_copy')
+  })
+
+  it('合計9タイプであること', () => {
+    expect(VALID_DOCUMENT_TYPES).toHaveLength(9)
   })
 })
 
@@ -314,7 +317,6 @@ describe('書類セクション: 入社前・入社後書類の構成', () => {
         { type: 'coe_copy', label: 'COE写し' },
         { type: 'flight_ticket_copy', label: 'フライト写し' },
         { type: 'bank_card_copy', label: '口座カード写し' },
-        { type: 'resident_card_copy', label: '住民票写し' },
       ],
     },
     {
@@ -330,12 +332,12 @@ describe('書類セクション: 入社前・入社後書類の構成', () => {
     expect(DOCUMENT_SECTIONS).toHaveLength(4)
   })
 
-  it('入社前書類セクションに4つの書類タイプがあること', () => {
+  it('入社前書類セクションに3つの書類タイプがあること', () => {
     const preEmployment = DOCUMENT_SECTIONS.find(s => s.title === '入社前書類')
     expect(preEmployment).toBeDefined()
-    expect(preEmployment!.types).toHaveLength(4)
+    expect(preEmployment!.types).toHaveLength(3)
     expect(preEmployment!.types.map(t => t.type)).toEqual([
-      'coe_copy', 'flight_ticket_copy', 'bank_card_copy', 'resident_card_copy',
+      'coe_copy', 'flight_ticket_copy', 'bank_card_copy',
     ])
   })
 
@@ -348,9 +350,15 @@ describe('書類セクション: 入社前・入社後書類の構成', () => {
     ])
   })
 
-  it('全書類タイプの合計が10であること', () => {
+  it('全書類タイプの合計が9であること', () => {
     const allTypes = DOCUMENT_SECTIONS.flatMap(s => s.types)
-    expect(allTypes).toHaveLength(10)
+    expect(allTypes).toHaveLength(9)
+  })
+
+  it('住民票写しがどのセクションにも表示されないこと', () => {
+    const allTypes = DOCUMENT_SECTIONS.flatMap(s => s.types)
+    expect(allTypes.map(t => t.type)).not.toContain('resident_card_copy')
+    expect(allTypes.map(t => t.label)).not.toContain('住民票写し')
   })
 
   it('すべての書類タイプにラベルが設定されていること', () => {
