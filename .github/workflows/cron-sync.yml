@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '0 2 * * *'
     - cron: '0 3 * * *'
+    - cron: '0 19 * * *'
   workflow_dispatch:
     inputs:
       sync_type:
@@ -20,6 +21,15 @@ on:
         description: 'Connector batch size for interview_records manual sync'
         required: false
         default: '10'
+      record_id_from:
+        description: 'Optional Kintone record ID range start for interview_records'
+        required: false
+      record_id_to:
+        description: 'Optional Kintone record ID range end for interview_records'
+        required: false
+      record_id_tail_size:
+        description: 'Optional newest Kintone record ID window size for interview_records'
+        required: false
 
 jobs:
   sync-people:
@@ -79,7 +89,7 @@ jobs:
           pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type visas
 
   sync-interview-records:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.sync_type == 'interview_records'
+    if: github.event_name == 'schedule' && github.event.schedule == '0 19 * * *' || github.event_name == 'workflow_dispatch' && github.event.inputs.sync_type == 'interview_records'
     runs-on: ubuntu-latest
     timeout-minutes: 360
     environment: Production
@@ -104,8 +114,23 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           echo "🕐 Starting interview_records sync at $(date)"
-          cmd=(pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type interview_records --all-batches)
-          if [ -n "${{ github.event.inputs.batch_size }}" ]; then
-            cmd+=(--limit "${{ github.event.inputs.batch_size }}")
+          cmd=(pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type interview_records)
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            # 04:00 JST daily: small newest-record window, one connector at a time.
+            cmd+=(--all-batches --limit 1 --record-id-tail-size 2000)
+          else
+            cmd+=(--all-batches)
+            if [ -n "${{ github.event.inputs.batch_size }}" ]; then
+              cmd+=(--limit "${{ github.event.inputs.batch_size }}")
+            fi
+            if [ -n "${{ github.event.inputs.record_id_from }}" ]; then
+              cmd+=(--record-id-from "${{ github.event.inputs.record_id_from }}")
+            fi
+            if [ -n "${{ github.event.inputs.record_id_to }}" ]; then
+              cmd+=(--record-id-to "${{ github.event.inputs.record_id_to }}")
+            fi
+            if [ -n "${{ github.event.inputs.record_id_tail_size }}" ]; then
+              cmd+=(--record-id-tail-size "${{ github.event.inputs.record_id_tail_size }}")
+            fi
           fi
           "${cmd[@]}"

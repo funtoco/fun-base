@@ -155,7 +155,10 @@ export interface KintoneSyncOptions {
   recordId?: string
   recordIdFrom?: string
   recordIdTo?: string
+  recordIdTailSize?: number
 }
+
+const MAX_RECORD_ID_TAIL_SIZE = 5000
 
 function assertKintoneRecordId(value: string, label: string): string {
   const trimmed = value.trim()
@@ -166,6 +169,14 @@ function assertKintoneRecordId(value: string, label: string): string {
 }
 
 export function buildRecordIdQuery(options: KintoneSyncOptions = {}): string {
+  if (options.recordId && (options.recordIdFrom || options.recordIdTo)) {
+    throw new Error('recordId cannot be combined with recordIdFrom or recordIdTo')
+  }
+
+  if (options.recordIdTailSize && (options.recordId || options.recordIdFrom || options.recordIdTo)) {
+    throw new Error('recordIdTailSize cannot be combined with explicit record id filters')
+  }
+
   if (options.recordId) {
     return `$id = ${assertKintoneRecordId(options.recordId, 'recordId')}`
   }
@@ -178,7 +189,79 @@ export function buildRecordIdQuery(options: KintoneSyncOptions = {}): string {
     conditions.push(`$id <= ${assertKintoneRecordId(options.recordIdTo, 'recordIdTo')}`)
   }
 
+  if (options.recordIdFrom && options.recordIdTo) {
+    const from = BigInt(options.recordIdFrom.trim())
+    const to = BigInt(options.recordIdTo.trim())
+    if (from > to) {
+      throw new Error('recordIdFrom must be less than or equal to recordIdTo')
+    }
+  }
+
   return conditions.join(' and ')
+}
+
+function parseOptionalRecordId(searchParams: URLSearchParams, name: string): string | undefined {
+  const value = searchParams.get(name)
+  if (!value || value.trim() === '') {
+    return undefined
+  }
+
+  return assertKintoneRecordId(value, name)
+}
+
+function parseOptionalRecordIdTailSize(searchParams: URLSearchParams): number | undefined {
+  const value = searchParams.get('recordIdTailSize')
+  if (!value || value.trim() === '') {
+    return undefined
+  }
+
+  if (!/^\d+$/.test(value.trim())) {
+    throw new Error('recordIdTailSize must be an integer')
+  }
+
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error('recordIdTailSize must be a safe integer')
+  }
+  if (parsed < 1 || parsed > MAX_RECORD_ID_TAIL_SIZE) {
+    throw new Error(`recordIdTailSize must be between 1 and ${MAX_RECORD_ID_TAIL_SIZE}`)
+  }
+
+  return parsed
+}
+
+export function parseKintoneSyncOptions(searchParams: URLSearchParams): KintoneSyncOptions {
+  const options: KintoneSyncOptions = {
+    recordId: parseOptionalRecordId(searchParams, 'recordId'),
+    recordIdFrom: parseOptionalRecordId(searchParams, 'recordIdFrom'),
+    recordIdTo: parseOptionalRecordId(searchParams, 'recordIdTo'),
+    recordIdTailSize: parseOptionalRecordIdTailSize(searchParams),
+  }
+
+  buildRecordIdQuery(options)
+
+  return Object.fromEntries(
+    Object.entries(options).filter(([, value]) => value !== undefined)
+  ) as KintoneSyncOptions
+}
+
+export function buildRecordIdTailQuery(maxRecordId: number, recordIdTailSize: number): string {
+  if (!Number.isSafeInteger(maxRecordId) || maxRecordId < 0) {
+    throw new Error('maxRecordId must be a safe integer greater than or equal to 0')
+  }
+  if (!Number.isSafeInteger(recordIdTailSize) || recordIdTailSize < 1 || recordIdTailSize > MAX_RECORD_ID_TAIL_SIZE) {
+    throw new Error(`recordIdTailSize must be between 1 and ${MAX_RECORD_ID_TAIL_SIZE}`)
+  }
+  if (maxRecordId === 0) {
+    return '$id <= 0'
+  }
+
+  const recordIdFrom = Math.max(1, maxRecordId - recordIdTailSize + 1)
+
+  return buildRecordIdQuery({
+    recordIdFrom: String(recordIdFrom),
+    recordIdTo: String(maxRecordId),
+  })
 }
 
 export function combineKintoneQueries(...queries: Array<string | null | undefined>): string {
@@ -502,6 +585,15 @@ export class KintoneDataSync {
     return maxRecordId
   }
 
+  private async buildRecordIdQueryForApp(sourceAppId: string, options: KintoneSyncOptions = {}): Promise<string> {
+    if (!options.recordIdTailSize) {
+      return buildRecordIdQuery(options)
+    }
+
+    const maxRecordId = await this.getMaxRecordId(sourceAppId)
+    return buildRecordIdTailQuery(maxRecordId, options.recordIdTailSize)
+  }
+
   /**
    * Build Kintone query from filter conditions
    */
@@ -602,7 +694,8 @@ export class KintoneDataSync {
         appMappingId,
         recordId: options.recordId,
         recordIdFrom: options.recordIdFrom,
-        recordIdTo: options.recordIdTo
+        recordIdTo: options.recordIdTo,
+        recordIdTailSize: options.recordIdTailSize,
       })
       // Start sync session
       sessionId = await this.syncLogger.startSession(
@@ -753,12 +846,13 @@ export class KintoneDataSync {
       for (const appMapping of appMappings) {
         // Build query using only database filter conditions
         const filterQuery = await this.buildFilterQuery(targetAppType, appMapping.id)
-        const recordIdQuery = buildRecordIdQuery(options)
+        const recordIdQuery = await this.buildRecordIdQueryForApp(appMapping.source_app_id, options)
         const query = combineKintoneQueries(filterQuery, recordIdQuery)
         console.log('[sync] kintone-query', {
           targetAppType,
           sourceAppId,
           appMappingId: appMapping.id,
+          recordIdTailSize: options.recordIdTailSize,
           query
         })
         
@@ -936,12 +1030,13 @@ export class KintoneDataSync {
       const filterQuery = buildInterviewRecordsQuery(
         await this.buildFilterQuery('interview_records', appMapping.id)
       )
-      const recordIdQuery = buildRecordIdQuery(options)
+      const recordIdQuery = await this.buildRecordIdQueryForApp(appMapping.source_app_id, options)
       const query = combineKintoneQueries(filterQuery, recordIdQuery)
 
       console.log('[sync] interview-records:kintone-query', {
         sourceAppId: appMapping.source_app_id,
         appMappingId: appMapping.id,
+        recordIdTailSize: options.recordIdTailSize,
         query,
       })
 
