@@ -1,41 +1,213 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { StatusBadge } from "@/components/ui/status-badge"
+import { Button } from "@/components/ui/button"
 import { Timeline } from "@/components/ui/timeline"
-import { TreeNoteView } from "@/components/ui/tree-note-view"
-import { formatDateTime } from "@/lib/utils"
-import type { Meeting, SupportAction, Visa, PersonDocument } from "@/lib/models"
+import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
+import { getCategoryColor } from "@/lib/interview-records"
+import { formatDate } from "@/lib/utils"
+import type { Visa, PersonDocument, RegularInterview, DailySupportRecord } from "@/lib/models"
 import { PersonDocumentsTab } from "@/components/person-documents-tab"
+import { ArrowUpRight, Calendar, Clock, MapPin, User, FileText, ChevronDown, ChevronUp } from "lucide-react"
 
 interface PersonDetailTabsProps {
   personId: string
-  personMeetings: Meeting[]
-  personSupportActions: SupportAction[]
   personVisas: Visa[]
   personDocuments: PersonDocument[]
+  regularInterviews?: RegularInterview[]
+  dailySupportRecords?: DailySupportRecord[]
 }
 
-export function PersonDetailTabs({ personId, personMeetings, personSupportActions, personVisas, personDocuments }: PersonDetailTabsProps) {
+function getDailySupportTimelineTitle(record: DailySupportRecord): string {
+  const categories = record.dailyEntries
+    .map((entry) => entry.shou)
+    .filter(Boolean)
+
+  if (categories.length === 0) return "日々対応"
+
+  const visibleCategories = categories.slice(0, 3).join(", ")
+  return `日々対応: ${visibleCategories}${categories.length > 3 ? "..." : ""}`
+}
+
+// Regular Interview Card Component - displays 企業提出用レポート as main content
+function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
+  const [expanded, setExpanded] = useState(false)
+  const detailHref = getInterviewRecordDetailPath(interview.id)
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-base">
+                {interview.targetQuarter} 定期面談
+              </CardTitle>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5" />
+                {formatDate(interview.interviewDate)}
+              </span>
+              {interview.interviewMethod && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" />
+                  {interview.interviewMethod}
+                </span>
+              )}
+              {interview.supportStaffName && (
+                <span className="flex items-center gap-1">
+                  <User className="h-3.5 w-3.5" />
+                  {interview.supportStaffName}
+                </span>
+              )}
+              {interview.interviewDuration && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5" />
+                  {interview.interviewDuration}分
+                </span>
+              )}
+            </div>
+          </div>
+          <Button asChild variant="ghost" size="sm" className="shrink-0">
+            <Link href={detailHref} aria-label={`${interview.targetQuarter ?? "定期面談"}の詳細`}>
+              詳細
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* 企業提出用レポート - Main Content */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">企業提出用レポート</span>
+          </div>
+          <div className={`bg-muted/30 rounded-lg p-4 text-sm whitespace-pre-wrap ${!expanded ? "line-clamp-6" : ""}`}>
+            {interview.companyReport}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setExpanded(!expanded)}
+            className="w-full"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="h-4 w-4 mr-1" />
+                閉じる
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-4 w-4 mr-1" />
+                全文を表示
+              </>
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Daily Support Card Component - displays tableStorageDaily entries as main content
+function DailySupportCard({ record }: { record: DailySupportRecord }) {
+  const detailHref = getInterviewRecordDetailPath(record.id)
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-base">
+                {formatDate(record.supportDate)} の対応
+              </CardTitle>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+              {record.startTime && record.endTime && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5" />
+                  {record.startTime} - {record.endTime}
+                </span>
+              )}
+              {record.supportStaffName && (
+                <span className="flex items-center gap-1">
+                  <User className="h-3.5 w-3.5" />
+                  {record.supportStaffName}
+                </span>
+              )}
+            </div>
+          </div>
+          <Button asChild variant="ghost" size="sm" className="shrink-0">
+            <Link href={detailHref} aria-label={`${formatDate(record.supportDate)}のサポート詳細`}>
+              詳細
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* tableStorageDaily - Main Content (dai/chu/shou categories) */}
+        <div className="space-y-3">
+          {record.dailyEntries.map((entry, index) => (
+            <div
+              key={index}
+              className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg"
+            >
+              <div className="flex flex-wrap gap-1.5">
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(entry.dai)}`}>
+                  {entry.dai}
+                </span>
+                <Badge variant="outline" className="text-xs">
+                  {entry.chu}
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {entry.shou}
+                </Badge>
+              </div>
+              {entry.notes && (
+                <p className="text-sm text-muted-foreground flex-1">
+                  {entry.notes}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+export function PersonDetailTabs({
+  personId,
+  personVisas,
+  personDocuments,
+  regularInterviews = [],
+  dailySupportRecords = [],
+}: PersonDetailTabsProps) {
   const [activeTab, setActiveTab] = useState("timeline")
 
+  // Build timeline items from interviews and support records
   const baseTimelineItems = [
-    ...personMeetings.map((meeting) => ({
-      id: meeting.id,
+    ...regularInterviews.map((interview) => ({
+      id: interview.id,
       type: "meeting" as const,
-      title: meeting.title,
-      datetime: meeting.datetime,
-      status: meeting.kind,
+      title: `${interview.targetQuarter} 定期面談`,
+      datetime: interview.interviewDate,
+      href: getInterviewRecordDetailPath(interview.id),
     })),
-    ...personSupportActions.map((action) => ({
-      id: action.id,
+    ...dailySupportRecords.map((record) => ({
+      id: record.id,
       type: "support" as const,
-      title: action.title,
-      datetime: action.updatedAt,
-      status: action.status,
+      title: getDailySupportTimelineTitle(record),
+      datetime: record.supportDate,
+      href: getInterviewRecordDetailPath(record.id),
     })),
   ].sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime())
 
@@ -156,7 +328,6 @@ export function PersonDetailTabs({ personId, personMeetings, personSupportAction
                     <div key={group.type} className="space-y-3">
                       {group.visas.map((visa, index) => {
                         const label = hasMultiple ? `${group.type}${index + 1}回目` : group.type
-                        const earliestDate = getVisaEarliestDate(visa)
                         const items = visaStatusItems(visa)
                         return (
                           <details key={visa.id} className="group rounded-md border bg-card">
@@ -184,71 +355,42 @@ export function PersonDetailTabs({ personId, personMeetings, personSupportAction
 
       <TabsContent value="meetings" className="mt-6">
         <div className="space-y-4">
-          {personMeetings.length === 0 ? (
+          {regularInterviews.length === 0 ? (
             <Card>
               <CardContent className="flex items-center justify-center py-8">
-                <p className="text-muted-foreground">面談記録がありません</p>
+                <p className="text-muted-foreground">定期面談の記録がありません</p>
               </CardContent>
             </Card>
           ) : (
-            personMeetings.map((meeting) => (
-              <Card key={meeting.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-lg">{meeting.title}</CardTitle>
-                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          {formatDateTime(meeting.datetime)}
-                        </span>
-                        <Badge variant="outline">{meeting.kind}</Badge>
-                        {meeting.durationMin && <span>{meeting.durationMin}分</span>}
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <TreeNoteView notes={meeting.notes} />
-                </CardContent>
-              </Card>
-            ))
+            <>
+              <div className="text-sm text-muted-foreground">
+                {regularInterviews.length}件の定期面談記録
+              </div>
+              {regularInterviews.map((interview) => (
+                <RegularInterviewCard key={interview.id} interview={interview} />
+              ))}
+            </>
           )}
         </div>
       </TabsContent>
 
       <TabsContent value="support" className="mt-6">
         <div className="space-y-4">
-          {personSupportActions.length === 0 ? (
+          {dailySupportRecords.length === 0 ? (
             <Card>
               <CardContent className="flex items-center justify-center py-8">
                 <p className="text-muted-foreground">サポート記録がありません</p>
               </CardContent>
             </Card>
           ) : (
-            personSupportActions.map((action) => (
-              <Card key={action.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-lg">{action.title}</CardTitle>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline">{action.category}</Badge>
-                        <StatusBadge status={action.status} type="support" />
-                      </div>
-                    </div>
-                    <div className="text-right text-sm text-muted-foreground">
-                      {action.assignee && <div>担当: {action.assignee}</div>}
-                      {action.due && <div>期日: {action.due}</div>}
-                    </div>
-                  </div>
-                </CardHeader>
-                {action.detail && (
-                  <CardContent>
-                    <p className="text-sm">{action.detail}</p>
-                  </CardContent>
-                )}
-              </Card>
-            ))
+            <>
+              <div className="text-sm text-muted-foreground">
+                {dailySupportRecords.length}件のサポート記録
+              </div>
+              {dailySupportRecords.map((record) => (
+                <DailySupportCard key={record.id} record={record} />
+              ))}
+            </>
           )}
         </div>
       </TabsContent>

@@ -241,3 +241,53 @@ test('parseActivityEntries normalizes Kintone subtable rows for daily support', 
     },
   ])
 })
+
+test('parseActivityEntries normalizes serialized tableStorageDaily values', () => {
+  const entries = parseActivityEntries({
+    value: JSON.stringify([
+      {
+        dai: '日々の対応報告',
+        chu: 'ビザ更新対応',
+        shou: ['申請に必要な公的書類の案内（課税証明等）', '健康診断の受診案内'],
+        notes: '健康診断の有効性と申請について必要な書類についての案内をしました。',
+      },
+    ]),
+  })
+
+  assert.deepEqual(entries, [
+    {
+      dai: '日々の対応報告',
+      chu: 'ビザ更新対応',
+      shou: '申請に必要な公的書類の案内（課税証明等）, 健康診断の受診案内',
+      notes: '健康診断の有効性と申請について必要な書類についての案内をしました。',
+    },
+  ])
+})
+
+test('parseActivityEntries preserves row-level FunBase visibility review metadata', () => {
+  const entries = parseActivityEntries({
+    value: JSON.stringify([
+      {
+        dai: '日々の対応報告',
+        chu: '退職後対応',
+        shou: ['転出手続きの案内'],
+        notes: '退職日について案内済み',
+        funbaseVisibility: 'pending',
+        salesReviewReasons: ['job_change', 'health_mental_pregnancy'],
+        salesReviewMemo: '営業確認待ち',
+      },
+    ]),
+  })
+
+  assert.deepEqual(entries, [
+    {
+      dai: '日々の対応報告',
+      chu: '退職後対応',
+      shou: '転出手続きの案内',
+      notes: '退職日について案内済み',
+      funbaseVisibility: 'pending',
+      salesReviewReasons: ['job_change', 'health_mental_pregnancy'],
+      salesReviewMemo: '営業確認待ち',
+    },
+  ])
+})

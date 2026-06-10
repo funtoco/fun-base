@@ -183,3 +183,92 @@ export type PersonDocument = {
   createdAt: string
   updatedAt: string
 }
+
+// Kintone App 98: 就労_面談記録 types
+// timeInterview values from Kintone
+export type InterviewRecordType = "定期面談" | "日々の面談" | "家族面談"
+
+// interviewMethod values from Kintone
+export type InterviewMethod = "オンラインMTG" | "対面" | "電話" | "メール"
+
+// Status values from Kintone App 98. FunBase imports regular interviews only after Kintone reaches 完了.
+export type KintoneInterviewStatus = "Not started" | "完了" | "確認不要" | "クローズ" | "確認中" | "差戻(確認事項あり)"
+
+// FunBase-side status for company-facing confirmation, separate from Kintone's internal workflow status.
+export type CompanyConfirmationStatus = "確認待ち" | "確認完了"
+
+// tableStorageDaily parsed structure
+export type DailySupportEntry = {
+  dai: string // 大分類
+  chu: string // 中分類
+  shou: string // 小分類
+  notes?: string // 備考
+}
+
+// Regular Interview Record (定期面談) - main content is 企業提出用レポート
+export type RegularInterview = {
+  id: string
+  kintoneRecordId?: string
+  personId: string // HRID
+  personName: string
+  nickName?: string
+  companyId?: string // COID
+  companyName?: string
+  interviewDate: string
+  startTime?: string
+  endTime?: string
+  targetQuarter?: string // 対象四半期
+  interviewDuration?: number // timeInterview in minutes
+  interviewMethod?: InterviewMethod
+  interviewPlace?: string
+  supportStaffName?: string // 支援担当者
+  salesStaffName?: string // 営業担当者
+  funtocoStaff?: string
+  kintoneStatus?: KintoneInterviewStatus
+  companyConfirmationStatus: CompanyConfirmationStatus
+  // Main content for 定期面談
+  companyReport: string // 企業提出用レポート
+  // Secondary (internal notes)
+  internalNotes?: string // interview field - keep secondary
+  createdAt: string
+  updatedAt: string
+}
+
+// Daily Support Record (日々の面談) - main content is tableStorageDaily
+export type DailySupportRecord = {
+  id: string
+  kintoneRecordId?: string
+  personId: string // HRID
+  personName: string
+  nickName?: string
+  companyId?: string // COID
+  companyName?: string
+  supportDate: string // interviewDate
+  startTime?: string
+  endTime?: string
+  supportStaffName?: string // 支援担当者
+  kintoneStatus?: KintoneInterviewStatus
+  companyConfirmationStatus: CompanyConfirmationStatus
+  // Main content for 日々の面談
+  dailyEntries: DailySupportEntry[] // parsed tableStorageDaily
+  // Secondary (internal notes)
+  internalNotes?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// Combined timeline item type for mixed activities
+export type TimelineActivityType = "visa" | "regular_interview" | "daily_support"
+
+export type EnhancedActivityItem = {
+  id: string
+  type: TimelineActivityType
+  title: string
+  personId: string
+  personName: string
+  companyName?: string
+  datetime: string
+  status?: string
+  link: string
+  metadata?: Record<string, string | number | undefined>
+}

@@ -21,18 +21,19 @@ import {
 } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
-import { getMeetings } from "@/lib/supabase/meetings"
-import { getSupportActions } from "@/lib/supabase/support-actions"
 import { getPublishedAnnouncements, getReadAnnouncementIds } from "@/lib/supabase/announcements"
+import { getLatestDailySupportRecords, getLatestRegularInterviews } from "@/lib/kintone-data"
 import { buildDashboardViewModel } from "@/lib/dashboard/view-model"
+import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
+import { getCategoryColor } from "@/lib/interview-records"
 import { formatDate, formatDateTime } from "@/lib/utils"
-import type { Announcement, Meeting, Person, SupportAction, Visa } from "@/lib/models"
+import type { Announcement, DailySupportRecord, Person, RegularInterview, Visa } from "@/lib/models"
 
 type DashboardData = {
   people: Person[]
   visas: Visa[]
-  meetings: Meeting[]
-  supportActions: SupportAction[]
+  regularInterviews: RegularInterview[]
+  dailySupportRecords: DailySupportRecord[]
   announcements: Announcement[]
   readAnnouncementIds: string[]
 }
@@ -87,25 +88,28 @@ function DashboardContent({
           count={viewModel.kpis.waitingCount}
           icon={<Briefcase className="h-4 w-4" />}
           href={buildFilteredHref("/people", { workingStatus: "入社待ち" })}
+          variant="waiting"
         />
         <KPICard
           title="在籍中"
           count={viewModel.kpis.activeCount}
           icon={<UserCheck className="h-4 w-4" />}
           href={buildFilteredHref("/people", { workingStatus: "在籍中" })}
+          variant="active"
         />
         <KPICard
           title="退職"
           count={viewModel.kpis.retiredCount}
           icon={<UserX className="h-4 w-4" />}
           href={buildFilteredHref("/people", { workingStatus: "退職" })}
+          variant="retired"
         />
         <KPICard
           title="ビザ申請中"
           count={viewModel.kpis.applicationInProgressCount}
           icon={<FileText className="h-4 w-4" />}
           href={buildFilteredHref("/people", { visaStatus: "申請中" })}
-          highlight
+          variant="primary"
         />
         <KPICard
           title="期限30日以内"
@@ -153,27 +157,31 @@ function DashboardContent({
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
                 <CardTitle className="text-base">最近の面談</CardTitle>
               </div>
+              <Link href="/meetings" className="text-xs text-primary hover:underline flex items-center gap-1">
+                一覧へ
+                <ChevronRight className="h-3 w-3" />
+              </Link>
             </div>
           </CardHeader>
           <CardContent>
-            {viewModel.latestMeetings.length === 0 ? (
+            {viewModel.latestRegularInterviews.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">面談記録はまだありません</p>
             ) : (
               <div className="space-y-3">
-                {viewModel.latestMeetings.map((meeting) => (
+                {viewModel.latestRegularInterviews.map((interview) => (
                   <Link
-                    key={meeting.id}
-                    href={`/people/${meeting.personId}`}
+                    key={interview.id}
+                    href={getInterviewRecordDetailPath(interview.id)}
                     className="block p-2 rounded-lg hover:bg-muted/50 transition-colors -mx-2"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{meeting.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{meeting.person?.name ?? "-"}</p>
+                        <p className="text-sm font-medium truncate">{interview.personName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{interview.companyName ?? "-"}</p>
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        <Badge variant="secondary" className="text-xs">{meeting.kind}</Badge>
-                        <span className="text-xs text-muted-foreground">{formatDate(meeting.datetime)}</span>
+                        <Badge variant="secondary" className="text-xs">{interview.targetQuarter ?? "定期面談"}</Badge>
+                        <span className="text-xs text-muted-foreground">{formatDate(interview.interviewDate)}</span>
                       </div>
                     </div>
                   </Link>
@@ -191,36 +199,45 @@ function DashboardContent({
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <CardTitle className="text-base">日々のサポート</CardTitle>
               </div>
+              <Link href="/support" className="text-xs text-primary hover:underline flex items-center gap-1">
+                一覧へ
+                <ChevronRight className="h-3 w-3" />
+              </Link>
             </div>
           </CardHeader>
           <CardContent>
-            {viewModel.supportActions.length === 0 ? (
+            {viewModel.latestDailySupportRecords.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">サポート記録はまだありません</p>
             ) : (
               <div className="space-y-3">
-                {viewModel.supportActions.map((action) => (
-                  <Link
-                    key={action.id}
-                    href={`/people/${action.personId}`}
-                    className="block p-2 rounded-lg hover:bg-muted/50 transition-colors -mx-2"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs shrink-0">{action.category}</Badge>
+                {viewModel.latestDailySupportRecords.map((record) => {
+                  const primaryEntry = record.dailyEntries[0]
+                  const categoryLabel = primaryEntry?.chu || primaryEntry?.dai || "日々対応"
+                  const title = primaryEntry?.shou || primaryEntry?.notes || `${formatDate(record.supportDate)} の対応`
+
+                  return (
+                    <Link
+                      key={record.id}
+                      href={getInterviewRecordDetailPath(record.id)}
+                      className="block p-2 rounded-lg hover:bg-muted/50 transition-colors -mx-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(categoryLabel)}`}>
+                              {categoryLabel}
+                            </span>
+                          </div>
+                          <p className="text-sm font-medium truncate mt-1">{title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{record.personName}</p>
                         </div>
-                        <p className="text-sm font-medium truncate mt-1">{action.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{action.person?.name ?? "-"}</p>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="text-xs text-muted-foreground">{formatDate(record.supportDate)}</span>
+                        </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        <StatusBadge status={action.status} type="support" />
-                        {action.due && (
-                          <span className="text-xs text-muted-foreground">{formatDate(action.due)}</span>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  )
+                })}
               </div>
             )}
           </CardContent>
@@ -388,36 +405,55 @@ function KPICard({
   icon,
   href,
   variant = "default",
-  highlight = false,
 }: {
   title: string
   count: number
   icon: ReactNode
   href: string
-  variant?: "default" | "warning"
-  highlight?: boolean
+  variant?: "default" | "waiting" | "active" | "retired" | "primary" | "warning"
 }) {
+  const variantClasses = {
+    default: {
+      card: "",
+      accent: "text-muted-foreground",
+      count: "text-foreground",
+    },
+    waiting: {
+      card: "border-sky-200 bg-sky-50/25",
+      accent: "text-sky-600",
+      count: "text-sky-700",
+    },
+    active: {
+      card: "border-emerald-200 bg-emerald-50/25",
+      accent: "text-emerald-600",
+      count: "text-emerald-700",
+    },
+    retired: {
+      card: "border-red-200 bg-red-50/20",
+      accent: "text-red-600",
+      count: "text-red-700",
+    },
+    primary: {
+      card: "border-primary/30 bg-primary/5",
+      accent: "text-primary",
+      count: "text-primary",
+    },
+    warning: {
+      card: "border-amber-200 bg-amber-50/30",
+      accent: "text-amber-600",
+      count: "text-amber-600",
+    },
+  }[variant]
+
   return (
     <Link href={href}>
-      <Card className={`hover:shadow-md transition-shadow cursor-pointer ${
-        variant === "warning" ? "border-amber-200 bg-amber-50/30" :
-        highlight ? "border-primary/30 bg-primary/5" :
-        ""
-      }`}>
+      <Card className={`hover:shadow-md transition-shadow cursor-pointer ${variantClasses.card}`}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
-            <span className={`${
-              variant === "warning" ? "text-amber-600" :
-              highlight ? "text-primary" :
-              "text-muted-foreground"
-            }`}>
+            <span className={variantClasses.accent}>
               {icon}
             </span>
-            <span className={`text-2xl font-bold ${
-              variant === "warning" ? "text-amber-600" :
-              highlight ? "text-primary" :
-              "text-foreground"
-            }`}>
+            <span className={`text-2xl font-bold ${variantClasses.count}`}>
               {count}
             </span>
           </div>
@@ -558,15 +594,15 @@ export default function DashboardPage() {
   const loadDashboardData = useCallback(async () => {
     setLoading(true)
     try {
-      const [people, visas, meetings, supportActions, announcements, readAnnouncementIds] = await Promise.all([
+      const [people, visas, regularInterviews, dailySupportRecords, announcements, readAnnouncementIds] = await Promise.all([
         getPeople(),
         getVisas(),
-        getMeetings(),
-        getSupportActions(),
+        getLatestRegularInterviews(5),
+        getLatestDailySupportRecords(5),
         getPublishedAnnouncements(),
         getReadAnnouncementIds(),
       ])
-      setData({ people, visas, meetings, supportActions, announcements, readAnnouncementIds })
+      setData({ people, visas, regularInterviews, dailySupportRecords, announcements, readAnnouncementIds })
       setLoadedAt(new Date())
       setError(false)
     } catch (err) {

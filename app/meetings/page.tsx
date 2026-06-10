@@ -1,349 +1,460 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useMemo, useEffect } from "react"
+import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { AuthGuard } from "@/components/auth-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { TreeNoteView } from "@/components/ui/tree-note-view"
-import { ListPanelLoadingSkeleton } from "@/components/ui/funbase-loading"
-import { Calendar, List, Search, Filter, Clock, User } from "lucide-react"
-import { getPeople } from "@/lib/supabase/people"
-import { getMeetings } from "@/lib/supabase/meetings"
-import { formatDateTime } from "@/lib/utils"
-import { meetingTaxonomy } from "@/constants/meeting-taxonomy"
-import type { Person, Meeting } from "@/lib/models"
+import { ResultCountBadge } from "@/components/ui/result-count-badge"
+import { Input } from "@/components/ui/input"
+import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
+import { getRegularInterviews } from "@/lib/kintone-data"
+import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
+import {
+  buildInterviewListQueryString,
+  getQueryMultiValues,
+  getQuerySingleValue,
+  toggleQueryMultiValue,
+} from "@/lib/interview-list-query"
+import { formatDate } from "@/lib/utils"
+import type { RegularInterview } from "@/lib/models"
+import {
+  ArrowUpRight,
+  Search,
+  FilterIcon,
+  Calendar,
+  Clock,
+  User,
+  Building2,
+  MapPin,
+  FileText,
+  ChevronDown,
+  ChevronUp
+} from "lucide-react"
+
+const MEETING_DATE_FILTER_OPTIONS = [
+  { value: "all", label: "すべて" },
+  { value: "7", label: "過去7日" },
+  { value: "30", label: "過去30日" },
+  { value: "90", label: "過去90日" },
+]
+
+// Interview Card Component - read-only, links to person and record detail
+function InterviewCard({ interview }: { interview: RegularInterview }) {
+  const [expanded, setExpanded] = useState(false)
+  const detailHref = getInterviewRecordDetailPath(interview.id)
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Link
+                href={`/people/${interview.personId}`}
+                className="font-semibold text-base hover:text-primary hover:underline"
+              >
+                {interview.personName}
+              </Link>
+              {interview.nickName && (
+                <span className="text-sm text-muted-foreground">({interview.nickName})</span>
+              )}
+              <Badge variant="outline">{interview.targetQuarter}</Badge>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5" />
+                {formatDate(interview.interviewDate)}
+              </span>
+              {interview.companyName && (
+                <span className="flex items-center gap-1">
+                  <Building2 className="h-3.5 w-3.5" />
+                  {interview.companyName}
+                </span>
+              )}
+              {interview.interviewMethod && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" />
+                  {interview.interviewMethod}
+                </span>
+              )}
+              {interview.supportStaffName && (
+                <span className="flex items-center gap-1">
+                  <User className="h-3.5 w-3.5" />
+                  {interview.supportStaffName}
+                </span>
+              )}
+              {interview.interviewDuration && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5" />
+                  {interview.interviewDuration}分
+                </span>
+              )}
+            </div>
+          </div>
+          <Button asChild variant="ghost" size="sm" className="shrink-0">
+            <Link href={detailHref} aria-label={`${interview.personName}の面談詳細`}>
+              詳細
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* 企業提出用レポート Preview - Main content for 定期面談 */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">企業提出用レポート</span>
+          </div>
+          <div className={`bg-muted/30 rounded-lg p-3 text-sm whitespace-pre-wrap ${!expanded ? "line-clamp-3" : ""}`}>
+            {interview.companyReport}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setExpanded(!expanded)}
+            className="w-full"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="h-4 w-4 mr-1" />
+                閉じる
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-4 w-4 mr-1" />
+                全文を表示
+              </>
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
 export default function MeetingsPage() {
-  const [viewMode, setViewMode] = useState<"list" | "calendar">("list")
-  const [searchTerm, setSearchTerm] = useState("")
-  const [typeFilter, setTypeFilter] = useState<string>("all")
-  const [personFilter, setPersonFilter] = useState<string>("all")
-  const [sectionFilter, setSectionFilter] = useState<string>("all")
-  const [dateFilter, setDateFilter] = useState<string>("all")
-  const [people, setPeople] = useState<Person[]>([])
-  const [meetings, setMeetings] = useState<Meeting[]>([])
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [interviews, setInterviews] = useState<RegularInterview[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("search") ?? "")
+  const [quarterFilter, setQuarterFilter] = useState<string[]>(() =>
+    getQueryMultiValues(new URLSearchParams(searchParams.toString()), "quarter")
+  )
+  const [companyFilter, setCompanyFilter] = useState<string[]>(() =>
+    getQueryMultiValues(new URLSearchParams(searchParams.toString()), "company")
+  )
+  const [staffFilter, setStaffFilter] = useState<string[]>(() =>
+    getQueryMultiValues(new URLSearchParams(searchParams.toString()), "staff")
+  )
+  const [methodFilter, setMethodFilter] = useState<string[]>(() =>
+    getQueryMultiValues(new URLSearchParams(searchParams.toString()), "method")
+  )
+  const [dateFilter, setDateFilter] = useState<string>(() =>
+    getQuerySingleValue(new URLSearchParams(searchParams.toString()), "date")
+  )
 
+  const replaceUrl = ({
+    search = searchTerm,
+    quarter = quarterFilter,
+    company = companyFilter,
+    staff = staffFilter,
+    method = methodFilter,
+    date = dateFilter,
+  }: {
+    search?: string
+    quarter?: string[]
+    company?: string[]
+    staff?: string[]
+    method?: string[]
+    date?: string
+  }) => {
+    const query = buildInterviewListQueryString({
+      search,
+      multi: { quarter, company, staff, method },
+      single: { date },
+    })
+    router.replace(`/meetings${query ? `?${query}` : ""}`, { scroll: false })
+  }
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value)
+    replaceUrl({ search: value })
+  }
+
+  const handleMultiFilterToggle = (
+    value: string,
+    currentValues: string[],
+    setValues: (values: string[]) => void,
+    key: "quarter" | "company" | "staff" | "method"
+  ) => {
+    const nextValues = toggleQueryMultiValue(currentValues, value)
+    setValues(nextValues)
+    replaceUrl({ [key]: nextValues })
+  }
+
+  const handleDateFilterChange = (value: string) => {
+    setDateFilter(value)
+    replaceUrl({ date: value })
+  }
+
+  const resetFilters = () => {
+    setSearchTerm("")
+    setQuarterFilter([])
+    setCompanyFilter([])
+    setStaffFilter([])
+    setMethodFilter([])
+    setDateFilter("all")
+    replaceUrl({
+      search: "",
+      quarter: [],
+      company: [],
+      staff: [],
+      method: [],
+      date: "all",
+    })
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    setSearchTerm(params.get("search") ?? "")
+    setQuarterFilter(getQueryMultiValues(params, "quarter"))
+    setCompanyFilter(getQueryMultiValues(params, "company"))
+    setStaffFilter(getQueryMultiValues(params, "staff"))
+    setMethodFilter(getQueryMultiValues(params, "method"))
+    setDateFilter(getQuerySingleValue(params, "date"))
+  }, [searchParams])
+
+  // Fetch data from async data adapter
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true)
-        const [peopleData, meetingsData] = await Promise.all([
-          getPeople(),
-          getMeetings()
-        ])
-        setPeople(peopleData)
-        setMeetings(meetingsData)
+        const data = await getRegularInterviews()
+        setInterviews(data)
       } catch (err) {
-        console.error('Error fetching data:', err)
-        setError('データの取得に失敗しました')
+        console.error("Error fetching interviews:", err)
       } finally {
         setLoading(false)
       }
     }
-
     fetchData()
   }, [])
 
-  // Filter meetings
-  const filteredMeetings = meetings.filter((meeting) => {
-    const person = people.find((p) => p.id === meeting.personId)
-    if (!person) return false
+  // Get unique filter options from loaded data
+  const filterOptions = useMemo(() => {
+    const quarters = new Set<string>()
+    const companies = new Set<string>()
+    const staff = new Set<string>()
+    const methods = new Set<string>()
 
-    // Search filter
-    if (searchTerm) {
-      const searchMatch =
-        meeting.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        person.name.toLowerCase().includes(searchTerm.toLowerCase())
-      if (!searchMatch) return false
+    interviews.forEach((interview) => {
+      if (interview.targetQuarter) quarters.add(interview.targetQuarter)
+      if (interview.companyName) companies.add(interview.companyName)
+      if (interview.supportStaffName) staff.add(interview.supportStaffName)
+      if (interview.interviewMethod) methods.add(interview.interviewMethod)
+    })
+
+    return {
+      quarters: Array.from(quarters).sort().reverse(),
+      companies: Array.from(companies).sort(),
+      staff: Array.from(staff).sort(),
+      methods: Array.from(methods),
     }
+  }, [interviews])
 
-    // Type filter
-    if (typeFilter !== "all" && meeting.kind !== typeFilter) return false
+  // Filter interviews
+  const filteredInterviews = useMemo(() => {
+    return interviews.filter((interview) => {
+      // Search filter
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase()
+        const matchesSearch =
+          interview.personName.toLowerCase().includes(searchLower) ||
+          (interview.nickName?.toLowerCase().includes(searchLower)) ||
+          (interview.companyName?.toLowerCase().includes(searchLower)) ||
+          interview.personId.toLowerCase().includes(searchLower) ||
+          (interview.companyId?.toLowerCase().includes(searchLower))
+        if (!matchesSearch) return false
+      }
 
-    // Person filter
-    if (personFilter !== "all" && meeting.personId !== personFilter) return false
+      // Quarter filter
+      if (quarterFilter.length > 0 && !quarterFilter.includes(interview.targetQuarter ?? "")) return false
 
-    // Section filter
-    if (sectionFilter !== "all") {
-      const hasSection = meeting.notes.some((note) => note.section === sectionFilter)
-      if (!hasSection) return false
-    }
+      // Company filter
+      if (companyFilter.length > 0 && !companyFilter.includes(interview.companyName ?? "")) return false
 
-    // Date filter
-    if (dateFilter !== "all") {
-      const meetingDate = new Date(meeting.datetime)
-      const now = new Date()
-      const daysAgo = Number.parseInt(dateFilter)
-      const filterDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
-      if (meetingDate < filterDate) return false
-    }
+      // Staff filter
+      if (staffFilter.length > 0 && !staffFilter.includes(interview.supportStaffName ?? "")) return false
 
-    return true
-  })
+      // Method filter
+      if (methodFilter.length > 0 && !methodFilter.includes(interview.interviewMethod ?? "")) return false
 
-  // Sort meetings by date (newest first)
-  const sortedMeetings = filteredMeetings.sort(
-    (a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime(),
-  )
+      // Date filter
+      if (dateFilter !== "all") {
+        const interviewDate = new Date(interview.interviewDate)
+        const now = new Date()
+        const daysAgo = Number.parseInt(dateFilter)
+        const filterDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
+        if (interviewDate < filterDate) return false
+      }
 
-  // Get unique values for filters
-  const uniquePeople = Array.from(new Set(meetings.map((m) => m.personId)))
-    .map((id) => people.find((p) => p.id === id))
-    .filter(Boolean)
+      return true
+    }).sort((a, b) => new Date(b.interviewDate).getTime() - new Date(a.interviewDate).getTime())
+  }, [interviews, searchTerm, quarterFilter, companyFilter, staffFilter, methodFilter, dateFilter])
 
-  const uniqueSections = Object.keys(meetingTaxonomy)
+  // Statistics
+  const stats = useMemo(() => {
+    const now = new Date()
+    const thisMonth = filteredInterviews.filter((i) => {
+      const date = new Date(i.interviewDate)
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+    }).length
 
-  if (loading) {
-    return (
-      <AuthGuard>
-        <div className="p-6 space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">面談記録</h1>
-            <p className="text-muted-foreground mt-2">面談の記録と内容を管理</p>
-          </div>
-          <ListPanelLoadingSkeleton />
-        </div>
-      </AuthGuard>
-    )
-  }
-
-  if (error) {
-    return (
-      <AuthGuard>
-        <div className="p-6 space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">面談記録</h1>
-            <p className="text-muted-foreground mt-2">面談の記録と内容を管理</p>
-          </div>
-          <div className="flex items-center justify-center py-8">
-            <div className="text-red-500">{error}</div>
-          </div>
-        </div>
-      </AuthGuard>
-    )
-  }
+    return { thisMonth }
+  }, [filteredInterviews])
 
   return (
     <AuthGuard>
       <div className="p-6 space-y-6">
         {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">面談記録</h1>
-            <p className="text-muted-foreground mt-2">面談の記録と内容を管理</p>
-          </div>
-
-          {/* View Mode Toggle */}
-          <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "list" | "calendar")}>
-            <TabsList>
-              <TabsTrigger value="list" className="gap-2">
-                <List className="h-4 w-4" />
-                リスト
-              </TabsTrigger>
-              <TabsTrigger value="calendar" className="gap-2">
-                <Calendar className="h-4 w-4" />
-                カレンダー
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">面談一覧</h1>
+          <p className="text-muted-foreground mt-2">定期面談の記録と企業提出用レポートを管理</p>
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="面談タイトル、人材名で検索..."
+              placeholder="人材名、呼び名、法人名、ID..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-10 w-64"
             />
           </div>
 
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-40">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4" />
-                <SelectValue placeholder="面談種別" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              <SelectItem value="仕事">仕事</SelectItem>
-              <SelectItem value="プライベート">プライベート</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="対象四半期"
+            options={filterOptions.quarters.map((quarter) => ({ value: quarter, label: quarter }))}
+            selectedValues={quarterFilter}
+            onToggle={(value) => handleMultiFilterToggle(value, quarterFilter, setQuarterFilter, "quarter")}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-          <Select value={personFilter} onValueChange={setPersonFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="対象者" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {uniquePeople.map((person) => (
-                <SelectItem key={person!.id} value={person!.id}>
-                  {person!.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="法人"
+            options={filterOptions.companies.map((company) => ({ value: company, label: company }))}
+            selectedValues={companyFilter}
+            onToggle={(value) => handleMultiFilterToggle(value, companyFilter, setCompanyFilter, "company")}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-          <Select value={sectionFilter} onValueChange={setSectionFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="セクション" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              {uniqueSections.map((section) => (
-                <SelectItem key={section} value={section}>
-                  {section}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="支援担当者"
+            options={filterOptions.staff.map((staff) => ({ value: staff, label: staff }))}
+            selectedValues={staffFilter}
+            onToggle={(value) => handleMultiFilterToggle(value, staffFilter, setStaffFilter, "staff")}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-          <Select value={dateFilter} onValueChange={setDateFilter}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="期間" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">すべて</SelectItem>
-              <SelectItem value="7">過去7日</SelectItem>
-              <SelectItem value="30">過去30日</SelectItem>
-              <SelectItem value="90">過去90日</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterMultiSelectPopover
+            label="面談方法"
+            options={filterOptions.methods.map((method) => ({ value: method, label: method }))}
+            selectedValues={methodFilter}
+            onToggle={(value) => handleMultiFilterToggle(value, methodFilter, setMethodFilter, "method")}
+            triggerIcon={<FilterIcon className="mr-2 h-4 w-4 flex-shrink-0" />}
+          />
 
-          {/* Results count */}
-          <Badge variant="secondary">{sortedMeetings.length} 件</Badge>
+          <FilterSelect
+            label="期間"
+            value={dateFilter}
+            options={MEETING_DATE_FILTER_OPTIONS}
+            onValueChange={handleDateFilterChange}
+            triggerIcon={<FilterIcon className="h-4 w-4 flex-shrink-0" />}
+          />
+
+          <ResultCountBadge count={filteredInterviews.length} total={interviews.length} />
         </div>
 
-        {/* Content */}
-        <Tabs value={viewMode}>
-          <TabsContent value="list">
-            <div className="space-y-4">
-              {sortedMeetings.length === 0 ? (
-                <Card>
-                  <CardContent className="flex items-center justify-center py-8">
-                    <p className="text-muted-foreground">面談記録がありません</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                sortedMeetings.map((meeting) => {
-                  const person = people.find((p) => p.id === meeting.personId)
-                  if (!person) return null
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Interview List */}
+          <div className="lg:col-span-3 space-y-4">
+            {loading ? (
+              <Card>
+                <CardContent className="flex items-center justify-center py-8">
+                  <p className="text-muted-foreground">読み込み中...</p>
+                </CardContent>
+              </Card>
+            ) : filteredInterviews.length === 0 ? (
+              <Card>
+                <CardContent className="flex items-center justify-center py-8">
+                  <p className="text-muted-foreground">
+                    {interviews.length === 0
+                      ? "面談記録がありません"
+                      : "該当する面談記録がありません"}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              filteredInterviews.map((interview) => (
+                <InterviewCard key={interview.id} interview={interview} />
+              ))
+            )}
+          </div>
 
-                  return (
-                    <Card key={meeting.id}>
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <CardTitle className="text-lg">{meeting.title}</CardTitle>
-                            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <User className="h-4 w-4" />
-                                {person.name}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Calendar className="h-4 w-4" />
-                                {formatDateTime(meeting.datetime)}
-                              </span>
-                              {meeting.durationMin && (
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-4 w-4" />
-                                  {meeting.durationMin}分
-                                </span>
-                              )}
-                              <Badge variant="outline">{meeting.kind}</Badge>
-                            </div>
-                            {meeting.attendees && meeting.attendees.length > 0 && (
-                              <div className="mt-2 text-sm text-muted-foreground">
-                                参加者: {meeting.attendees.join(", ")}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <TreeNoteView notes={meeting.notes} />
-                      </CardContent>
-                    </Card>
-                  )
-                })
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="calendar">
+          {/* Sidebar Stats */}
+          <div className="space-y-6">
+            {/* Summary Stats */}
             <Card>
-              <CardContent className="flex items-center justify-center py-16">
-                <div className="text-center">
-                  <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">カレンダービューは今後実装予定です</p>
-                  <p className="text-sm text-muted-foreground mt-2">現在はリストビューをご利用ください</p>
+              <CardHeader>
+                <CardTitle>サマリー</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">総件数</span>
+                  <Badge variant="secondary">{filteredInterviews.length}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">今月</span>
+                  <Badge variant="secondary">{stats.thisMonth}</Badge>
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-        </Tabs>
 
-        {/* Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">面談種別</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm">仕事</span>
-                  <Badge variant="secondary">{sortedMeetings.filter((m) => m.kind === "仕事").length}</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">プライベート</span>
-                  <Badge variant="secondary">{sortedMeetings.filter((m) => m.kind === "プライベート").length}</Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">今月の面談</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {
-                  sortedMeetings.filter((meeting) => {
-                    const meetingDate = new Date(meeting.datetime)
+            {/* Quick Filters */}
+            <Card>
+              <CardHeader>
+                <CardTitle>クイックフィルタ</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <button
+                  onClick={() => {
                     const now = new Date()
-                    return meetingDate.getMonth() === now.getMonth() && meetingDate.getFullYear() === now.getFullYear()
-                  }).length
-                }
-              </div>
-              <p className="text-xs text-muted-foreground">実施済み</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">平均面談時間</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {Math.round(
-                  sortedMeetings.reduce((sum, m) => sum + (m.durationMin || 0), 0) / sortedMeetings.length || 0,
-                )}
-                分
-              </div>
-              <p className="text-xs text-muted-foreground">1回あたり</p>
-            </CardContent>
-          </Card>
+                    const currentQuarter = `${now.getFullYear()}年第${Math.ceil((now.getMonth() + 1) / 3)}四半期`
+                    setQuarterFilter([currentQuarter])
+                    replaceUrl({ quarter: [currentQuarter] })
+                  }}
+                  className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
+                >
+                  今四半期のみ表示
+                </button>
+                <button
+                  onClick={resetFilters}
+                  className="w-full text-left p-2 rounded hover:bg-muted/50 transition-colors text-sm"
+                >
+                  フィルタをリセット
+                </button>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </AuthGuard>

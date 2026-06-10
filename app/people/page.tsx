@@ -291,6 +291,7 @@ export default function PeoplePage() {
         searchPlaceholder="人材名、法人名、事業所名で検索..."
         onRowClick={handleRowClick}
         loading={loading}
+        tableClassName="min-w-[960px] table-fixed"
         initialSearchTerm={searchParams.get('search') || ''}
         initialActiveFilters={getFiltersFromUrl()}
         onFilterChange={updateUrl}

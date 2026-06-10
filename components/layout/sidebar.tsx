@@ -4,7 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Home, Users, FileText, FolderOpen, ExternalLink } from "lucide-react"
+import { Calendar, CheckSquare, Clock, Home, Users, FileText, FolderOpen, ExternalLink } from "lucide-react"
 
 const navigation = [
   {
@@ -23,34 +23,34 @@ const navigation = [
     icon: FileText,
   },
   {
+    name: "面談一覧",
+    href: "/meetings",
+    icon: Calendar,
+  },
+  {
+    name: "サポート記録",
+    href: "/support",
+    icon: CheckSquare,
+  },
+  {
+    name: "タイムライン",
+    href: "/timeline",
+    icon: Clock,
+  },
+  {
     name: "書類管理",
     href: "/documents",
     icon: FolderOpen,
   },
-  // {
-  //   name: "面談記録",
-  //   href: "/meetings",
-  //   icon: Calendar,
-  // },
-  // {
-  //   name: "タイムライン",
-  //   href: "/timeline",
-  //   icon: Clock,
-  // },
-  // {
-  //   name: "サポート記録",
-  //   href: "/actions",
-  //   icon: CheckSquare,
-  // },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <div className="flex h-full w-64 flex-col bg-sidebar border-r border-sidebar-border">
+    <div className="flex h-full w-60 shrink-0 flex-col bg-sidebar border-r border-sidebar-border">
       {/* Logo */}
-      <div className="flex h-14 items-center px-5">
+      <div className="flex h-14 items-center px-4">
         <div className="flex items-center gap-2">
           <Image src="/funstudio-logo.webp" alt="FunBase" width={120} height={32} className="h-8 w-auto" />
         </div>
