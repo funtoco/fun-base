@@ -8,9 +8,12 @@ import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
+import { BoardLoadingSkeleton } from "@/components/ui/funbase-loading"
+import { useNavigationProgress } from "@/components/navigation-progress"
 import { Search, Filter as FilterIcon, X, ChevronDown, ChevronUp, Building2 } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
+import { matchesPersonSearch } from "@/lib/person-search"
 import { cn, formatDate, isExpiringSoon } from "@/lib/utils"
 import { toggleQueryMultiValue } from "@/lib/interview-list-query"
 import { getLatestVisaActivityDate } from "@/lib/visa-display"
@@ -38,6 +41,7 @@ interface ExtendedKanbanColumn {
 
 export default function VisasPage() {
   const router = useRouter()
+  const { startNavigation } = useNavigationProgress()
   const searchParams = useSearchParams()
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState<string[]>([])
@@ -151,8 +155,7 @@ export default function VisasPage() {
 
     // Search filter
     if (searchTerm) {
-      const searchMatch = person.name.toLowerCase().includes(searchTerm.toLowerCase())
-      if (!searchMatch) return false
+      if (!matchesPersonSearch(person, searchTerm)) return false
     }
 
     // Type filter
@@ -259,8 +262,7 @@ export default function VisasPage() {
 
       // Search filter
       if (searchTerm) {
-        const searchMatch = person.name.toLowerCase().includes(searchTerm.toLowerCase())
-        if (!searchMatch) return false
+        if (!matchesPersonSearch(person, searchTerm)) return false
       }
 
       // Type filter
@@ -286,7 +288,8 @@ export default function VisasPage() {
   }
 
   const handleItemClick = (item: any) => {
-    window.location.href = `/people/${item.metadata.personId}`
+    startNavigation()
+    router.push(`/people/${item.metadata.personId}`)
   }
 
   const clearAllFilters = () => {
@@ -396,9 +399,7 @@ export default function VisasPage() {
           <h1 className="text-3xl font-bold text-foreground">ビザ進捗管理</h1>
           <p className="text-muted-foreground mt-2">ビザ申請の進捗状況確認</p>
         </div>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-muted-foreground">読み込み中...</div>
-        </div>
+        <BoardLoadingSkeleton />
       </div>
     )
   }
@@ -431,7 +432,7 @@ export default function VisasPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="人材名で検索..."
+              placeholder="人材名、法人名、事業所名で検索..."
               value={searchTerm}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-10 w-64"

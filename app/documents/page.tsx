@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { PersonAvatar } from "@/components/ui/person-avatar"
+import { useNavigationProgress } from "@/components/navigation-progress"
 import { getAllPersonDocuments, type PersonDocumentWithPerson } from "@/lib/supabase/person-documents"
 import type { DocumentType } from "@/lib/models"
 
@@ -12,6 +13,13 @@ const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   passport_back: "パスポート（裏）",
   residence_card_front: "在留カード（表）",
   residence_card_back: "在留カード（裏）",
+  coe_copy: "COE写し",
+  flight_ticket_copy: "フライト写し",
+  bank_card_copy: "口座カード写し",
+  resume: "履歴書",
+  designation_document: "指定書写し",
+  employment_insurance_notice: "雇用保険通知書",
+  other: "その他書類",
 }
 
 function formatFileSize(bytes?: number): string {
@@ -35,6 +43,7 @@ function formatDate(dateString?: string): string {
 export default function DocumentsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { startNavigation } = useNavigationProgress()
   const [documents, setDocuments] = useState<PersonDocumentWithPerson[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -105,11 +114,31 @@ export default function DocumentsPage() {
         DOCUMENT_TYPE_LABELS[row.documentType as DocumentType] || row.documentType,
     },
     {
+      key: "title",
+      label: "タイトル",
+      sortable: true,
+      render: (value) => (
+        <span className="truncate max-w-[180px] block text-sm">
+          {value || "-"}
+        </span>
+      ),
+    },
+    {
       key: "fileName",
       label: "ファイル名",
       sortable: true,
       render: (value) => (
         <span className="truncate max-w-[200px] block text-sm">
+          {value || "-"}
+        </span>
+      ),
+    },
+    {
+      key: "note",
+      label: "メモ",
+      sortable: true,
+      render: (value) => (
+        <span className="line-clamp-2 max-w-[260px] text-sm text-muted-foreground">
           {value || "-"}
         </span>
       ),
@@ -158,21 +187,8 @@ export default function DocumentsPage() {
   ]
 
   const handleRowClick = (doc: PersonDocumentWithPerson) => {
+    startNavigation()
     router.push(`/people/${doc.personId}`)
-  }
-
-  if (loading) {
-    return (
-      <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">書類管理</h1>
-          <p className="text-muted-foreground mt-2">アップロードされた書類の一覧</p>
-        </div>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-muted-foreground">読み込み中...</div>
-        </div>
-      </div>
-    )
   }
 
   if (error) {
@@ -202,11 +218,12 @@ export default function DocumentsPage() {
         data={documentsWithLabel}
         columns={columns}
         filters={filters}
-        searchKeys={["personName", "fileName", "documentTypeLabel"]}
+        searchKeys={["personName", "title", "fileName", "documentTypeLabel", "note"]}
         onRowClick={handleRowClick}
         initialSearchTerm={searchParams.get("search") || ""}
         initialActiveFilters={getFiltersFromUrl()}
         onFilterChange={updateUrl}
+        loading={loading}
       />
     </div>
   )

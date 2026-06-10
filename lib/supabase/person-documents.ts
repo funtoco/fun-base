@@ -1,5 +1,21 @@
 import { createClient } from './client'
 import type { PersonDocument } from '@/lib/models'
+import { resolveReplacementDocumentNote } from '@/lib/document-notes'
+
+const REMOVED_DOCUMENT_TYPE = 'resident_card_copy'
+const VALID_DOCUMENT_TYPES = [
+  'passport_front',
+  'passport_back',
+  'residence_card_front',
+  'residence_card_back',
+  'coe_copy',
+  'flight_ticket_copy',
+  'bank_card_copy',
+  'resume',
+  'designation_document',
+  'employment_insurance_notice',
+  'other',
+]
 
 export async function getPersonDocuments(personId: string): Promise<PersonDocument[]> {
   const supabase = createClient()
@@ -7,6 +23,7 @@ export async function getPersonDocuments(personId: string): Promise<PersonDocume
     .from('person_documents')
     .select('*')
     .eq('person_id', personId)
+    .neq('document_type', REMOVED_DOCUMENT_TYPE)
     .order('created_at', { ascending: true })
 
   if (error) {
@@ -27,6 +44,7 @@ export async function getAllPersonDocuments(): Promise<PersonDocumentWithPerson[
   const { data, error } = await supabase
     .from('person_documents')
     .select('*, people(name, kana)')
+    .neq('document_type', REMOVED_DOCUMENT_TYPE)
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -62,8 +80,13 @@ const BUCKET_NAME = 'person-documents'
 export async function uploadDocumentDirect(
   personId: string,
   documentType: string,
-  file: File
+  file: File,
+  options: { replaceDocumentId?: string | null; title?: string | null; note?: string | null } = {}
 ): Promise<{ success: boolean; error?: string }> {
+  if (!VALID_DOCUMENT_TYPES.includes(documentType)) {
+    return { success: false, error: '対応していない書類種別です' }
+  }
+
   if (file.size > MAX_FILE_SIZE) {
     return { success: false, error: 'ファイルサイズは10MB以下にしてください' }
   }
@@ -88,14 +111,34 @@ export async function uploadDocumentDirect(
   const extension = file.name.split('.').pop() || ''
   const timestamp = Date.now()
   const filePath = `${tenantId}/${documentType}/${documentType}_${personId}_${timestamp}.${extension}`
+  const allowMultiple = documentType === 'other'
+  let documentToReplace: { id: string; storage_path: string; title?: string | null; note?: string | null } | null = null
 
-  // Check for existing document of the same type
-  const { data: existingDoc } = await supabase
-    .from('person_documents')
-    .select('id, storage_path')
-    .eq('person_id', personId)
-    .eq('document_type', documentType)
-    .single()
+  if (options.replaceDocumentId) {
+    const { data: replaceDoc, error: replaceDocError } = await supabase
+      .from('person_documents')
+      .select('id, storage_path, title, note')
+      .eq('id', options.replaceDocumentId)
+      .eq('person_id', personId)
+      .eq('document_type', documentType)
+      .single()
+
+    if (replaceDocError || !replaceDoc) {
+      return { success: false, error: '差し替え対象の書類が見つかりません' }
+    }
+
+    documentToReplace = replaceDoc
+  } else if (!allowMultiple) {
+    // Preserve the existing one-document-per-type behavior for fixed document types.
+    const { data: existingDoc } = await supabase
+      .from('person_documents')
+      .select('id, storage_path, title, note')
+      .eq('person_id', personId)
+      .eq('document_type', documentType)
+      .maybeSingle()
+
+    documentToReplace = existingDoc
+  }
 
   // Upload file directly to Supabase Storage
   const { error: uploadError } = await supabase.storage
@@ -111,10 +154,10 @@ export async function uploadDocumentDirect(
     return { success: false, error: 'ファイルのアップロードに失敗しました' }
   }
 
-  // Delete old document before insert (unique constraint on person_id + document_type)
-  if (existingDoc) {
-    await supabase.from('person_documents').delete().eq('id', existingDoc.id)
-    await supabase.storage.from(BUCKET_NAME).remove([existingDoc.storage_path])
+  // Delete fixed document types before insert for compatibility with the existing unique constraint.
+  if (documentToReplace && !allowMultiple) {
+    await supabase.from('person_documents').delete().eq('id', documentToReplace.id)
+    await supabase.storage.from(BUCKET_NAME).remove([documentToReplace.storage_path])
   }
 
   // Get authenticated user
@@ -128,10 +171,12 @@ export async function uploadDocumentDirect(
       tenant_id: tenantId,
       document_type: documentType,
       storage_path: filePath,
+      title: options.title?.trim() || documentToReplace?.title || null,
       file_name: file.name,
       content_type: file.type,
       file_size_bytes: file.size,
       uploaded_by: user?.id || null,
+      note: resolveReplacementDocumentNote(options.note ?? undefined, documentToReplace?.note),
     })
 
   if (insertError) {
@@ -139,6 +184,11 @@ export async function uploadDocumentDirect(
     await supabase.storage.from(BUCKET_NAME).remove([filePath])
     console.error('DB insert error:', insertError)
     return { success: false, error: 'ドキュメントの保存に失敗しました' }
+  }
+
+  if (documentToReplace && allowMultiple) {
+    await supabase.from('person_documents').delete().eq('id', documentToReplace.id)
+    await supabase.storage.from(BUCKET_NAME).remove([documentToReplace.storage_path])
   }
 
   return { success: true }
@@ -151,10 +201,12 @@ function mapToPersonDocument(data: any): PersonDocument {
     tenantId: data.tenant_id,
     documentType: data.document_type,
     storagePath: data.storage_path,
+    title: data.title,
     fileName: data.file_name,
     contentType: data.content_type,
     fileSizeBytes: data.file_size_bytes,
     uploadedBy: data.uploaded_by,
+    note: data.note,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   }

@@ -2,14 +2,12 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Building2, Users, Plus, MoreHorizontal, Trash2, Pencil } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { TenantMembersPage } from "@/components/tenant/tenant-members-page"
+import { ArrowLeft, Building2, Users, Plus, Trash2, Pencil } from "lucide-react"
 import { CreateTenantDialog } from "@/components/tenant/create-tenant-dialog"
 import { TenantEditDialog } from "@/components/tenant/tenant-edit-dialog"
 import { createTenantAction, getTenantsAction, isUserOwnerOfAnyTenant, type CreateTenantData } from "@/lib/actions/tenant-actions"
@@ -25,7 +23,6 @@ export default function AdminTenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [userTenants, setUserTenants] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedTenant, setSelectedTenant] = useState<string | null>(null)
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
@@ -166,25 +163,6 @@ export default function AdminTenantsPage() {
     )
   }
 
-  // If a tenant is selected, show the tenant members page
-  if (selectedTenant) {
-    return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => setSelectedTenant(null)}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            テナント一覧に戻る
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">テナント管理</h1>
-            <p className="text-muted-foreground mt-1">メンバーと権限を管理します</p>
-          </div>
-        </div>
-        <TenantMembersPage tenantId={selectedTenant} />
-      </div>
-    )
-  }
-
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -217,7 +195,6 @@ export default function AdminTenantsPage() {
             <Card 
               key={tenant.id} 
               className="hover:shadow-md transition-shadow relative"
-              onClick={() => setSelectedTenant(tenant.id)}
             >
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -278,10 +255,12 @@ export default function AdminTenantsPage() {
                   <Button 
                     variant="outline" 
                     className="w-full"
-                    onClick={() => setSelectedTenant(tenant.id)}
+                    asChild
                   >
-                    <Users className="h-4 w-4 mr-2" />
-                    メンバー管理
+                    <Link href={`/admin/tenants/${tenant.id}`}>
+                      <Users className="h-4 w-4 mr-2" />
+                      メンバー管理
+                    </Link>
                   </Button>
                 </div>
               </CardContent>

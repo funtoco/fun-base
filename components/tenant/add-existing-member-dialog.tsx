@@ -12,16 +12,19 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { CheckCircle, Search, Loader2 } from "lucide-react"
 import { useToast } from "@/lib/hooks/use-toast"
+import type { TenantOffice } from "@/lib/supabase/tenants"
 
 interface AddExistingMemberDialogProps {
   tenantId: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onAddMember: () => void
+  offices?: TenantOffice[]
 }
 
 interface SearchUser {
@@ -36,12 +39,14 @@ export function AddExistingMemberDialog({
   tenantId, 
   open, 
   onOpenChange, 
-  onAddMember 
+  onAddMember,
+  offices = [],
 }: AddExistingMemberDialogProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<SearchUser[]>([])
   const [selectedUser, setSelectedUser] = useState<SearchUser | null>(null)
   const [role, setRole] = useState<'admin' | 'member' | 'guest'>('member')
+  const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [searching, setSearching] = useState(false)
   const { toast } = useToast()
@@ -108,7 +113,8 @@ export function AddExistingMemberDialog({
         },
         body: JSON.stringify({
           userId: selectedUser.user_id,
-          role: role
+          role: role,
+          officeIds: selectedOfficeIds,
         })
       })
 
@@ -128,6 +134,7 @@ export function AddExistingMemberDialog({
       setSearchResults([])
       setSelectedUser(null)
       setRole('member')
+      setSelectedOfficeIds([])
       onOpenChange(false)
       onAddMember()
     } catch (error) {
@@ -147,7 +154,16 @@ export function AddExistingMemberDialog({
     setSearchResults([])
     setSelectedUser(null)
     setRole('member')
+    setSelectedOfficeIds([])
     onOpenChange(false)
+  }
+
+  const toggleOffice = (officeId: string, checked: boolean) => {
+    setSelectedOfficeIds((currentOfficeIds) =>
+      checked
+        ? Array.from(new Set([...currentOfficeIds, officeId]))
+        : currentOfficeIds.filter((id) => id !== officeId)
+    )
   }
 
   const getRoleBadgeColor = (role: string) => {
@@ -276,6 +292,28 @@ export function AddExistingMemberDialog({
                 </Select>
               </div>
             )}
+
+            {selectedUser && offices.length > 0 && (
+              <div className="grid gap-2">
+                <Label>所属先</Label>
+                <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">
+                  {offices.map((office) => (
+                    <Label
+                      key={office.id}
+                      htmlFor={`add-office-${office.id}`}
+                      className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-muted"
+                    >
+                      <Checkbox
+                        id={`add-office-${office.id}`}
+                        checked={selectedOfficeIds.includes(office.id)}
+                        onCheckedChange={(checked) => toggleOffice(office.id, checked === true)}
+                      />
+                      <span className="text-sm font-medium">{office.name}</span>
+                    </Label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
@@ -290,4 +328,3 @@ export function AddExistingMemberDialog({
     </Dialog>
   )
 }
-

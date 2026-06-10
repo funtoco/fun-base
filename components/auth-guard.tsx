@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useAuth } from "@/contexts/auth-context"
+import { FunBaseLoading } from "@/components/ui/funbase-loading"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 
@@ -27,11 +28,7 @@ export function AuthGuard({ children, requireAuth = true, redirectTo = "/login" 
   }, [user, loading, requireAuth, redirectTo, router])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    )
+    return <FunBaseLoading variant="fullscreen" title="FunBaseを準備中" description="アクセス権限を確認しています" />
   }
 
   if (requireAuth && !user) {

@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { FunBaseLoading } from "@/components/ui/funbase-loading"
+import { useNavigationProgress } from "@/components/navigation-progress"
 import { ArrowLeft, Save, AlertTriangle, CheckCircle } from "lucide-react"
 import { getPersonById } from "@/lib/supabase/people"
 import type { Person } from "@/lib/models"
@@ -15,6 +17,7 @@ import type { Person } from "@/lib/models"
 export default function EditPersonPage() {
   const router = useRouter()
   const params = useParams()
+  const { startNavigation } = useNavigationProgress()
   const id = params.id as string
 
   const [person, setPerson] = useState<Person | null>(null)
@@ -125,9 +128,11 @@ export default function EditPersonPage() {
   if (loading) {
     return (
       <div className="p-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="text-muted-foreground">読み込み中...</div>
-        </div>
+        <FunBaseLoading
+          variant="inline"
+          title="編集画面を読み込み中"
+          description="人材情報をフォームに反映しています"
+        />
       </div>
     )
   }
@@ -157,7 +162,10 @@ export default function EditPersonPage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.push(`/people/${id}`)}
+            onClick={() => {
+              startNavigation()
+              router.push(`/people/${id}`)
+            }}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -547,7 +555,10 @@ export default function EditPersonPage() {
       <div className="flex items-center justify-end gap-4">
         <Button
           variant="outline"
-          onClick={() => router.push(`/people/${id}`)}
+          onClick={() => {
+            startNavigation()
+            router.push(`/people/${id}`)
+          }}
           disabled={saving}
         >
           キャンセル
@@ -563,4 +574,3 @@ export default function EditPersonPage() {
     </div>
   )
 }
-

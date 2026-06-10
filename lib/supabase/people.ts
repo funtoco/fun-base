@@ -1,16 +1,86 @@
 import { createClient } from './client'
 import type { Person } from '@/lib/models'
+import {
+  applyPeopleAccessFilter,
+  canAccessPersonByCompany,
+  getCompanyAccessForUser,
+  type CompanyAccess,
+} from './people-access'
+
+async function getCurrentUserCompanyAccess(): Promise<CompanyAccess> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return {
+      fullTenantIds: new Set(),
+      restrictedTenantCompanies: new Map(),
+      hasActiveMembership: false,
+    }
+  }
+
+  try {
+    return await getCompanyAccessForUser(supabase, user.id)
+  } catch (error) {
+    console.error("Error fetching current user company access:", error)
+    throw error
+  }
+}
+
+function mapPersonRow(person: any, tenantName?: string): Person {
+  return {
+    id: person.id,
+    name: person.name,
+    kana: person.kana,
+    nationality: person.nationality,
+    dob: person.dob,
+    specificSkillField: person.specific_skill_field,
+    phone: person.phone,
+    employeeNumber: person.employee_number,
+    workingStatus: person.working_status,
+    residenceCardNo: person.residence_card_no,
+    residenceCardExpiryDate: person.residence_card_expiry_date,
+    residenceCardIssuedDate: person.residence_card_issued_date,
+    email: person.email,
+    address: person.address,
+    tenantName,
+    company: person.company,
+    note: person.note,
+    visaId: person.visa_id,
+    externalId: person.external_id,
+    imagePath: person.image_path,
+    employmentNotificationDate: person.employment_notification_date,
+    employmentChangeNotificationDate: person.employment_change_notification_date,
+    interviewDate: person.interview_date,
+    jobOfferDate: person.job_offer_date,
+    applicationNumber: person.application_number,
+    departureProcedureStatus: person.departure_procedure_status,
+    entryConfirmedDate: person.entry_confirmed_date,
+    myNumber: person.my_number,
+    joiningDate: person.joining_date,
+    insuranceNumber: person.insurance_number,
+    insuranceAcquiredDate: person.insurance_acquired_date,
+    insuranceEnrollmentStatus: person.insurance_enrollment_status,
+    createdAt: person.created_at,
+    updatedAt: person.updated_at
+  }
+}
 
 export async function getPeople(): Promise<Person[]> {
   const supabase = createClient()
+  const companyAccess = await getCurrentUserCompanyAccess()
+  const query = applyPeopleAccessFilter(
+    supabase
+      .from('people')
+      .select(`
+        *,
+        tenant:tenant_id (id, name)
+      `),
+    companyAccess
+  )
 
-  const { data, error } = await supabase
-    .from('people')
-    .select(`
-      *,
-      tenant:tenant_id (id, name)
-    `)
-    .order('created_at', { ascending: false })
+  if (!query) return []
+
+  const { data, error } = await query.order('created_at', { ascending: false })
 
   if (error) {
     console.error('Error fetching people:', error)
@@ -19,54 +89,28 @@ export async function getPeople(): Promise<Person[]> {
 
   if (!data || data.length === 0) return []
 
-  return data.map((person: any) => ({
-      id: person.id,
-      name: person.name,
-      kana: person.kana,
-      nationality: person.nationality,
-      dob: person.dob,
-      specificSkillField: person.specific_skill_field,
-      phone: person.phone,
-      employeeNumber: person.employee_number,
-      workingStatus: person.working_status,
-      residenceCardNo: person.residence_card_no,
-      residenceCardExpiryDate: person.residence_card_expiry_date,
-      residenceCardIssuedDate: person.residence_card_issued_date,
-      email: person.email,
-      address: person.address,
-      tenantName: person.tenant?.name,
-      company: person.company,
-      note: person.note,
-      visaId: person.visa_id,
-      externalId: person.external_id,
-      imagePath: person.image_path,
-      employmentNotificationDate: person.employment_notification_date,
-      employmentChangeNotificationDate: person.employment_change_notification_date,
-      interviewDate: person.interview_date,
-      jobOfferDate: person.job_offer_date,
-      applicationNumber: person.application_number,
-      departureProcedureStatus: person.departure_procedure_status,
-      entryConfirmedDate: person.entry_confirmed_date,
-      myNumber: person.my_number,
-      joiningDate: person.joining_date,
-      insuranceNumber: person.insurance_number,
-      insuranceAcquiredDate: person.insurance_acquired_date,
-      insuranceEnrollmentStatus: person.insurance_enrollment_status,
-      createdAt: person.created_at,
-      updatedAt: person.updated_at
-  }))
+  return data
+    .filter((person: any) => canAccessPersonByCompany(person, companyAccess))
+    .map((person: any) => mapPersonRow(person, person.tenant?.name))
 }
 
 export async function getPersonById(id: string): Promise<Person | null> {
   const supabase = createClient()
+  const companyAccess = await getCurrentUserCompanyAccess()
   
   console.log('Fetching person with ID:', id)
+
+  const query = applyPeopleAccessFilter(
+    supabase
+      .from('people')
+      .select('*')
+      .eq('id', id),
+    companyAccess
+  )
+
+  if (!query) return null
   
-  const { data, error } = await supabase
-    .from('people')
-    .select('*')
-    .eq('id', id)
-    .single()
+  const { data, error } = await query.single()
   
   console.log('Query result:', { data, error })
   
@@ -77,6 +121,10 @@ export async function getPersonById(id: string): Promise<Person | null> {
   
   if (!data) {
     console.log('No person found with ID:', id)
+    return null
+  }
+
+  if (!canAccessPersonByCompany(data, companyAccess)) {
     return null
   }
   
@@ -95,42 +143,7 @@ export async function getPersonById(id: string): Promise<Person | null> {
     }
   }
   
-  return {
-    id: data.id,
-    name: data.name,
-    kana: data.kana,
-    nationality: data.nationality,
-    dob: data.dob,
-    specificSkillField: data.specific_skill_field,
-    phone: data.phone,
-    employeeNumber: data.employee_number,
-    workingStatus: data.working_status,
-    residenceCardNo: data.residence_card_no,
-    residenceCardExpiryDate: data.residence_card_expiry_date,
-    residenceCardIssuedDate: data.residence_card_issued_date,
-    email: data.email,
-    address: data.address,
-    tenantName: tenantName,
-    company: data.company,
-    note: data.note,
-    visaId: data.visa_id,
-    externalId: data.external_id,
-    imagePath: data.image_path,
-    employmentNotificationDate: data.employment_notification_date,
-    employmentChangeNotificationDate: data.employment_change_notification_date,
-    interviewDate: data.interview_date,
-    jobOfferDate: data.job_offer_date,
-    applicationNumber: data.application_number,
-    departureProcedureStatus: data.departure_procedure_status,
-    entryConfirmedDate: data.entry_confirmed_date,
-    myNumber: data.my_number,
-    joiningDate: data.joining_date,
-    insuranceNumber: data.insurance_number,
-    insuranceAcquiredDate: data.insurance_acquired_date,
-    insuranceEnrollmentStatus: data.insurance_enrollment_status,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at
-  }
+  return mapPersonRow(data, tenantName)
 }
 
 export async function createPerson(person: Omit<Person, 'createdAt' | 'updatedAt'>): Promise<Person> {

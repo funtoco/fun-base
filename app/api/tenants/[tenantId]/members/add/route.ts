@@ -3,6 +3,58 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
 import { canManageTenant } from "@/lib/tenant-access"
 
+function normalizeOfficeIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .filter((id): id is string => typeof id === "string")
+        .map((id) => id.trim())
+        .filter(Boolean)
+    )
+  )
+}
+
+async function replaceOfficeAssignments(
+  adminSupabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  userTenantId: string,
+  officeIds: string[]
+): Promise<string | null> {
+  const { error: deleteError } = await adminSupabase
+    .from("user_tenant_offices")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .eq("user_tenant_id", userTenantId)
+
+  if (deleteError) {
+    console.error("Error deleting member office assignments:", deleteError)
+    return "Failed to update member affiliations"
+  }
+
+  if (officeIds.length === 0) {
+    return null
+  }
+
+  const { error: insertError } = await adminSupabase
+    .from("user_tenant_offices")
+    .insert(officeIds.map((officeId) => ({
+      tenant_id: tenantId,
+      user_tenant_id: userTenantId,
+      tenant_office_id: officeId,
+    })))
+
+  if (insertError) {
+    console.error("Error inserting member office assignments:", insertError)
+    return "Failed to update member affiliations"
+  }
+
+  return null
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { tenantId: string } }
@@ -17,6 +69,7 @@ export async function POST(
 
     const body = await request.json()
     const { userId, role } = body
+    const officeIds = normalizeOfficeIds(body.officeIds)
 
     if (!userId || !role) {
       return NextResponse.json(
@@ -46,6 +99,30 @@ export async function POST(
         { error: "You don't have permission to add members" },
         { status: 403 }
       )
+    }
+
+    if (officeIds.length > 0) {
+      const { data: offices, error: officesError } = await supabase
+        .from("tenant_offices")
+        .select("id")
+        .eq("tenant_id", params.tenantId)
+        .eq("is_active", true)
+        .in("id", officeIds)
+
+      if (officesError) {
+        console.error("Error verifying member offices:", officesError)
+        return NextResponse.json(
+          { error: "Failed to verify affiliations" },
+          { status: 500 }
+        )
+      }
+
+      if ((offices || []).length !== officeIds.length) {
+        return NextResponse.json(
+          { error: "Invalid officeIds" },
+          { status: 400 }
+        )
+      }
     }
 
     // Check if the user is already a member
@@ -78,9 +155,11 @@ export async function POST(
       (membership) => membership.status === 'pending'
     )
 
+    const adminSupabase = createAdminClient()
+
     if (pendingMembership) {
         // If pending, update to active with new role
-        const { error: updateError } = await supabase
+        const { error: updateError } = await adminSupabase
           .from('user_tenants')
           .update({
             role: role,
@@ -97,6 +176,20 @@ export async function POST(
           )
         }
 
+        const officeAssignmentError = await replaceOfficeAssignments(
+          adminSupabase,
+          params.tenantId,
+          pendingMembership.id,
+          officeIds
+        )
+
+        if (officeAssignmentError) {
+          return NextResponse.json(
+            { error: officeAssignmentError },
+            { status: 500 }
+          )
+        }
+
         return NextResponse.json({ 
           success: true, 
           message: "Member added successfully" 
@@ -104,7 +197,6 @@ export async function POST(
     }
 
     // Get user email from auth.users
-    const adminSupabase = createAdminClient()
     const { data: authUserData, error: authUserError } = await adminSupabase.auth.admin.getUserById(userId)
     
     if (authUserError || !authUserData?.user) {
@@ -143,7 +235,7 @@ export async function POST(
     }
 
     // Add the user to the tenant
-    const { error: insertError } = await supabase
+    const { data: userTenant, error: insertError } = await adminSupabase
       .from('user_tenants')
       .insert({
         user_id: userId,
@@ -154,11 +246,27 @@ export async function POST(
         invited_by: user.id,
         joined_at: new Date().toISOString()
       })
+      .select("id")
+      .single()
 
     if (insertError) {
       console.error('Error adding member:', insertError)
       return NextResponse.json(
         { error: "Failed to add member" },
+        { status: 500 }
+      )
+    }
+
+    const officeAssignmentError = await replaceOfficeAssignments(
+      adminSupabase,
+      params.tenantId,
+      userTenant.id,
+      officeIds
+    )
+
+    if (officeAssignmentError) {
+      return NextResponse.json(
+        { error: officeAssignmentError },
         { status: 500 }
       )
     }

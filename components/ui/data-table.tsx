@@ -29,10 +29,13 @@ interface DataTableProps<T> {
   columns: Column<T>[]
   csvColumns?: Column<T>[]
   filters?: Filter[]
-  searchKeys?: (keyof T)[]
+  searchKeys?: readonly (keyof T | string)[]
+  searchPlaceholder?: string
   onRowClick?: (row: T) => void
   className?: string
   tableClassName?: string
+  loading?: boolean
+  skeletonRowCount?: number
   // URLパラメータ永続化用
   initialSearchTerm?: string
   initialActiveFilters?: Record<string, string[]>
@@ -52,9 +55,12 @@ export function DataTable<T extends Record<string, any>>({
   csvColumns,
   filters = [],
   searchKeys = [],
+  searchPlaceholder = "検索...",
   onRowClick,
   className,
   tableClassName,
+  loading = false,
+  skeletonRowCount = 6,
   initialSearchTerm = "",
   initialActiveFilters = {},
   onFilterChange,
@@ -198,7 +204,7 @@ export function DataTable<T extends Record<string, any>>({
             <div className="relative w-full max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="検索..."
+                placeholder={searchPlaceholder}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -313,7 +319,25 @@ export function DataTable<T extends Record<string, any>>({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedData.length === 0 ? (
+            {loading ? (
+              Array.from({ length: skeletonRowCount }).map((_, rowIndex) => (
+                <TableRow key={`skeleton-${rowIndex}`}>
+                  {columns.map((column, columnIndex) => (
+                    <TableCell key={column.key.toString()} className={column.cellClassName}>
+                      <div
+                        className={cn(
+                          "funbase-loader-shimmer h-4 rounded-full bg-muted",
+                          columnIndex === 0 && "h-9 w-36",
+                          columnIndex !== 0 && columnIndex % 3 === 0 && "w-20",
+                          columnIndex !== 0 && columnIndex % 3 === 1 && "w-28",
+                          columnIndex !== 0 && columnIndex % 3 === 2 && "w-16",
+                        )}
+                      />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : sortedData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
                   データがありません

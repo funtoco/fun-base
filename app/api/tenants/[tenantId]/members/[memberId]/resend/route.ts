@@ -91,7 +91,7 @@ export async function POST(
 
     let redirectTo: string
     try {
-      redirectTo = getInviteRedirectUrl()
+      redirectTo = getInviteRedirectUrl({ requestOrigin: request.nextUrl.origin })
     } catch (error) {
       console.error("Error resolving resend redirect URL:", error)
       return NextResponse.json(

@@ -5,8 +5,10 @@ import { DataTable, type Column } from "@/components/ui/data-table"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { PersonAvatar } from "@/components/ui/person-avatar"
+import { useNavigationProgress } from "@/components/navigation-progress"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
+import { PERSON_SEARCH_KEYS } from "@/lib/person-search"
 import type { Person } from "@/lib/models"
 
 interface PersonWithVisa extends Person {
@@ -21,6 +23,7 @@ interface PersonWithVisa extends Person {
 export default function PeoplePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { startNavigation } = useNavigationProgress()
   const [people, setPeople] = useState<Person[]>([])
   const [visas, setVisas] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -134,17 +137,16 @@ export default function PeoplePage() {
       key: "name",
       label: "名前",
       sortable: true,
-      cellClassName: "w-[260px] max-w-[260px]",
       render: (value, row) => (
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex items-center gap-3">
           <PersonAvatar 
             name={value || ""} 
             imagePath={row.imagePath}
             size="md"
           />
-          <div className="min-w-0">
-            <div className="truncate font-medium">{value}</div>
-            {row.kana && <div className="truncate text-xs text-muted-foreground">{row.kana}</div>}
+          <div>
+            <div className="font-medium">{value}</div>
+            {row.kana && <div className="text-xs text-muted-foreground">{row.kana}</div>}
           </div>
         </div>
       ),
@@ -154,29 +156,23 @@ export default function PeoplePage() {
       label: "国籍",
       sortable: true,
       filterable: true,
-      cellClassName: "w-[100px]",
     },
     {
       key: "tenantName",
       label: "会社",
       sortable: true,
       filterable: true,
-      cellClassName: "w-[220px] max-w-[220px]",
-      render: (value) => <div className="truncate">{value}</div>,
     },
     {
       key: "company",
       label: "所属先",
       sortable: true,
       filterable: true,
-      cellClassName: "w-[260px] max-w-[260px]",
-      render: (value) => <div className="truncate">{value}</div>,
     },
     {
       key: "employeeNumber",
       label: "従業員番号",
       sortable: true,
-      cellClassName: "w-[120px]",
       render: (value) =>
         value ? <span className="text-sm font-mono">{value}</span> : <span className="text-muted-foreground">-</span>,
     },
@@ -185,7 +181,6 @@ export default function PeoplePage() {
       label: "就労ステータス",
       sortable: true,
       filterable: true,
-      cellClassName: "w-[132px]",
       render: (value) =>
         value ? <StatusBadge status={value} type="working" /> : <span className="text-muted-foreground">-</span>,
     },
@@ -257,21 +252,8 @@ export default function PeoplePage() {
   ]
 
   const handleRowClick = (person: PersonWithVisa) => {
+    startNavigation()
     router.push(`/people/${person.id}`)
-  }
-
-  if (loading) {
-    return (
-      <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">人材一覧</h1>
-          <p className="text-muted-foreground mt-2">人材の一覧と基本情報</p>
-        </div>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-muted-foreground">読み込み中...</div>
-        </div>
-      </div>
-    )
   }
 
   if (error) {
@@ -305,8 +287,10 @@ export default function PeoplePage() {
         columns={columns}
         csvColumns={csvColumns}
         filters={filters}
-        searchKeys={["name", "kana", "company", "nationality", "employeeNumber"]}
+        searchKeys={PERSON_SEARCH_KEYS}
+        searchPlaceholder="人材名、法人名、事業所名で検索..."
         onRowClick={handleRowClick}
+        loading={loading}
         tableClassName="min-w-[960px] table-fixed"
         initialSearchTerm={searchParams.get('search') || ''}
         initialActiveFilters={getFiltersFromUrl()}

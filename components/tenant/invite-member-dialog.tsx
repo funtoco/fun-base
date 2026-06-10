@@ -12,8 +12,10 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/lib/hooks/use-toast"
+import type { TenantOffice } from "@/lib/supabase/tenants"
 
 interface InviteMemberDialogProps {
   tenantId: string
@@ -21,6 +23,7 @@ interface InviteMemberDialogProps {
   onOpenChange: (open: boolean) => void
   onInviteSent: () => void
   canChooseRole?: boolean
+  offices?: TenantOffice[]
 }
 
 export function InviteMemberDialog({ 
@@ -29,10 +32,12 @@ export function InviteMemberDialog({
   onOpenChange, 
   onInviteSent,
   canChooseRole = true,
+  offices = [],
 }: InviteMemberDialogProps) {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [role, setRole] = useState<'admin' | 'member' | 'guest'>('member')
+  const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
@@ -73,7 +78,8 @@ export function InviteMemberDialog({
         },
         body: JSON.stringify({
           email: email.toLowerCase().trim(),
-          role: inviteRole
+          role: inviteRole,
+          officeIds: selectedOfficeIds,
         })
       })
 
@@ -92,6 +98,7 @@ export function InviteMemberDialog({
       setName("")
       setEmail("")
       setRole('member')
+      setSelectedOfficeIds([])
       setErrors({})
       onOpenChange(false)
       onInviteSent()
@@ -111,8 +118,17 @@ export function InviteMemberDialog({
     setName("")
     setEmail("")
     setRole('member')
+    setSelectedOfficeIds([])
     setErrors({})
     onOpenChange(false)
+  }
+
+  const toggleOffice = (officeId: string, checked: boolean) => {
+    setSelectedOfficeIds((currentOfficeIds) =>
+      checked
+        ? Array.from(new Set([...currentOfficeIds, officeId]))
+        : currentOfficeIds.filter((id) => id !== officeId)
+    )
   }
 
   return (
@@ -163,6 +179,27 @@ export function InviteMemberDialog({
                 <Label>ロール</Label>
                 <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
                   member - 企業担当者は member として招待されます
+                </div>
+              </div>
+            )}
+            {offices.length > 0 && (
+              <div className="grid gap-2">
+                <Label>所属先</Label>
+                <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">
+                  {offices.map((office) => (
+                    <Label
+                      key={office.id}
+                      htmlFor={`invite-office-${office.id}`}
+                      className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-muted"
+                    >
+                      <Checkbox
+                        id={`invite-office-${office.id}`}
+                        checked={selectedOfficeIds.includes(office.id)}
+                        onCheckedChange={(checked) => toggleOffice(office.id, checked === true)}
+                      />
+                      <span className="text-sm font-medium">{office.name}</span>
+                    </Label>
+                  ))}
                 </div>
               </div>
             )}

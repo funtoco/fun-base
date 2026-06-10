@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { formatDateTime } from "@/lib/utils"
+import { formatDate } from "@/lib/utils"
 import { Calendar, FileText, CheckSquare, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
@@ -97,7 +97,7 @@ export function Timeline({ items, className }: TimelineProps) {
                       {item.personName && <p className="text-xs text-muted-foreground mt-1">対象: {item.personName}</p>}
                     </div>
                     <div className="flex flex-col items-end gap-2">
-                      <time className="text-xs text-muted-foreground">{formatDateTime(item.datetime)}</time>
+                      <time className="text-xs text-muted-foreground">{formatDate(item.datetime)}</time>
                       {item.status && (
                         <Badge variant="outline" className="text-xs">
                           {item.status}

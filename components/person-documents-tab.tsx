@@ -31,7 +31,6 @@ const DOCUMENT_SECTIONS: { title: string; types: { type: DocumentType; label: st
       { type: "coe_copy", label: "COE写し" },
       { type: "flight_ticket_copy", label: "フライト写し" },
       { type: "bank_card_copy", label: "口座カード写し" },
-      { type: "resident_card_copy", label: "住民票写し" },
     ],
   },
   {
@@ -39,6 +38,13 @@ const DOCUMENT_SECTIONS: { title: string; types: { type: DocumentType; label: st
     types: [
       { type: "resume", label: "履歴書" },
       { type: "designation_document", label: "指定書写し" },
+      { type: "employment_insurance_notice", label: "雇用保険通知書" },
+    ],
+  },
+  {
+    title: "その他書類",
+    types: [
+      { type: "other", label: "その他書類" },
     ],
   },
 ]
@@ -61,8 +67,28 @@ export function PersonDocumentsTab({ personId, personDocuments: initialDocuments
   const getExistingDocument = (docType: DocumentType) => {
     const doc = documents.find((d) => d.documentType === docType)
     if (!doc) return null
-    return { id: doc.id, storagePath: doc.storagePath, fileName: doc.fileName, contentType: doc.contentType }
+    return {
+      id: doc.id,
+      storagePath: doc.storagePath,
+      title: doc.title,
+      fileName: doc.fileName,
+      contentType: doc.contentType,
+      note: doc.note,
+    }
   }
+
+  const getExistingDocuments = (docType: DocumentType) => (
+    documents
+      .filter((d) => d.documentType === docType)
+      .map((doc) => ({
+        id: doc.id,
+        storagePath: doc.storagePath,
+        title: doc.title,
+        fileName: doc.fileName,
+        contentType: doc.contentType,
+        note: doc.note,
+      }))
+  )
 
   return (
     <div className="space-y-6">
@@ -79,7 +105,10 @@ export function PersonDocumentsTab({ personId, personDocuments: initialDocuments
                   label={label}
                   personId={personId}
                   documentType={type}
-                  existingDocument={getExistingDocument(type)}
+                  existingDocument={type === "other" ? null : getExistingDocument(type)}
+                  existingDocuments={type === "other" ? getExistingDocuments(type) : undefined}
+                  allowMultiple={type === "other"}
+                  className={type === "other" ? "sm:col-span-2" : undefined}
                   onUploadComplete={refreshDocuments}
                   onDeleteComplete={refreshDocuments}
                 />

@@ -5,6 +5,7 @@ import { useEffect } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
+import { FunBaseLoading } from "@/components/ui/funbase-loading"
 import { isPublicRoute } from "@/lib/auth-route-guards"
 import { usePathname, useRouter } from "next/navigation"
 import { usePageViewLogger } from "@/hooks/use-page-view-logger"
@@ -32,11 +33,7 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   }, [isPublicPage, loading, pathname, router, user])
 
   if (loading || (!isPublicPage && !user)) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    )
+    return <FunBaseLoading variant="fullscreen" title="FunBaseを準備中" description="安全にセッションを確認しています" />
   }
 
   // 認証が不要なページの場合（ミドルウェアでリダイレクト処理済み）

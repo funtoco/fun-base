@@ -5,9 +5,8 @@ import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
 import { AuthProvider } from "@/contexts/auth-context"
-import { Sidebar } from "@/components/layout/sidebar"
-import { Header } from "@/components/layout/header"
 import { ConditionalLayout } from "@/components/layout/conditional-layout"
+import { NavigationProgressProvider } from "@/components/navigation-progress"
 import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 
@@ -30,9 +29,11 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <AuthProvider>
-          <ConditionalLayout>
-            <Suspense fallback={null}>{children}</Suspense>
-          </ConditionalLayout>
+          <NavigationProgressProvider>
+            <ConditionalLayout>
+              <Suspense fallback={null}>{children}</Suspense>
+            </ConditionalLayout>
+          </NavigationProgressProvider>
           <Toaster />
         </AuthProvider>
         <Analytics />

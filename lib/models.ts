@@ -155,7 +155,18 @@ export type AnnouncementRead = {
   readAt: string
 }
 
-export type DocumentType = 'passport_front' | 'passport_back' | 'residence_card_front' | 'residence_card_back' | 'coe_copy' | 'flight_ticket_copy' | 'bank_card_copy' | 'resident_card_copy' | 'resume' | 'designation_document'
+export type DocumentType =
+  | 'passport_front'
+  | 'passport_back'
+  | 'residence_card_front'
+  | 'residence_card_back'
+  | 'coe_copy'
+  | 'flight_ticket_copy'
+  | 'bank_card_copy'
+  | 'resume'
+  | 'designation_document'
+  | 'employment_insurance_notice'
+  | 'other'
 
 export type PersonDocument = {
   id: string
@@ -163,10 +174,12 @@ export type PersonDocument = {
   tenantId: string
   documentType: DocumentType
   storagePath: string
+  title?: string
   fileName?: string
   contentType?: string
   fileSizeBytes?: number
   uploadedBy?: string
+  note?: string
   createdAt: string
   updatedAt: string
 }

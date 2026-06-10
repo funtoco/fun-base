@@ -47,7 +47,7 @@ export async function getInterviewRecordDetailById(recordId: string): Promise<In
 
   if (!data) return null
 
-  const row = data as InterviewRecordRow
+  const row = data as unknown as InterviewRecordRow
   if (row.record_type === "regular_interview") {
     return {
       recordType: "regular_interview",
@@ -84,7 +84,7 @@ export async function getRegularInterviewsByPersonId(personId: string): Promise<
     return handleInterviewRecordsFetchError("fetch regular interviews by person", error)
   }
 
-  const records = ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToRegularInterview)
+  const records = ((data || []) as unknown as InterviewRecordRow[]).map(mapInterviewRecordToRegularInterview)
   console.log("[interview-records] getRegularInterviewsByPersonId fetch success", { personId, count: records.length })
   return records
 }
@@ -104,7 +104,7 @@ export async function getDailySupportRecordsByPersonId(personId: string): Promis
     return handleInterviewRecordsFetchError("fetch daily support records by person", error)
   }
 
-  const records = mapInterviewRecordRowsToDailySupportRecords((data || []) as InterviewRecordRow[])
+  const records = mapInterviewRecordRowsToDailySupportRecords((data || []) as unknown as InterviewRecordRow[])
   console.log("[interview-records] getDailySupportRecordsByPersonId fetch success", { personId, count: records.length })
   return records
 }
