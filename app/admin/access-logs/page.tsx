@@ -85,6 +85,15 @@ export default function AccessLogsPage() {
   const [eventType, setEventType] = useState<string>("all")
   const [emailFilter, setEmailFilter] = useState("")
 
+  const isFuntocoUser = user?.email?.endsWith("@funtoco.jp") ?? false
+
+  useEffect(() => {
+    if (authLoading) return
+    if (!isFuntocoUser) {
+      router.replace("/people")
+    }
+  }, [authLoading, isFuntocoUser])
+
   const fetchLogs = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -114,8 +123,8 @@ export default function AccessLogsPage() {
   }, [page, eventType, emailFilter])
 
   useEffect(() => {
-    if (!authLoading && user) fetchLogs()
-  }, [authLoading, user, fetchLogs])
+    if (!authLoading && user && isFuntocoUser) fetchLogs()
+  }, [authLoading, user, isFuntocoUser, fetchLogs])
 
   // reset to page 0 when filters change
   useEffect(() => { setPage(0) }, [eventType, emailFilter])

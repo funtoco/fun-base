@@ -574,21 +574,23 @@ export function Header() {
                 <Users className="mr-2 h-4 w-4" />
                 テナント管理
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/admin/connectors/dashboard')}>
-                <Cable className="mr-2 h-4 w-4" />
-                コネクター管理
-              </DropdownMenuItem>
               {user?.email?.endsWith("@funtoco.jp") && (
-                <DropdownMenuItem onClick={() => navigate('/admin/announcements')}>
-                  <Megaphone className="mr-2 h-4 w-4" />
-                  お知らせ管理
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem onClick={() => navigate('/admin/connectors/dashboard')}>
+                    <Cable className="mr-2 h-4 w-4" />
+                    コネクター管理
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/admin/announcements')}>
+                    <Megaphone className="mr-2 h-4 w-4" />
+                    お知らせ管理
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate('/admin/access-logs')}>
+                    <ShieldCheck className="mr-2 h-4 w-4" />
+                    アクセスログ
+                  </DropdownMenuItem>
+                </>
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate('/admin/access-logs')}>
-                <ShieldCheck className="mr-2 h-4 w-4" />
-                アクセスログ
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
