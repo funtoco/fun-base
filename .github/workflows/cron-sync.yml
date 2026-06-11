@@ -112,25 +112,40 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          BATCH_SIZE: ${{ github.event.inputs.batch_size }}
+          RECORD_ID_FROM: ${{ github.event.inputs.record_id_from }}
+          RECORD_ID_TO: ${{ github.event.inputs.record_id_to }}
+          RECORD_ID_TAIL_SIZE: ${{ github.event.inputs.record_id_tail_size }}
         run: |
           echo "🕐 Starting interview_records sync at $(date)"
           cmd=(pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type interview_records)
-          if [ "${{ github.event_name }}" = "schedule" ]; then
+
+          add_numeric_arg() {
+            local input_name="$1"
+            local input_value="$2"
+            local arg_name="$3"
+
+            if [ -z "$input_value" ]; then
+              return 0
+            fi
+
+            if [[ ! "$input_value" =~ ^[0-9]+$ ]]; then
+              echo "::error title=Invalid workflow input::${input_name} must be digits only"
+              exit 1
+            fi
+
+            cmd+=("$arg_name" "$input_value")
+          }
+
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
             # 04:00 JST daily: small newest-record window, one connector at a time.
             cmd+=(--all-batches --limit 1 --record-id-tail-size 2000)
           else
             cmd+=(--all-batches)
-            if [ -n "${{ github.event.inputs.batch_size }}" ]; then
-              cmd+=(--limit "${{ github.event.inputs.batch_size }}")
-            fi
-            if [ -n "${{ github.event.inputs.record_id_from }}" ]; then
-              cmd+=(--record-id-from "${{ github.event.inputs.record_id_from }}")
-            fi
-            if [ -n "${{ github.event.inputs.record_id_to }}" ]; then
-              cmd+=(--record-id-to "${{ github.event.inputs.record_id_to }}")
-            fi
-            if [ -n "${{ github.event.inputs.record_id_tail_size }}" ]; then
-              cmd+=(--record-id-tail-size "${{ github.event.inputs.record_id_tail_size }}")
-            fi
+            add_numeric_arg "batch_size" "${BATCH_SIZE:-}" "--limit"
+            add_numeric_arg "record_id_from" "${RECORD_ID_FROM:-}" "--record-id-from"
+            add_numeric_arg "record_id_to" "${RECORD_ID_TO:-}" "--record-id-to"
+            add_numeric_arg "record_id_tail_size" "${RECORD_ID_TAIL_SIZE:-}" "--record-id-tail-size"
           fi
           "${cmd[@]}"
