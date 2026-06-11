@@ -1,10 +1,14 @@
 import type { KintoneRecord } from '@/lib/kintone/api-client'
+import { FUNBASE_REGULAR_MEETING_START_DATE } from '@/lib/meeting-scope'
 
 export const DEFAULT_EXTERNAL_CONFIRMATION_STATUS = '確認待ち'
 export const IMPORTABLE_INTERVIEW_STATUS = '完了'
 export const KINTONE_INTERVIEW_SOURCE_SYSTEM = 'kintone'
+const KINTONE_REGULAR_INTERVIEW_QUERY =
+  `timeInterview in ("定期面談") and interviewDate >= "${FUNBASE_REGULAR_MEETING_START_DATE}"`
+const KINTONE_DAILY_SUPPORT_QUERY = 'timeInterview in ("日々の面談")'
 const KINTONE_INTERVIEW_RECORD_TYPE_QUERY =
-  'timeInterview in ("定期面談", "日々の面談")'
+  `(${KINTONE_REGULAR_INTERVIEW_QUERY}) or (${KINTONE_DAILY_SUPPORT_QUERY})`
 
 type RecordType = 'regular_interview' | 'daily_support'
 
@@ -129,11 +133,11 @@ function recordTypeValue(record: KintoneRecord): any {
   return toStringOrNull(fieldValue(record, 'timeInterview')) ?? fieldValue(record, 'interview')
 }
 
-function hasRecordTypeFilter(query: string): boolean {
+function hasScopedInterviewRecordFilter(query: string): boolean {
   return (
-    /\btimeInterview\s+in\s*\([^)]*"定期面談"[^)]*"日々の面談"[^)]*\)/.test(query) ||
-    (/\btimeInterview\s*=\s*"定期面談"/.test(query) &&
-      /\btimeInterview\s*=\s*"日々の面談"/.test(query))
+    query.includes(FUNBASE_REGULAR_MEETING_START_DATE) &&
+    /\btimeInterview\b/.test(query) &&
+    /日々の面談/.test(query)
   )
 }
 
@@ -145,9 +149,9 @@ export function buildInterviewRecordsQuery(baseQuery = ''): string {
   const trimmed = baseQuery.trim()
 
   if (!trimmed) return KINTONE_INTERVIEW_RECORD_TYPE_QUERY
-  if (hasRecordTypeFilter(trimmed)) return trimmed
+  if (hasScopedInterviewRecordFilter(trimmed)) return trimmed
 
-  return `${parenthesizeQuery(trimmed)} and ${KINTONE_INTERVIEW_RECORD_TYPE_QUERY}`
+  return `${parenthesizeQuery(trimmed)} and (${KINTONE_INTERVIEW_RECORD_TYPE_QUERY})`
 }
 
 export function isImportableInterviewRecord(record: KintoneRecord): boolean {
