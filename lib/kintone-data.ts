@@ -75,7 +75,7 @@ async function fetchInterviewRecordRowsByType(recordType: "regular_interview" | 
 
 /**
  * Get all regular interview records (定期面談)
- * Main content: 企業提出用レポート (companyReport)
+ * Main content: 定期面談レポート (companyReport)
  */
 export async function getRegularInterviews(): Promise<RegularInterview[]> {
   const rows = await fetchInterviewRecordRowsByType("regular_interview")
@@ -200,7 +200,7 @@ export async function getDailySupportCategories(): Promise<{ dai: string; chu: s
 // Import and use ONLY in development/test environments.
 // ============================================================================
 
-// Sample 企業提出用レポート content
+// Sample 定期面談レポート content
 const sampleCompanyReports = [
   `【面談概要】
 本人の勤務状況は良好で、業務への適応も順調に進んでいる。

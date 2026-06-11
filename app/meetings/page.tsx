@@ -104,11 +104,11 @@ function InterviewCard({ interview }: { interview: RegularInterview }) {
         </div>
       </CardHeader>
       <CardContent>
-        {/* 企業提出用レポート Preview - Main content for 定期面談 */}
+        {/* 定期面談レポート Preview - Main content for 定期面談 */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">企業提出用レポート</span>
+            <span className="text-sm font-medium">定期面談レポート</span>
           </div>
           <div className={`bg-muted/30 rounded-lg p-3 text-sm whitespace-pre-wrap ${!expanded ? "line-clamp-3" : ""}`}>
             {interview.companyReport}
@@ -325,7 +325,7 @@ export default function MeetingsPage() {
         {/* Page Header */}
         <div>
           <h1 className="text-3xl font-bold text-foreground">面談一覧</h1>
-          <p className="text-muted-foreground mt-2">定期面談の記録と企業提出用レポートを管理</p>
+          <p className="text-muted-foreground mt-2">定期面談の記録と定期面談レポートを管理</p>
         </div>
 
         {/* Filters */}
