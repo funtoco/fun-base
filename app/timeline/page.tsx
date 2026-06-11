@@ -10,6 +10,7 @@ import { FilterSelect } from "@/components/ui/filter-select"
 import { Badge } from "@/components/ui/badge"
 import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
+import { RecordListLoadingSkeleton } from "@/components/ui/funbase-loading"
 import { formatDate } from "@/lib/utils"
 import { Search, Calendar, FileText, CheckSquare, ChevronRight, Filter } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
@@ -317,11 +318,9 @@ export default function TimelinePage() {
         <div className="p-6 space-y-6">
           <div>
             <h1 className="text-3xl font-bold text-foreground">タイムライン</h1>
-            <p className="text-muted-foreground mt-2">すべての活動を時系列で確認</p>
+            <p className="text-muted-foreground mt-2">ビザ進捗、定期面談、日々対応を時系列で確認</p>
           </div>
-          <div className="flex items-center justify-center py-8">
-            <p className="text-muted-foreground">読み込み中...</p>
-          </div>
+          <RecordListLoadingSkeleton />
         </div>
       </AuthGuard>
     )
