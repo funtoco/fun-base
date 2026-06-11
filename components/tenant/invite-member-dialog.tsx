@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -24,6 +24,11 @@ interface InviteMemberDialogProps {
   onInviteSent: () => void
   canChooseRole?: boolean
   offices?: TenantOffice[]
+  initialValues?: {
+    email?: string
+    role?: 'admin' | 'member' | 'guest'
+    officeIds?: string[]
+  } | null
 }
 
 export function InviteMemberDialog({ 
@@ -33,6 +38,7 @@ export function InviteMemberDialog({
   onInviteSent,
   canChooseRole = true,
   offices = [],
+  initialValues = null,
 }: InviteMemberDialogProps) {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -46,6 +52,16 @@ export function InviteMemberDialog({
     ? "新しいメンバーをメールでテナントに招待します。"
     : "企業担当者へ招待メールを送信します。招待完了までは招待中として表示されます。"
   const submitLabel = loading ? "送信中..." : "招待メールを送信"
+
+  useEffect(() => {
+    if (!open || !initialValues) return
+
+    setName("")
+    setEmail(initialValues.email || "")
+    setRole(initialValues.role || "member")
+    setSelectedOfficeIds(initialValues.officeIds || [])
+    setErrors({})
+  }, [initialValues, open])
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}

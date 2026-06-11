@@ -1,6 +1,6 @@
 "use client"
 
-import { Building2, MoreHorizontal, Pencil, RefreshCw, Trash2 } from "lucide-react"
+import { Building2, MailPlus, MoreHorizontal, Pencil, RefreshCw, Trash2 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   DropdownMenu,
@@ -29,6 +29,7 @@ interface MembersTableProps {
   onDeleteMember: (memberId: string) => void
   onEditOffices?: (member: UserTenant) => void
   onResendInvite?: (memberId: string) => void
+  onReinviteMember?: (member: UserTenant) => void
   currentUserRole: 'owner' | 'admin' | 'member' | 'guest'
   canManageCompanyContacts?: boolean
   currentUserId?: string
@@ -43,6 +44,7 @@ export function MembersTable({
   onDeleteMember,
   onEditOffices,
   onResendInvite,
+  onReinviteMember,
   currentUserRole,
   canManageCompanyContacts = false,
   currentUserId,
@@ -74,6 +76,10 @@ export function MembersTable({
   const canDeleteMember = (targetMember: UserTenant) => {
     if (targetMember.user_id === currentUserId) return false
 
+    if (targetMember.status === "pending" && targetMember.email) {
+      return true
+    }
+
     if (currentUserRole === "owner" || currentUserRole === "admin") {
       return targetMember.role !== "owner"
     }
@@ -88,14 +94,14 @@ export function MembersTable({
       return false
     }
 
-    if (currentUserRole === "owner" || currentUserRole === "admin") {
-      return true
-    }
-
-    if (!canManageCompanyContacts) return false
-
-    return isCompanyContactEmail(targetMember.email) && isCompanyContactRole(targetMember.role)
+    return targetMember.user_id !== currentUserId
   }
+
+  const canReinviteMember = (targetMember: UserTenant) =>
+    Boolean(onReinviteMember) &&
+    targetMember.status === "pending" &&
+    Boolean(targetMember.email) &&
+    canDeleteMember(targetMember)
 
   const canEditOffices = (targetMember: UserTenant) =>
     Boolean(onEditOffices) &&
@@ -125,7 +131,13 @@ export function MembersTable({
     canChangeRole(targetMember) ||
     canEditOffices(targetMember) ||
     canResendInvite(targetMember) ||
+    canReinviteMember(targetMember) ||
     canDeleteMember(targetMember)
+
+  const hasDropdownActions = (targetMember: UserTenant) =>
+    canChangeRole(targetMember) ||
+    canEditOffices(targetMember) ||
+    (targetMember.status !== "pending" && canDeleteMember(targetMember))
 
   const handleRoleChange = (member: UserTenant, newRole: 'owner' | 'admin' | 'member' | 'guest') => {
     if (!canChangeRole(member)) return
@@ -145,6 +157,11 @@ export function MembersTable({
   const handleResendInvite = (member: UserTenant) => {
     if (!canResendInvite(member)) return
     onResendInvite?.(member.id)
+  }
+
+  const handleReinviteMember = (member: UserTenant) => {
+    if (!canReinviteMember(member)) return
+    onReinviteMember?.(member)
   }
 
   return (
@@ -249,87 +266,118 @@ export function MembersTable({
                   {formatLastActive(member.joined_at)}
                 </TableCell>
                 <TableCell>
-                  {hasRowActions(member) ? (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="size-4" />
-                          <span className="sr-only">メニューを開く</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {canChangeRole(member) && (
-                          <>
-                            {member.role !== 'owner' && (
-                              <DropdownMenuItem
-                                onClick={() => handleRoleChange(member, 'owner')}
-                              >
-                                Ownerに変更
-                              </DropdownMenuItem>
-                            )}
-                            {member.role !== 'admin' && (
-                              <DropdownMenuItem
-                                onClick={() => handleRoleChange(member, 'admin')}
-                              >
-                                Adminに変更
-                              </DropdownMenuItem>
-                            )}
-                            {member.role !== 'member' && (
-                              <DropdownMenuItem
-                                onClick={() => handleRoleChange(member, 'member')}
-                              >
-                                Memberに変更
-                              </DropdownMenuItem>
-                            )}
-                            {member.role !== 'guest' && (
-                              <DropdownMenuItem
-                                onClick={() => handleRoleChange(member, 'guest')}
-                              >
-                                Guestに変更
-                              </DropdownMenuItem>
-                            )}
-                          </>
-                        )}
+                  <div className="flex items-center justify-end gap-1">
+                    {member.status === "pending" && canResendInvite(member) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 text-xs"
+                        onClick={() => handleResendInvite(member)}
+                      >
+                        <RefreshCw className="size-3.5" />
+                        再送
+                      </Button>
+                    )}
 
-                        {canChangeRole(member) && (canEditOffices(member) || canResendInvite(member) || canDeleteMember(member)) && (
-                          <DropdownMenuSeparator />
-                        )}
+                    {member.status === "pending" && canReinviteMember(member) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 text-xs"
+                        onClick={() => handleReinviteMember(member)}
+                      >
+                        <MailPlus className="size-3.5" />
+                        再招待
+                      </Button>
+                    )}
 
-                        {canEditOffices(member) && (
-                          <DropdownMenuItem onClick={() => handleEditOffices(member)}>
-                            <Building2 className="size-4 mr-2" />
-                            所属先を変更
-                          </DropdownMenuItem>
-                        )}
+                    {member.status === "pending" && canDeleteMember(member) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-xs text-destructive hover:text-destructive"
+                        onClick={() => handleDeleteMember(member)}
+                      >
+                        <Trash2 className="size-3.5" />
+                        削除
+                      </Button>
+                    )}
 
-                        {canEditOffices(member) && (canResendInvite(member) || canDeleteMember(member)) && (
-                          <DropdownMenuSeparator />
-                        )}
+                    {hasDropdownActions(member) ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="size-4" />
+                            <span className="sr-only">メニューを開く</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {canChangeRole(member) && (
+                            <>
+                              {member.role !== 'owner' && (
+                                <DropdownMenuItem
+                                  onClick={() => handleRoleChange(member, 'owner')}
+                                >
+                                  Ownerに変更
+                                </DropdownMenuItem>
+                              )}
+                              {member.role !== 'admin' && (
+                                <DropdownMenuItem
+                                  onClick={() => handleRoleChange(member, 'admin')}
+                                >
+                                  Adminに変更
+                                </DropdownMenuItem>
+                              )}
+                              {member.role !== 'member' && (
+                                <DropdownMenuItem
+                                  onClick={() => handleRoleChange(member, 'member')}
+                                >
+                                  Memberに変更
+                                </DropdownMenuItem>
+                              )}
+                              {member.role !== 'guest' && (
+                                <DropdownMenuItem
+                                  onClick={() => handleRoleChange(member, 'guest')}
+                                >
+                                  Guestに変更
+                                </DropdownMenuItem>
+                              )}
+                            </>
+                          )}
 
-                        {canResendInvite(member) && (
-                          <>
-                            <DropdownMenuItem onClick={() => handleResendInvite(member)}>
-                              <RefreshCw className="size-4 mr-2" />
-                              招待メール再送
+                          {canChangeRole(member) && (canEditOffices(member) || member.status !== "pending") && (
+                            <DropdownMenuSeparator />
+                          )}
+
+                          {canEditOffices(member) && (
+                            <DropdownMenuItem onClick={() => handleEditOffices(member)}>
+                              <Building2 className="size-4 mr-2" />
+                              所属先を変更
                             </DropdownMenuItem>
-                            {canDeleteMember(member) && <DropdownMenuSeparator />}
-                          </>
-                        )}
+                          )}
 
-                        {canDeleteMember(member) && (
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteMember(member)} 
-                            className="text-destructive"
-                          >
-                            <Trash2 className="size-4 mr-2" />
-                            {member.status === "pending" ? "招待をキャンセル" : "削除"}
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  ) : (
-                    <span className="block text-center text-muted-foreground">-</span>
-                  )}
+                          {canEditOffices(member) && member.status !== "pending" && canDeleteMember(member) && (
+                            <DropdownMenuSeparator />
+                          )}
+
+                          {member.status !== "pending" && canDeleteMember(member) && (
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteMember(member)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="size-4 mr-2" />
+                              削除
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : !hasRowActions(member) ? (
+                      <span className="block text-center text-muted-foreground">-</span>
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             )
