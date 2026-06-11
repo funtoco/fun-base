@@ -33,7 +33,7 @@ function getDailySupportTimelineTitle(record: DailySupportRecord): string {
   return `日々対応: ${visibleCategories}${categories.length > 3 ? "..." : ""}`
 }
 
-// Regular Interview Card Component - displays 企業提出用レポート as main content
+// Regular Interview Card Component - displays 定期面談レポート as main content
 function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
   const [expanded, setExpanded] = useState(false)
   const detailHref = getInterviewRecordDetailPath(interview.id)
@@ -82,11 +82,11 @@ function RegularInterviewCard({ interview }: { interview: RegularInterview }) {
         </div>
       </CardHeader>
       <CardContent>
-        {/* 企業提出用レポート - Main Content */}
+        {/* 定期面談レポート - Main Content */}
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">企業提出用レポート</span>
+            <span className="text-sm font-medium">定期面談レポート</span>
           </div>
           <div className={`bg-muted/30 rounded-lg p-4 text-sm whitespace-pre-wrap ${!expanded ? "line-clamp-6" : ""}`}>
             {interview.companyReport}

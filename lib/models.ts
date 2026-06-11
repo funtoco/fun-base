@@ -205,7 +205,7 @@ export type DailySupportEntry = {
   notes?: string // 備考
 }
 
-// Regular Interview Record (定期面談) - main content is 企業提出用レポート
+// Regular Interview Record (定期面談) - main content is 定期面談レポート
 export type RegularInterview = {
   id: string
   kintoneRecordId?: string
@@ -227,7 +227,7 @@ export type RegularInterview = {
   kintoneStatus?: KintoneInterviewStatus
   companyConfirmationStatus: CompanyConfirmationStatus
   // Main content for 定期面談
-  companyReport: string // 企業提出用レポート
+  companyReport: string // 定期面談レポート
   // Secondary (internal notes)
   internalNotes?: string // interview field - keep secondary
   createdAt: string

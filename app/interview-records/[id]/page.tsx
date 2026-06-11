@@ -105,7 +105,7 @@ export default async function InterviewRecordDetailPage({ params }: InterviewRec
           <CardHeader>
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">企業提出用レポート</CardTitle>
+              <CardTitle className="text-base">定期面談レポート</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -115,7 +115,7 @@ export default async function InterviewRecordDetailPage({ params }: InterviewRec
               </div>
             ) : (
               <p className="rounded-lg bg-muted/30 p-4 text-sm text-muted-foreground">
-                企業提出用レポートはありません
+                定期面談レポートはありません
               </p>
             )}
           </CardContent>
