@@ -27,6 +27,7 @@ import {
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/lib/hooks/use-toast"
 import { canManageCompanyContacts as canManageCompanyContactsForActor } from "@/lib/tenant-access"
+import { TenantMembersLoadingSkeleton } from "@/components/ui/funbase-loading"
 
 interface TenantMembersPageProps {
   tenantId: string
@@ -254,17 +255,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
     : "企業担当者を招待"
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">メンバー</h1>
-          <p className="text-muted-foreground">テナントのメンバーを管理します</p>
-        </div>
-        <div className="text-center py-8 text-muted-foreground">
-          読み込み中...
-        </div>
-      </div>
-    )
+    return <TenantMembersLoadingSkeleton />
   }
 
   return (
