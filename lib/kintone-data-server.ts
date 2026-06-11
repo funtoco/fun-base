@@ -1,4 +1,5 @@
 import type { DailySupportRecord, RegularInterview } from "@/lib/models"
+import { FUNBASE_REGULAR_MEETING_START_DATE } from "@/lib/meeting-scope"
 import { createClient } from "@/lib/supabase/server"
 import {
   INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON,
@@ -49,6 +50,8 @@ export async function getInterviewRecordDetailById(recordId: string): Promise<In
 
   const row = data as unknown as InterviewRecordRow
   if (row.record_type === "regular_interview") {
+    if (row.interview_date < FUNBASE_REGULAR_MEETING_START_DATE) return null
+
     return {
       recordType: "regular_interview",
       record: mapInterviewRecordToRegularInterview(row),
@@ -76,6 +79,7 @@ export async function getRegularInterviewsByPersonId(personId: string): Promise<
     .from("interview_records")
     .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "regular_interview")
+    .gte("interview_date", FUNBASE_REGULAR_MEETING_START_DATE)
     .eq("person_id", personId)
     .order("interview_date", { ascending: false })
     .order("created_at", { ascending: false })

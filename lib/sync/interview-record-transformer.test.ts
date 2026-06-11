@@ -62,27 +62,32 @@ test('isImportableInterviewRecord only requires completed status for regular int
 test('buildInterviewRecordsQuery keeps connector filters and limits record categories', () => {
   assert.equal(
     buildInterviewRecordsQuery('COID = "3222"'),
-    '(COID = "3222") and timeInterview in ("定期面談", "日々の面談")'
+    '(COID = "3222") and ((timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談")))'
   )
 
   assert.equal(
     buildInterviewRecordsQuery('COID = "3222" or Status = "確認不要"'),
-    '(COID = "3222" or Status = "確認不要") and timeInterview in ("定期面談", "日々の面談")'
+    '(COID = "3222" or Status = "確認不要") and ((timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談")))'
   )
 
   assert.equal(
     buildInterviewRecordsQuery('(COID = "3222" or Status = "確認不要")'),
-    '(COID = "3222" or Status = "確認不要") and timeInterview in ("定期面談", "日々の面談")'
+    '(COID = "3222" or Status = "確認不要") and ((timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談")))'
   )
 
   assert.equal(
     buildInterviewRecordsQuery('COID = "3222" and timeInterview in ("定期面談", "日々の面談")'),
-    'COID = "3222" and timeInterview in ("定期面談", "日々の面談")'
+    '(COID = "3222" and timeInterview in ("定期面談", "日々の面談")) and ((timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談")))'
   )
 
   assert.equal(
     buildInterviewRecordsQuery(),
-    'timeInterview in ("定期面談", "日々の面談")'
+    '(timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談"))'
+  )
+
+  assert.equal(
+    buildInterviewRecordsQuery('(timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談"))'),
+    '(timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談"))'
   )
 })
 

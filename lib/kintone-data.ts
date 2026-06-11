@@ -6,6 +6,7 @@
  */
 
 import type { CompanyConfirmationStatus, RegularInterview, DailySupportRecord, DailySupportEntry } from "@/lib/models"
+import { FUNBASE_REGULAR_MEETING_START_DATE } from "@/lib/meeting-scope"
 import { createClient } from "@/lib/supabase/client"
 import {
   DEFAULT_COMPANY_CONFIRMATION_STATUS,
@@ -44,10 +45,16 @@ async function fetchInterviewRecordRowsByType(recordType: "regular_interview" | 
   let offset = 0
 
   while (true) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("interview_records")
       .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
       .eq("record_type", recordType)
+
+    if (recordType === "regular_interview") {
+      query = query.gte("interview_date", FUNBASE_REGULAR_MEETING_START_DATE)
+    }
+
+    const { data, error } = await query
       .order("interview_date", { ascending: false })
       .order("created_at", { ascending: false })
       .range(offset, offset + INTERVIEW_RECORD_PAGE_SIZE - 1)
@@ -84,6 +91,7 @@ export async function getLatestRegularInterviews(limit = 5): Promise<RegularInte
     .from("interview_records")
     .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "regular_interview")
+    .gte("interview_date", FUNBASE_REGULAR_MEETING_START_DATE)
     .order("interview_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit)
@@ -105,6 +113,7 @@ export async function getRegularInterviewsByPersonId(personId: string): Promise<
     .from("interview_records")
     .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
     .eq("record_type", "regular_interview")
+    .gte("interview_date", FUNBASE_REGULAR_MEETING_START_DATE)
     .eq("person_id", personId)
     .order("interview_date", { ascending: false })
     .order("created_at", { ascending: false })
