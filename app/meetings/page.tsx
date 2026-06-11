@@ -11,6 +11,7 @@ import { ResultCountBadge } from "@/components/ui/result-count-badge"
 import { Input } from "@/components/ui/input"
 import { FilterSelect } from "@/components/ui/filter-select"
 import { FilterMultiSelectPopover } from "@/components/ui/filter-multi-select-popover"
+import { RecordListLoadingSkeleton } from "@/components/ui/funbase-loading"
 import { getRegularInterviews } from "@/lib/kintone-data"
 import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
 import {
@@ -328,6 +329,10 @@ export default function MeetingsPage() {
           <p className="text-muted-foreground mt-2">定期面談の記録と定期面談レポートを管理</p>
         </div>
 
+        {loading ? (
+          <RecordListLoadingSkeleton />
+        ) : (
+          <>
         {/* Filters */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative">
@@ -387,13 +392,7 @@ export default function MeetingsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Interview List */}
           <div className="lg:col-span-3 space-y-4">
-            {loading ? (
-              <Card>
-                <CardContent className="flex items-center justify-center py-8">
-                  <p className="text-muted-foreground">読み込み中...</p>
-                </CardContent>
-              </Card>
-            ) : filteredInterviews.length === 0 ? (
+            {filteredInterviews.length === 0 ? (
               <Card>
                 <CardContent className="flex items-center justify-center py-8">
                   <p className="text-muted-foreground">
@@ -456,6 +455,8 @@ export default function MeetingsPage() {
             </Card>
           </div>
         </div>
+          </>
+        )}
       </div>
     </AuthGuard>
   )

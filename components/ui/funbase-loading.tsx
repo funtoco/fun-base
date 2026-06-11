@@ -192,6 +192,67 @@ export function ListPanelLoadingSkeleton() {
   )
 }
 
+export function RecordListLoadingSkeleton() {
+  return (
+    <div className="space-y-6" role="status" aria-label="一覧を読み込んでいます">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="funbase-loader-shimmer h-10 w-80 max-w-full rounded-md bg-muted" />
+        <div className="funbase-loader-shimmer h-10 w-36 rounded-md bg-muted [animation-delay:120ms]" />
+        <div className="funbase-loader-shimmer h-10 w-32 rounded-md bg-muted [animation-delay:180ms]" />
+        <div className="funbase-loader-shimmer h-10 w-36 rounded-md bg-muted [animation-delay:240ms]" />
+        <div className="funbase-loader-shimmer h-10 w-28 rounded-md bg-muted [animation-delay:300ms]" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+        <div className="space-y-4 lg:col-span-3">
+          {Array.from({ length: 3 }).map((_, cardIndex) => (
+            <div key={cardIndex} className="rounded-lg border border-border bg-card p-6 shadow-sm">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="funbase-loader-shimmer h-5 w-44 rounded-full bg-muted" />
+                    <div className="funbase-loader-shimmer h-6 w-28 rounded-full bg-muted [animation-delay:120ms]" />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="funbase-loader-shimmer h-4 w-24 rounded-full bg-muted [animation-delay:160ms]" />
+                    <div className="funbase-loader-shimmer h-4 w-40 rounded-full bg-muted [animation-delay:220ms]" />
+                    <div className="funbase-loader-shimmer h-4 w-28 rounded-full bg-muted [animation-delay:280ms]" />
+                    <div className="funbase-loader-shimmer h-4 w-32 rounded-full bg-muted [animation-delay:340ms]" />
+                  </div>
+                </div>
+                <div className="funbase-loader-shimmer h-9 w-20 shrink-0 rounded-md bg-muted [animation-delay:180ms]" />
+              </div>
+
+              <div className="space-y-3 rounded-lg bg-muted/30 p-4">
+                <div className="funbase-loader-shimmer h-4 w-36 rounded-full bg-muted [animation-delay:220ms]" />
+                <div className="funbase-loader-shimmer h-4 w-full rounded-full bg-muted [animation-delay:280ms]" />
+                <div className="funbase-loader-shimmer h-4 w-5/6 rounded-full bg-muted [animation-delay:340ms]" />
+                <div className="funbase-loader-shimmer h-4 w-2/3 rounded-full bg-muted [animation-delay:400ms]" />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-6">
+          {Array.from({ length: 2 }).map((_, cardIndex) => (
+            <div key={cardIndex} className="rounded-lg border border-border bg-card p-6 shadow-sm">
+              <div className="funbase-loader-shimmer mb-5 h-5 w-28 rounded-full bg-muted" />
+              <div className="space-y-4">
+                {Array.from({ length: 3 }).map((__, rowIndex) => (
+                  <div key={rowIndex} className="flex items-center justify-between gap-4">
+                    <div className="funbase-loader-shimmer h-4 w-24 rounded-full bg-muted" />
+                    <div className="funbase-loader-shimmer h-6 w-12 rounded-full bg-muted" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function TenantListLoadingSkeleton() {
   return (
     <div className="p-6 space-y-6" role="status" aria-label="テナント一覧を読み込んでいます">
