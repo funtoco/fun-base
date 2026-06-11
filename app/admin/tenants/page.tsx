@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ArrowLeft, Building2, Users, Plus, Trash2, Pencil } from "lucide-react"
+import { ArrowLeft, Building2, Search, Users, Plus, Trash2, Pencil, X } from "lucide-react"
 import { CreateTenantDialog } from "@/components/tenant/create-tenant-dialog"
 import { TenantEditDialog } from "@/components/tenant/tenant-edit-dialog"
 import { createTenantAction, getTenantsAction, isUserOwnerOfAnyTenant, type CreateTenantData } from "@/lib/actions/tenant-actions"
@@ -15,6 +16,7 @@ import { deleteTenant, updateTenant } from "@/lib/supabase/tenants"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/lib/hooks/use-toast"
 import { Tenant } from "@/tenant-management/types/tenant"
+import { TenantListLoadingSkeleton } from "@/components/ui/funbase-loading"
 
 export default function AdminTenantsPage() {
   const router = useRouter()
@@ -26,6 +28,7 @@ export default function AdminTenantsPage() {
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -129,21 +132,13 @@ export default function AdminTenantsPage() {
     }
   }
 
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase()
+  const filteredTenants = normalizedSearchQuery
+    ? tenants.filter((tenant) => tenant.name.toLowerCase().includes(normalizedSearchQuery))
+    : tenants
+
   if (authLoading || loading) {
-    return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            戻る
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">テナント管理</h1>
-            <p className="text-muted-foreground mt-2">読み込み中...</p>
-          </div>
-        </div>
-      </div>
-    )
+    return <TenantListLoadingSkeleton />
   }
 
   if (!user) {
@@ -185,9 +180,41 @@ export default function AdminTenantsPage() {
         )}
       </div>
 
+      {tenants.length > 0 && (
+        <div className="flex flex-col gap-2 sm:max-w-md">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="法人名で検索"
+              className="pl-9 pr-10"
+              aria-label="法人名で検索"
+            />
+            {searchQuery && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
+                onClick={() => setSearchQuery("")}
+                aria-label="検索条件をクリア"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          {searchQuery && (
+            <p className="text-sm text-muted-foreground">
+              {filteredTenants.length}件の法人が見つかりました
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Tenants List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {tenants.map((tenant) => {
+        {filteredTenants.map((tenant) => {
           const userTenant = userTenants.find(ut => ut.tenant_id === tenant.id)
           const userRole = userTenant?.role || 'guest'
           
@@ -268,6 +295,23 @@ export default function AdminTenantsPage() {
           )
         })}
       </div>
+
+      {tenants.length > 0 && filteredTenants.length === 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-12">
+              <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">該当する法人がありません</h3>
+              <p className="text-muted-foreground mb-6">
+                検索条件を変えてもう一度お試しください。
+              </p>
+              <Button variant="outline" onClick={() => setSearchQuery("")}>
+                検索条件をクリア
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {tenants.length === 0 && (
         <Card>
