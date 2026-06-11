@@ -4,8 +4,10 @@ import test from 'node:test'
 import {
   applyFileFieldProcessResult,
   buildRecordIdQuery,
+  buildRecordIdTailQuery,
   combineKintoneQueries,
   buildPeopleImageStoragePath,
+  parseKintoneSyncOptions,
   shouldSkipMissingUpdateTarget,
 } from './kintone-sync'
 import { buildUpdateCondition, getKintoneRecordValue } from './update-key-utils'
@@ -107,6 +109,21 @@ test('buildRecordIdQuery supports bounded Kintone record id ranges', () => {
   )
 })
 
+test('buildRecordIdQuery rejects conflicting Kintone record filters', () => {
+  assert.throws(
+    () => buildRecordIdQuery({ recordId: '2447', recordIdFrom: '2400' }),
+    /recordId cannot be combined/
+  )
+  assert.throws(
+    () => buildRecordIdQuery({ recordIdFrom: '2500', recordIdTo: '2400' }),
+    /recordIdFrom must be less than or equal to recordIdTo/
+  )
+  assert.throws(
+    () => buildRecordIdQuery({ recordIdFrom: '2400', recordIdTailSize: 1000 }),
+    /recordIdTailSize cannot be combined/
+  )
+})
+
 test('buildRecordIdQuery rejects non-numeric record ids', () => {
   assert.throws(
     () => buildRecordIdQuery({ recordId: '2447 or status = "x"' }),
@@ -118,5 +135,34 @@ test('combineKintoneQueries preserves existing filters and adds record id filter
   assert.equal(
     combineKintoneQueries('status = "在籍中"', buildRecordIdQuery({ recordId: '2447' })),
     'status = "在籍中" and $id = 2447'
+  )
+})
+
+test('parseKintoneSyncOptions accepts newest record tail window', () => {
+  assert.deepEqual(
+    parseKintoneSyncOptions(new URLSearchParams({ recordIdTailSize: '2000' })),
+    { recordIdTailSize: 2000 }
+  )
+})
+
+test('parseKintoneSyncOptions rejects unsafe newest record tail window', () => {
+  assert.throws(
+    () => parseKintoneSyncOptions(new URLSearchParams({ recordIdTailSize: '0' })),
+    /recordIdTailSize must be between 1 and 5000/
+  )
+  assert.throws(
+    () => parseKintoneSyncOptions(new URLSearchParams({ recordIdTailSize: '5001' })),
+    /recordIdTailSize must be between 1 and 5000/
+  )
+})
+
+test('buildRecordIdTailQuery creates a bounded newest-record window', () => {
+  assert.equal(
+    buildRecordIdTailQuery(9288, 2000),
+    '$id >= 7289 and $id <= 9288'
+  )
+  assert.equal(
+    buildRecordIdTailQuery(1200, 2000),
+    '$id >= 1 and $id <= 1200'
   )
 })
