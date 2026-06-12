@@ -16,6 +16,7 @@ on:
           - people
           - visas
           - interview_records
+          - app98_mapping_audit
           - both
       batch_size:
         description: 'Connector batch size for interview_records manual sync'
@@ -30,6 +31,35 @@ on:
       record_id_tail_size:
         description: 'Optional newest Kintone record ID window size for interview_records'
         required: false
+      app98_mapping_apply:
+        description: 'Apply App98 mapping audit fixes. Leave false for dry-run.'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      app98_mapping_slug:
+        description: 'Optional tenant slug/COID to audit or fix only one tenant'
+        required: false
+      app98_mapping_slugs:
+        description: 'Optional comma-separated tenant slugs/COIDs to audit or fix'
+        required: false
+      app98_mapping_limit:
+        description: 'Optional audit candidate limit'
+        required: false
+      app98_mapping_max_apply:
+        description: 'Maximum tenant configs to modify when apply=true'
+        required: false
+        default: '50'
+      app98_mapping_require_external_users:
+        description: 'Only audit/fix tenants with at least one active non-Funtoco user'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 jobs:
   sync-people:
@@ -148,4 +178,82 @@ jobs:
             add_numeric_arg "record_id_to" "${RECORD_ID_TO:-}" "--record-id-to"
             add_numeric_arg "record_id_tail_size" "${RECORD_ID_TAIL_SIZE:-}" "--record-id-tail-size"
           fi
+          "${cmd[@]}"
+
+  app98-mapping-audit:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.sync_type == 'app98_mapping_audit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: Production
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit App98 mapping configuration
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          APP98_MAPPING_APPLY: ${{ github.event.inputs.app98_mapping_apply }}
+          APP98_MAPPING_SLUG: ${{ github.event.inputs.app98_mapping_slug }}
+          APP98_MAPPING_SLUGS: ${{ github.event.inputs.app98_mapping_slugs }}
+          APP98_MAPPING_LIMIT: ${{ github.event.inputs.app98_mapping_limit }}
+          APP98_MAPPING_MAX_APPLY: ${{ github.event.inputs.app98_mapping_max_apply }}
+          APP98_MAPPING_REQUIRE_EXTERNAL_USERS: ${{ github.event.inputs.app98_mapping_require_external_users }}
+        run: |
+          echo "🕐 Starting App98 mapping audit at $(date)"
+          cmd=(pnpm dlx tsx@4.20.3 scripts/audit-app98-mappings.ts)
+
+          if [ "$APP98_MAPPING_APPLY" = "true" ]; then
+            cmd+=(--apply)
+          fi
+
+          if [ -n "$APP98_MAPPING_SLUG" ]; then
+            if [[ ! "$APP98_MAPPING_SLUG" =~ ^[0-9]+$ ]]; then
+              echo "::error title=Invalid workflow input::app98_mapping_slug must be digits only"
+              exit 1
+            fi
+            cmd+=(--slug "$APP98_MAPPING_SLUG")
+          fi
+
+          if [ -n "$APP98_MAPPING_SLUGS" ]; then
+            if [[ ! "$APP98_MAPPING_SLUGS" =~ ^[0-9,]+$ ]]; then
+              echo "::error title=Invalid workflow input::app98_mapping_slugs must be comma-separated digits only"
+              exit 1
+            fi
+            cmd+=(--slugs "$APP98_MAPPING_SLUGS")
+          fi
+
+          if [ -n "$APP98_MAPPING_LIMIT" ]; then
+            if [[ ! "$APP98_MAPPING_LIMIT" =~ ^[0-9]+$ ]]; then
+              echo "::error title=Invalid workflow input::app98_mapping_limit must be digits only"
+              exit 1
+            fi
+            cmd+=(--limit "$APP98_MAPPING_LIMIT")
+          fi
+
+          if [ -n "$APP98_MAPPING_MAX_APPLY" ]; then
+            if [[ ! "$APP98_MAPPING_MAX_APPLY" =~ ^[0-9]+$ ]]; then
+              echo "::error title=Invalid workflow input::app98_mapping_max_apply must be digits only"
+              exit 1
+            fi
+            cmd+=(--max-apply "$APP98_MAPPING_MAX_APPLY")
+          fi
+
+          if [ "$APP98_MAPPING_REQUIRE_EXTERNAL_USERS" = "true" ]; then
+            cmd+=(--require-external-users)
+          fi
+
           "${cmd[@]}"
