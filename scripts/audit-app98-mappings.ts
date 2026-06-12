@@ -47,7 +47,7 @@ type Candidate = {
   tenant: TenantRow
   peopleCount: number
   activeExternalUserCount: number
-  validMappings: MappingRow[]
+  app98Mappings: MappingRow[]
   selectedMapping: MappingRow | null
   filters: FilterRow[]
   issues: string[]
@@ -90,6 +90,23 @@ function parseSlugFilter(): Set<string> | null {
   }
 
   return new Set(values)
+}
+
+function parseNonNegativeIntegerOption(name: string, rawValue: string | undefined, defaultValue: number): number {
+  if (rawValue === undefined || rawValue === '') {
+    return defaultValue
+  }
+
+  if (!/^\d+$/.test(rawValue)) {
+    throw new Error(`${name} must be a non-negative integer`)
+  }
+
+  const value = Number(rawValue)
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`${name} must be a safe non-negative integer`)
+  }
+
+  return value
 }
 
 function getServerClient(): SupabaseClient {
@@ -171,12 +188,11 @@ function buildCandidate(
   allMappings: MappingRow[],
   allFilters: FilterRow[]
 ): Candidate {
-  const validMappings = allMappings.filter(mapping => {
+  const app98Mappings = allMappings.filter(mapping => {
     return mapping.connector_id === connector.id
       && mapping.source_app_id === APP98_SOURCE_APP_ID
-      && mapping.target_app_type === TARGET_APP_TYPE
   })
-  const selectedMapping = chooseMapping(validMappings)
+  const selectedMapping = chooseMapping(app98Mappings)
   const filters = selectedMapping
     ? allFilters.filter(filter => filter.app_mapping_id === selectedMapping.id)
     : []
@@ -187,17 +203,22 @@ function buildCandidate(
     issues.push('missing_tenant_slug')
   }
 
-  if (validMappings.length === 0) {
+  if (app98Mappings.length === 0) {
     issues.push('missing_app98_mapping')
     plannedActions.push('create_app98_mapping')
   } else {
-    if (validMappings.length > 1) {
+    if (app98Mappings.length > 1) {
       issues.push('duplicate_app98_mapping')
     }
 
     if (!selectedMapping?.is_active) {
       issues.push('inactive_app98_mapping')
       plannedActions.push('activate_app98_mapping')
+    }
+
+    if (selectedMapping?.target_app_type !== TARGET_APP_TYPE) {
+      issues.push('wrong_target_app_type')
+      plannedActions.push('normalize_target_app_type')
     }
 
     if (selectedMapping?.target_table !== TARGET_TABLE) {
@@ -233,7 +254,7 @@ function buildCandidate(
     tenant,
     peopleCount,
     activeExternalUserCount,
-    validMappings,
+    app98Mappings,
     selectedMapping,
     filters,
     issues: [...new Set(issues)],
@@ -363,8 +384,16 @@ async function ensureFilters(
 async function main() {
   const apply = hasFlag('--apply') || process.env.APP98_MAPPING_APPLY === 'true'
   const slugFilter = parseSlugFilter()
-  const maxApply = Number(getArgValue('--max-apply') || process.env.APP98_MAPPING_MAX_APPLY || '50')
-  const limit = Number(getArgValue('--limit') || process.env.APP98_MAPPING_LIMIT || '0')
+  const maxApply = parseNonNegativeIntegerOption(
+    'max-apply',
+    getArgValue('--max-apply') || process.env.APP98_MAPPING_MAX_APPLY,
+    50
+  )
+  const limit = parseNonNegativeIntegerOption(
+    'limit',
+    getArgValue('--limit') || process.env.APP98_MAPPING_LIMIT,
+    0
+  )
   const includeEmptyPeople = hasFlag('--include-empty-people') || process.env.APP98_MAPPING_INCLUDE_EMPTY_PEOPLE === 'true'
   const requireExternalUsers = hasFlag('--require-external-users') || process.env.APP98_MAPPING_REQUIRE_EXTERNAL_USERS === 'true'
   const supabase = getServerClient()
