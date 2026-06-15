@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
-  canManageCompanyContacts,
   canManageTenant,
   getTenantMemberRemovalError,
   getTenantMemberRoleUpdateError,
-  isCompanyContactEmail,
-  isCompanyContactRole,
 } from "@/lib/tenant-access"
 
 const MANAGEABLE_ROLES = ["owner", "admin", "member", "guest"] as const
@@ -277,47 +274,24 @@ export async function DELETE(
 
     const memberships = actorMemberships || []
     const canManageAllMembers = canManageTenant(memberships)
-    const canManageCompanyContactDelete = canManageCompanyContacts(
-      memberships,
-      user.email
-    )
 
-    if (!canManageAllMembers && !canManageCompanyContactDelete) {
+    if (!canManageAllMembers) {
       return NextResponse.json(
         { error: "メンバーを削除する権限がありません" },
         { status: 403 }
       )
     }
 
-    if (!canManageAllMembers) {
-      if (targetMember.user_id === user.id) {
-        return NextResponse.json(
-          { error: "自分自身を削除することはできません" },
-          { status: 400 }
-        )
-      }
+    const permissionError = getTenantMemberRemovalError({
+      currentUserId: user.id,
+      targetUserId: targetMember.user_id,
+      targetRole: targetMember.role,
+      actorMemberships: memberships,
+    })
 
-      if (
-        !isCompanyContactEmail(targetMember.email) ||
-        !isCompanyContactRole(targetMember.role)
-      ) {
-        return NextResponse.json(
-          { error: "企業担当者のみ削除できます" },
-          { status: 403 }
-        )
-      }
-    } else {
-      const permissionError = getTenantMemberRemovalError({
-        currentUserId: user.id,
-        targetUserId: targetMember.user_id,
-        targetRole: targetMember.role,
-        actorMemberships: memberships,
-      })
-
-      if (permissionError) {
-        const status = permissionError === "メンバーを削除する権限がありません" ? 403 : 400
-        return NextResponse.json({ error: permissionError }, { status })
-      }
+    if (permissionError) {
+      const status = permissionError === "メンバーを削除する権限がありません" ? 403 : 400
+      return NextResponse.json({ error: permissionError }, { status })
     }
 
     const { error: deleteError } = await supabase

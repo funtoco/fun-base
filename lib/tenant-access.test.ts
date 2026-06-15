@@ -8,10 +8,10 @@ import {
   isInternalStaffEmail,
 } from "./tenant-access"
 
-test("internal active member can manage company contacts without full admin role", () => {
+test("internal active member cannot manage company contacts without admin role", () => {
   const result = canManageCompanyContacts([{ role: "member" }], "sales@funtoco.jp")
 
-  assert.equal(result, true)
+  assert.equal(result, false)
 })
 
 test("external member cannot manage company contacts", () => {

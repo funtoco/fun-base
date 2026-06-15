@@ -16,7 +16,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { RoleBadge } from "./role-badge"
 import { StatusBadge } from "./status-badge"
 import type { UserTenant } from "@/lib/supabase/tenants"
-import { isCompanyContactEmail, isCompanyContactRole } from "@/lib/tenant-access"
 
 type DisplayRole = 'owner' | 'admin' | 'member' | 'guest'
 
@@ -31,7 +30,6 @@ interface MembersTableProps {
   onResendInvite?: (memberId: string) => void
   onReinviteMember?: (member: UserTenant) => void
   currentUserRole: 'owner' | 'admin' | 'member' | 'guest'
-  canManageCompanyContacts?: boolean
   currentUserId?: string
 }
 
@@ -46,7 +44,6 @@ export function MembersTable({
   onResendInvite,
   onReinviteMember,
   currentUserRole,
-  canManageCompanyContacts = false,
   currentUserId,
 }: MembersTableProps) {
   const canBulkDeleteMembers =
@@ -76,17 +73,11 @@ export function MembersTable({
   const canDeleteMember = (targetMember: UserTenant) => {
     if (targetMember.user_id === currentUserId) return false
 
-    if (targetMember.status === "pending" && targetMember.email) {
-      return true
-    }
-
     if (currentUserRole === "owner" || currentUserRole === "admin") {
       return targetMember.role !== "owner"
     }
 
-    if (!canManageCompanyContacts) return false
-
-    return isCompanyContactEmail(targetMember.email) && isCompanyContactRole(targetMember.role)
+    return false
   }
 
   const canResendInvite = (targetMember: UserTenant) => {
@@ -94,7 +85,11 @@ export function MembersTable({
       return false
     }
 
-    return targetMember.user_id !== currentUserId
+    if (currentUserRole === "owner" || currentUserRole === "admin") {
+      return true
+    }
+
+    return false
   }
 
   const canReinviteMember = (targetMember: UserTenant) =>

@@ -2,12 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/client"
 import { getInviteRedirectUrl } from "@/lib/supabase/invite-redirect"
 import { createClient } from "@/lib/supabase/server"
-import {
-  canManageCompanyContacts,
-  canManageTenant,
-  isCompanyContactEmail,
-  isCompanyContactRole,
-} from "@/lib/tenant-access"
+import { canManageTenant } from "@/lib/tenant-access"
 
 export async function POST(
   request: NextRequest,
@@ -53,12 +48,8 @@ export async function POST(
 
     const memberships = actorMemberships || []
     const canManageAllMembers = canManageTenant(memberships)
-    const canManageCompanyContactInvite = canManageCompanyContacts(
-      memberships,
-      user.email
-    )
 
-    if (!canManageAllMembers && !canManageCompanyContactInvite) {
+    if (!canManageAllMembers) {
       return NextResponse.json(
         { error: "You don't have permission to resend invitations" },
         { status: 403 }
@@ -76,16 +67,6 @@ export async function POST(
       return NextResponse.json(
         { error: "Invitation email is missing" },
         { status: 400 }
-      )
-    }
-
-    if (
-      !canManageAllMembers &&
-      (!isCompanyContactEmail(targetMember.email) || !isCompanyContactRole(targetMember.role))
-    ) {
-      return NextResponse.json(
-        { error: "You can only resend invitations for company contacts" },
-        { status: 403 }
       )
     }
 

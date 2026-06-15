@@ -43,17 +43,9 @@ export function isCompanyContactRole(role: TenantAccessRole | null): boolean {
 
 export function canManageCompanyContacts(
   memberships: TenantRoleMembership[],
-  actorEmail?: string | null
+  _actorEmail?: string | null
 ): boolean {
-  if (canManageTenant(memberships)) {
-    return true
-  }
-
-  if (!isInternalStaffEmail(actorEmail)) {
-    return false
-  }
-
-  return memberships.some((membership) => membership.role === "member")
+  return canManageTenant(memberships)
 }
 
 export function isTenantOwner(memberships: TenantRoleMembership[]): boolean {
