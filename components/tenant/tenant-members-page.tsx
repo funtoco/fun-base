@@ -299,9 +299,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
     selectedMemberRecords.every((member) => member.status === "pending")
       ? "一括キャンセル"
       : "一括削除"
-  const inviteButtonLabel = canManageMembers
-    ? "メールで招待"
-    : "企業担当者を招待"
+  const inviteButtonLabel = "メールで招待"
 
   if (loading) {
     return <TenantMembersLoadingSkeleton />
@@ -410,7 +408,6 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onResendInvite={handleResendInvite}
               onReinviteMember={showReinviteConfirm}
               currentUserRole={currentUserRole}
-              canManageCompanyContacts={canManageCompanyContacts}
               currentUserId={user?.id}
             />
           )}
@@ -433,7 +430,6 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onResendInvite={handleResendInvite}
               onReinviteMember={showReinviteConfirm}
               currentUserRole={currentUserRole}
-              canManageCompanyContacts={canManageCompanyContacts}
               currentUserId={user?.id}
             />
           )}
@@ -456,7 +452,6 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onResendInvite={handleResendInvite}
               onReinviteMember={showReinviteConfirm}
               currentUserRole={currentUserRole}
-              canManageCompanyContacts={canManageCompanyContacts}
               currentUserId={user?.id}
             />
           )}
@@ -560,8 +555,8 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               <h3 className="font-semibold">Member（メンバー）</h3>
               <ul className="text-sm space-y-1">
                 <li>✓ データの閲覧・編集</li>
-                <li>△ 社内担当者の場合、企業担当者の招待・再送・削除のみ対応可</li>
-                <li>✗ internal member のロール変更・追加は不可</li>
+                <li>✗ メンバーの招待・再送・削除は不可</li>
+                <li>✗ ロール変更・追加は不可</li>
                 <li>✗ 設定変更不可</li>
               </ul>
             </div>
