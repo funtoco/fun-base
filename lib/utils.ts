@@ -16,6 +16,10 @@ export function slugify(text: string): string {
     .trim()
 }
 
+export function reverseString(text: string): string {
+  return Array.from(text).reverse().join("")
+}
+
 // Date formatting utilities for Japanese locale
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {
   const dateObj = typeof date === "string" ? new Date(date) : date
