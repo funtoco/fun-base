@@ -16,6 +16,10 @@ export function slugify(text: string): string {
     .trim()
 }
 
+export function toUpperCaseString(text: string): string {
+  return text.toUpperCase()
+}
+
 // Date formatting utilities for Japanese locale
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {
   const dateObj = typeof date === "string" ? new Date(date) : date
