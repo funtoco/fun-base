@@ -103,7 +103,7 @@ export function TenantMembersSection({ tenantId, currentUserRole }: TenantMember
             <div>
               <CardTitle>チームメンバー</CardTitle>
               <CardDescription>
-                {activeMembers.length} of {activeMembers.length} seats used. (10 max)
+                {activeMembers.length}名が所属中
               </CardDescription>
             </div>
             {canManageMembers && (
