@@ -274,9 +274,6 @@ export default function AdminTenantsPage() {
                          userRole === 'member' ? 'メンバー' : 'ゲスト'}
                       </Badge>
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                      {tenant.max_members}人まで
-                    </div>
                   </div>
 
                   <Button 
