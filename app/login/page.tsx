@@ -10,9 +10,9 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getSafeRedirectPath } from "@/lib/auth-route-guards"
-import Link from "next/link"
 import Image from "next/image"
 import { useSearchParams } from "next/navigation"
+import Link from "next/link"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -89,12 +89,6 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          <div className="mt-4 text-center text-sm">
-            アカウントをお持ちでない方は{" "}
-            <Link href="/signup" className="text-primary hover:underline">
-              新規登録
-            </Link>
-          </div>
         </CardContent>
       </Card>
     </div>
