@@ -1,6 +1,7 @@
 export const DEFAULT_AUTH_REDIRECT_PATH = "/dashboard"
 
-const AUTH_ROUTES = ["/login", "/signup"]
+const AUTH_ROUTES = ["/login"]
+const REMOVED_PUBLIC_ROUTES = ["/signup"]
 const PUBLIC_ROUTE_PREFIXES = ["/auth", "/invite"]
 
 function matchesRoute(pathname: string, route: string) {
@@ -13,6 +14,10 @@ export function isAuthRoute(pathname: string) {
 
 export function isPublicRoute(pathname: string) {
   if (pathname === "/") {
+    return true
+  }
+
+  if (REMOVED_PUBLIC_ROUTES.some((route) => matchesRoute(pathname, route))) {
     return true
   }
 
