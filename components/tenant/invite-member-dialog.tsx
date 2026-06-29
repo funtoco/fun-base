@@ -17,6 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/lib/hooks/use-toast"
 import type { TenantOffice } from "@/lib/supabase/tenants"
 
+type InvitableRole = 'admin' | 'member' | 'guest'
+
 interface InviteMemberDialogProps {
   tenantId: string
   open: boolean
@@ -42,7 +44,7 @@ export function InviteMemberDialog({
 }: InviteMemberDialogProps) {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
-  const [role, setRole] = useState<'admin' | 'member' | 'guest'>('member')
+  const [role, setRole] = useState<InvitableRole>('member')
   const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
@@ -179,7 +181,7 @@ export function InviteMemberDialog({
             {canChooseRole ? (
               <div className="grid gap-2">
                 <Label htmlFor="role">ロール</Label>
-                <Select value={role} onValueChange={(value: 'admin' | 'member' | 'guest') => setRole(value)}>
+                <Select value={role} onValueChange={(value: InvitableRole) => setRole(value)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

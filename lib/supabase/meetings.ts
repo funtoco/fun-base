@@ -1,8 +1,14 @@
 import { createClient } from './client'
 import type { Meeting, MeetingNote } from '@/lib/models'
+import { getAccessiblePersonIdsForCurrentUser } from './people-access'
 
 export async function getMeetings(): Promise<Meeting[]> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'meetings')
+
+  if (accessiblePersonIds.length === 0) {
+    return []
+  }
   
   const { data, error } = await supabase
     .from('meetings')
@@ -16,6 +22,7 @@ export async function getMeetings(): Promise<Meeting[]> {
         detail
       )
     `)
+    .in('person_id', accessiblePersonIds)
     .order('datetime', { ascending: false })
   
   if (error) {
@@ -24,7 +31,7 @@ export async function getMeetings(): Promise<Meeting[]> {
   }
   
   // SupabaseのデータをMeeting型に変換
-  return data.map(meeting => ({
+  return data.map((meeting: any) => ({
     id: meeting.id,
     personId: meeting.person_id,
     kind: meeting.kind,
@@ -46,6 +53,11 @@ export async function getMeetings(): Promise<Meeting[]> {
 
 export async function getMeetingById(id: string): Promise<Meeting | null> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'meetings')
+
+  if (accessiblePersonIds.length === 0) {
+    return null
+  }
   
   const { data, error } = await supabase
     .from('meetings')
@@ -60,6 +72,7 @@ export async function getMeetingById(id: string): Promise<Meeting | null> {
       )
     `)
     .eq('id', id)
+    .in('person_id', accessiblePersonIds)
     .single()
   
   if (error) {
@@ -89,6 +102,11 @@ export async function getMeetingById(id: string): Promise<Meeting | null> {
 
 export async function getMeetingsByPersonId(personId: string): Promise<Meeting[]> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'meetings')
+
+  if (!accessiblePersonIds.includes(personId)) {
+    return []
+  }
   
   const { data, error } = await supabase
     .from('meetings')
@@ -110,7 +128,7 @@ export async function getMeetingsByPersonId(personId: string): Promise<Meeting[]
     throw error
   }
   
-  return data.map(meeting => ({
+  return data.map((meeting: any) => ({
     id: meeting.id,
     personId: meeting.person_id,
     kind: meeting.kind,

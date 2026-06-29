@@ -1,6 +1,7 @@
 import { createClient } from './client'
 import type { PersonDocument } from '@/lib/models'
 import { resolveReplacementDocumentNote } from '@/lib/document-notes'
+import { getAccessiblePersonIdsForCurrentUser } from './people-access'
 
 const REMOVED_DOCUMENT_TYPE = 'resident_card_copy'
 const VALID_DOCUMENT_TYPES = [
@@ -19,6 +20,12 @@ const VALID_DOCUMENT_TYPES = [
 
 export async function getPersonDocuments(personId: string): Promise<PersonDocument[]> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'documents')
+
+  if (!accessiblePersonIds.includes(personId)) {
+    return []
+  }
+
   const { data, error } = await supabase
     .from('person_documents')
     .select('*')
@@ -41,9 +48,16 @@ export type PersonDocumentWithPerson = PersonDocument & {
 
 export async function getAllPersonDocuments(): Promise<PersonDocumentWithPerson[]> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'documents')
+
+  if (accessiblePersonIds.length === 0) {
+    return []
+  }
+
   const { data, error } = await supabase
     .from('person_documents')
     .select('*, people(name, kana)')
+    .in('person_id', accessiblePersonIds)
     .neq('document_type', REMOVED_DOCUMENT_TYPE)
     .order('created_at', { ascending: false })
 
@@ -95,6 +109,11 @@ export async function uploadDocumentDirect(
   }
 
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'documents')
+
+  if (!accessiblePersonIds.includes(personId)) {
+    return { success: false, error: '人材情報が見つかりません' }
+  }
 
   // Get person's tenant_id
   const { data: person, error: personError } = await supabase

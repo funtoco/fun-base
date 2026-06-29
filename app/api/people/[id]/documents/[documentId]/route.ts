@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { getAccessiblePersonIdsForCurrentUser } from '@/lib/supabase/people-access'
 import { deleteFileFromStorage } from '@/lib/storage/file-uploader'
 import { normalizeDocumentNote } from '@/lib/document-notes'
 
@@ -32,6 +33,14 @@ export async function PATCH(
     }
 
     const supabase = await createClient()
+    const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'documents')
+
+    if (!accessiblePersonIds.includes(personId)) {
+      return NextResponse.json(
+        { error: 'Document not found' },
+        { status: 404 }
+      )
+    }
 
     const { data: document, error: fetchError } = await supabase
       .from('person_documents')
@@ -133,6 +142,14 @@ export async function DELETE(
     }
 
     const supabase = await createClient()
+    const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'documents')
+
+    if (!accessiblePersonIds.includes(personId)) {
+      return NextResponse.json(
+        { error: 'Document not found' },
+        { status: 404 }
+      )
+    }
 
     // Query the document and validate it belongs to the person
     const { data: document, error: fetchError } = await supabase

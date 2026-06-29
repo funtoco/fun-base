@@ -160,7 +160,7 @@ export function TenantMembersSection({ tenantId, currentUserRole }: TenantMember
                         <Badge variant={getRoleBadgeVariant(member.role)}>
                           {member.role === 'owner' ? 'オーナー' : 
                            member.role === 'admin' ? '管理者' :
-                           member.role === 'member' ? 'メンバー' : 'ゲスト'}
+                           member.role === 'member' ? 'メンバー' :'ゲスト'}
                         </Badge>
                       </div>
                     </TableCell>
@@ -247,7 +247,7 @@ export function TenantMembersSection({ tenantId, currentUserRole }: TenantMember
                         <Badge variant={getRoleBadgeVariant(member.role)}>
                           {member.role === 'owner' ? 'オーナー' : 
                            member.role === 'admin' ? '管理者' :
-                           member.role === 'member' ? 'メンバー' : 'ゲスト'}
+                           member.role === 'member' ? 'メンバー' :'ゲスト'}
                         </Badge>
                       </div>
                     </TableCell>

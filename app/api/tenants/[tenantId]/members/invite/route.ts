@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
 import { getInviteRedirectUrl } from "@/lib/supabase/invite-redirect"
-import { canManageTenant } from "@/lib/tenant-access"
+import {
+  canManageTenant,
+  TENANT_INVITABLE_ROLES,
+} from "@/lib/tenant-access"
 
-const INVITABLE_ROLES = new Set(["admin", "member", "guest"])
+const INVITABLE_ROLES = new Set(TENANT_INVITABLE_ROLES)
 
 function normalizeOfficeIds(value: unknown): string[] {
   if (!Array.isArray(value)) {

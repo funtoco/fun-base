@@ -19,6 +19,8 @@ import { CheckCircle, Search, Loader2 } from "lucide-react"
 import { useToast } from "@/lib/hooks/use-toast"
 import type { TenantOffice } from "@/lib/supabase/tenants"
 
+type InvitableRole = 'admin' | 'member' | 'guest'
+
 interface AddExistingMemberDialogProps {
   tenantId: string
   open: boolean
@@ -45,7 +47,7 @@ export function AddExistingMemberDialog({
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<SearchUser[]>([])
   const [selectedUser, setSelectedUser] = useState<SearchUser | null>(null)
-  const [role, setRole] = useState<'admin' | 'member' | 'guest'>('member')
+  const [role, setRole] = useState<InvitableRole>('member')
   const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [searching, setSearching] = useState(false)
@@ -280,7 +282,7 @@ export function AddExistingMemberDialog({
             {selectedUser && (
               <div className="grid gap-2">
                 <Label htmlFor="role">ロール</Label>
-                <Select value={role} onValueChange={(value: 'admin' | 'member' | 'guest') => setRole(value)}>
+                <Select value={role} onValueChange={(value: InvitableRole) => setRole(value)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

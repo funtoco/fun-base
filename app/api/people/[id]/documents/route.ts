@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { getAccessiblePersonIdsForCurrentUser } from '@/lib/supabase/people-access'
 import { uploadFileToStorage, generateFilePath, deleteFileFromStorage } from '@/lib/storage/file-uploader'
 import { normalizeDocumentNote, resolveReplacementDocumentNote } from '@/lib/document-notes'
 
@@ -36,6 +37,14 @@ export async function GET(
     }
 
     const supabase = await createClient()
+    const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'documents')
+
+    if (!accessiblePersonIds.includes(personId)) {
+      return NextResponse.json(
+        { error: 'Person not found' },
+        { status: 404 }
+      )
+    }
 
     const { data, error } = await supabase
       .from('person_documents')
@@ -132,6 +141,14 @@ export async function POST(
     }
 
     const supabase = await createClient()
+    const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'documents')
+
+    if (!accessiblePersonIds.includes(personId)) {
+      return NextResponse.json(
+        { error: 'Person not found' },
+        { status: 404 }
+      )
+    }
 
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser()

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { Person } from '@/lib/models'
+import { getAccessiblePersonIdsForCurrentUser } from '@/lib/supabase/people-access'
 
 export async function PUT(
   request: NextRequest,
@@ -44,6 +45,14 @@ export async function PUT(
 
     // サーバー側のSupabaseクライアントを使用
     const supabase = await createClient()
+    const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase)
+
+    if (!accessiblePersonIds.includes(id)) {
+      return NextResponse.json(
+        { error: 'Person not found' },
+        { status: 404 }
+      )
+    }
 
     // 更新対象のフィールドを構築
     const updateFields: Record<string, any> = {
@@ -156,4 +165,3 @@ export async function PUT(
     )
   }
 }
-

@@ -1,5 +1,6 @@
 import { createClient } from './client'
 import type { Visa, VisaStatus } from '@/lib/models'
+import { getAccessiblePersonIdsForCurrentUser } from './people-access'
 
 export interface VisaListResponse {
   visas: Visa[]
@@ -20,11 +21,17 @@ const applyVisaStatusExclusions = (query: ReturnType<typeof createClient>["from"
 
 export async function getVisas(): Promise<Visa[]> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'visas')
+
+  if (accessiblePersonIds.length === 0) {
+    return []
+  }
   
   const { data, error } = await applyVisaStatusExclusions(
     supabase
     .from('visas')
     .select()
+    .in('person_id', accessiblePersonIds)
     .order('updated_at', { ascending: false })
   )
   
@@ -34,7 +41,7 @@ export async function getVisas(): Promise<Visa[]> {
   }
   
   // SupabaseのデータをVisa型に変換
-  return data.map(visa => ({
+  return data.map((visa: any) => ({
     id: visa.id,
     personId: visa.person_id,
     status: visa.status,
@@ -60,12 +67,18 @@ export async function getVisas(): Promise<Visa[]> {
 
 export async function getVisaById(id: string): Promise<Visa | null> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'visas')
+
+  if (accessiblePersonIds.length === 0) {
+    return null
+  }
   
   const { data, error } = await applyVisaStatusExclusions(
     supabase
     .from('visas')
     .select()
     .eq('id', id)
+    .in('person_id', accessiblePersonIds)
     .single()
   )
   
@@ -100,6 +113,11 @@ export async function getVisaById(id: string): Promise<Visa | null> {
 
 export async function getVisasByPersonId(personId: string): Promise<Visa[]> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'visas')
+
+  if (!accessiblePersonIds.includes(personId)) {
+    return []
+  }
   
   const { data, error } = await applyVisaStatusExclusions(
     supabase
@@ -269,22 +287,10 @@ export async function deleteVisa(id: string): Promise<void> {
 }
 
 export async function getVisaStatusCounts(): Promise<VisaStatusCounts> {
-  const supabase = createClient()
-  
-  const { data, error } = await applyVisaStatusExclusions(
-    supabase
-    .from('visas')
-    .select('status')
-  )
-
-  if (error) {
-    console.error('Error fetching visa status counts:', error)
-    throw error
-  }
-  
-  // Count occurrences of each status
   const counts: VisaStatusCounts = {}
-  data.forEach(visa => {
+
+  const visas = await getVisas()
+  visas.forEach(visa => {
     counts[visa.status] = (counts[visa.status] || 0) + 1
   })
   
@@ -297,6 +303,16 @@ export async function getVisasPaginated(
   pageSize: number = 20
 ): Promise<VisaListResponse> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'visas')
+  
+  if (accessiblePersonIds.length === 0) {
+    return {
+      visas: [],
+      totalCount: 0,
+      hasNextPage: false,
+      hasPrevPage: false,
+    }
+  }
   
   const offset = (page - 1) * pageSize
   
@@ -312,6 +328,7 @@ export async function getVisasPaginated(
         tenant_id
       )
     `, { count: 'exact' })
+    .in('person_id', accessiblePersonIds)
     .order('updated_at', { ascending: false })
     .range(offset, offset + pageSize - 1)
 
@@ -328,7 +345,7 @@ export async function getVisasPaginated(
     throw error
   }
   
-  const visas: (Visa & { person: any })[] = data.map(item => ({
+  const visas: (Visa & { person: any })[] = data.map((item: any) => ({
     id: item.id,
     personId: item.person_id,
     status: item.status,

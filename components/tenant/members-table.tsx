@@ -16,21 +16,39 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { RoleBadge } from "./role-badge"
 import { StatusBadge } from "./status-badge"
 import type { UserTenant } from "@/lib/supabase/tenants"
+import {
+  normalizeTenantFeaturePermissions,
+  TENANT_FEATURE_PERMISSION_KEYS,
+  TENANT_FEATURE_PERMISSION_LABELS,
+  type TenantFeaturePermission,
+  type TenantFeaturePermissions,
+} from "@/lib/tenant-access"
 
-type DisplayRole = 'owner' | 'admin' | 'member' | 'guest'
+type DisplayRole = "owner" | "admin" | "member" | "guest"
+const ROLE_OPTIONS: Array<{ value: DisplayRole; label: string }> = [
+  { value: "owner", label: "オーナー" },
+  { value: "admin", label: "管理者" },
+  { value: "member", label: "メンバー" },
+  { value: "guest", label: "ゲスト" },
+]
 
 interface MembersTableProps {
   members: UserTenant[]
   selectedMembers: string[]
   onSelectMember: (memberId: string, selected: boolean) => void
   onSelectAll: (memberIds: string[], selected: boolean) => void
-  onChangeRole: (memberId: string, role: 'owner' | 'admin' | 'member' | 'guest') => void
+  onChangeRole: (memberId: string, role: DisplayRole) => void
+  onChangeFeaturePermissions: (memberId: string, permissions: TenantFeaturePermissions) => void
   onDeleteMember: (memberId: string) => void
   onEditOffices?: (member: UserTenant) => void
   onResendInvite?: (memberId: string) => void
   onReinviteMember?: (member: UserTenant) => void
-  currentUserRole: 'owner' | 'admin' | 'member' | 'guest'
+  currentUserRole: DisplayRole
   currentUserId?: string
+}
+
+function isManagerRole(role: UserTenant["role"] | DisplayRole): boolean {
+  return role === "owner" || role === "admin"
 }
 
 export function MembersTable({
@@ -39,6 +57,7 @@ export function MembersTable({
   onSelectMember,
   onSelectAll,
   onChangeRole,
+  onChangeFeaturePermissions,
   onDeleteMember,
   onEditOffices,
   onResendInvite,
@@ -46,8 +65,7 @@ export function MembersTable({
   currentUserRole,
   currentUserId,
 }: MembersTableProps) {
-  const canBulkDeleteMembers =
-    currentUserRole === "owner" || currentUserRole === "admin"
+  const canBulkDeleteMembers = isManagerRole(currentUserRole)
 
   const formatLastActive = (joinedAt?: string) => {
     if (!joinedAt) return "-"
@@ -62,35 +80,32 @@ export function MembersTable({
   const getDisplayRole = (role: UserTenant["role"]): DisplayRole =>
     role === "supporter" ? "member" : role
 
-  // Permission checks
   const canChangeRole = (targetMember: UserTenant) => {
-    if (currentUserRole === 'guest' || currentUserRole === 'member') return false
-    if (targetMember.user_id === currentUserId) return false // Can't change own role
-    if (targetMember.role === 'owner' && currentUserRole !== 'owner') return false
+    if (!isManagerRole(currentUserRole)) return false
+    if (targetMember.user_id === currentUserId) return false
+    if (targetMember.role === "owner" && currentUserRole !== "owner") return false
     return true
   }
 
+  const canChangeFeaturePermissions = (targetMember: UserTenant) =>
+    isManagerRole(currentUserRole) &&
+    targetMember.user_id !== currentUserId &&
+    targetMember.role !== "owner" &&
+    targetMember.role !== "admin"
+
   const canDeleteMember = (targetMember: UserTenant) => {
     if (targetMember.user_id === currentUserId) return false
-
-    if (currentUserRole === "owner" || currentUserRole === "admin") {
+    if (isManagerRole(currentUserRole)) {
       return targetMember.role !== "owner"
     }
-
     return false
   }
 
-  const canResendInvite = (targetMember: UserTenant) => {
-    if (!onResendInvite || targetMember.status !== "pending" || !targetMember.email) {
-      return false
-    }
-
-    if (currentUserRole === "owner" || currentUserRole === "admin") {
-      return true
-    }
-
-    return false
-  }
+  const canResendInvite = (targetMember: UserTenant) =>
+    Boolean(onResendInvite) &&
+    targetMember.status === "pending" &&
+    Boolean(targetMember.email) &&
+    isManagerRole(currentUserRole)
 
   const canReinviteMember = (targetMember: UserTenant) =>
     Boolean(onReinviteMember) &&
@@ -100,7 +115,7 @@ export function MembersTable({
 
   const canEditOffices = (targetMember: UserTenant) =>
     Boolean(onEditOffices) &&
-    (currentUserRole === "owner" || currentUserRole === "admin") &&
+    isManagerRole(currentUserRole) &&
     targetMember.user_id !== currentUserId
 
   const canSelectMember = (targetMember: UserTenant) =>
@@ -134,9 +149,21 @@ export function MembersTable({
     canEditOffices(targetMember) ||
     (targetMember.status !== "pending" && canDeleteMember(targetMember))
 
-  const handleRoleChange = (member: UserTenant, newRole: 'owner' | 'admin' | 'member' | 'guest') => {
+  const handleRoleChange = (member: UserTenant, newRole: DisplayRole) => {
     if (!canChangeRole(member)) return
     onChangeRole(member.id, newRole)
+  }
+
+  const handleFeaturePermissionChange = (
+    member: UserTenant,
+    feature: TenantFeaturePermission,
+    checked: boolean
+  ) => {
+    if (!canChangeFeaturePermissions(member)) return
+    onChangeFeaturePermissions(member.id, {
+      ...normalizeTenantFeaturePermissions(member.feature_permissions),
+      [feature]: checked,
+    })
   }
 
   const handleDeleteMember = (member: UserTenant) => {
@@ -179,6 +206,7 @@ export function MembersTable({
             ) : null}
             <TableHead>メール</TableHead>
             <TableHead>ロール</TableHead>
+            <TableHead>機能権限</TableHead>
             <TableHead>所属先</TableHead>
             <TableHead>ステータス</TableHead>
             <TableHead>参加日</TableHead>
@@ -188,7 +216,9 @@ export function MembersTable({
         <TableBody>
           {members.map((member) => {
             const isCurrentUser = member.user_id === currentUserId
-            const email = member.email || ''
+            const email = member.email || ""
+            const permissions = normalizeTenantFeaturePermissions(member.feature_permissions)
+            const featurePermissionsLocked = !canChangeFeaturePermissions(member)
 
             return (
               <TableRow key={member.id}>
@@ -222,7 +252,46 @@ export function MembersTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <RoleBadge role={getDisplayRole(member.role)} />
+                  <div className="flex items-center gap-2">
+                    <RoleBadge role={getDisplayRole(member.role)} />
+                    {canChangeRole(member) && (
+                      <select
+                        aria-label={`${email}のロールを変更`}
+                        value={getDisplayRole(member.role)}
+                        onChange={(event) =>
+                          handleRoleChange(member, event.target.value as DisplayRole)
+                        }
+                        className="h-7 rounded-md border border-input bg-background px-2 text-xs shadow-sm transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      >
+                        {ROLE_OPTIONS.map((roleOption) => (
+                          <option key={roleOption.value} value={roleOption.value}>
+                            {roleOption.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex max-w-[30rem] flex-wrap gap-x-3 gap-y-2">
+                    {isManagerRole(member.role) ? (
+                      <Badge variant="secondary">全機能</Badge>
+                    ) : (
+                      TENANT_FEATURE_PERMISSION_KEYS.map((feature) => (
+                        <label key={feature} className="flex items-center gap-1.5 text-xs">
+                          <Checkbox
+                            checked={permissions[feature] !== false}
+                            disabled={featurePermissionsLocked}
+                            onCheckedChange={(checked) =>
+                              handleFeaturePermissionChange(member, feature, checked === true)
+                            }
+                            aria-label={`${email}の${TENANT_FEATURE_PERMISSION_LABELS[feature]}権限`}
+                          />
+                          <span>{TENANT_FEATURE_PERMISSION_LABELS[feature]}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
@@ -312,31 +381,23 @@ export function MembersTable({
                         <DropdownMenuContent align="end">
                           {canChangeRole(member) && (
                             <>
-                              {member.role !== 'owner' && (
-                                <DropdownMenuItem
-                                  onClick={() => handleRoleChange(member, 'owner')}
-                                >
+                              {member.role !== "owner" && (
+                                <DropdownMenuItem onClick={() => handleRoleChange(member, "owner")}>
                                   Ownerに変更
                                 </DropdownMenuItem>
                               )}
-                              {member.role !== 'admin' && (
-                                <DropdownMenuItem
-                                  onClick={() => handleRoleChange(member, 'admin')}
-                                >
+                              {member.role !== "admin" && (
+                                <DropdownMenuItem onClick={() => handleRoleChange(member, "admin")}>
                                   Adminに変更
                                 </DropdownMenuItem>
                               )}
-                              {member.role !== 'member' && (
-                                <DropdownMenuItem
-                                  onClick={() => handleRoleChange(member, 'member')}
-                                >
+                              {member.role !== "member" && (
+                                <DropdownMenuItem onClick={() => handleRoleChange(member, "member")}>
                                   Memberに変更
                                 </DropdownMenuItem>
                               )}
-                              {member.role !== 'guest' && (
-                                <DropdownMenuItem
-                                  onClick={() => handleRoleChange(member, 'guest')}
-                                >
+                              {member.role !== "guest" && (
+                                <DropdownMenuItem onClick={() => handleRoleChange(member, "guest")}>
                                   Guestに変更
                                 </DropdownMenuItem>
                               )}

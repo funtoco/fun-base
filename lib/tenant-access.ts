@@ -5,8 +5,51 @@ export type TenantAccessRole =
   | "guest"
   | "supporter"
 
+export type TenantFeaturePermission =
+  | "people"
+  | "visas"
+  | "meetings"
+  | "support_actions"
+  | "documents"
+  | "funedu"
+
+export type TenantFeaturePermissions = Partial<Record<TenantFeaturePermission, boolean>>
+
 export interface TenantRoleMembership {
   role: TenantAccessRole | null
+  status?: string | null
+  feature_permissions?: TenantFeaturePermissions | string | null
+}
+
+export const TENANT_MANAGEABLE_ROLES = [
+  "owner",
+  "admin",
+  "member",
+  "guest",
+] as const satisfies readonly Exclude<TenantAccessRole, "supporter">[]
+
+export const TENANT_INVITABLE_ROLES = [
+  "admin",
+  "member",
+  "guest",
+] as const satisfies readonly Exclude<TenantAccessRole, "owner" | "supporter">[]
+
+export const TENANT_FEATURE_PERMISSION_KEYS = [
+  "people",
+  "visas",
+  "meetings",
+  "support_actions",
+  "documents",
+  "funedu",
+] as const satisfies readonly TenantFeaturePermission[]
+
+export const TENANT_FEATURE_PERMISSION_LABELS: Record<TenantFeaturePermission, string> = {
+  people: "人材一覧",
+  visas: "ビザ",
+  meetings: "面談",
+  support_actions: "サポート記録",
+  documents: "書類",
+  funedu: "FunEdu",
 }
 
 const INTERNAL_STAFF_EMAIL_DOMAIN = "@funtoco.jp"
@@ -25,6 +68,55 @@ export function canManageTenant(memberships: TenantRoleMembership[]): boolean {
     (membership) =>
       membership.role === "owner" || membership.role === "admin"
   )
+}
+
+export function normalizeTenantFeaturePermissions(
+  permissions: TenantRoleMembership["feature_permissions"]
+): TenantFeaturePermissions {
+  if (!permissions) {
+    return {}
+  }
+
+  if (typeof permissions === "string") {
+    try {
+      return normalizeTenantFeaturePermissions(JSON.parse(permissions))
+    } catch {
+      return {}
+    }
+  }
+
+  const normalized: TenantFeaturePermissions = {}
+  for (const key of TENANT_FEATURE_PERMISSION_KEYS) {
+    const value = permissions[key]
+    if (typeof value === "boolean") {
+      normalized[key] = value
+    }
+  }
+
+  return normalized
+}
+
+export function hasTenantFeatureAccess(
+  membership: TenantRoleMembership,
+  feature: TenantFeaturePermission
+): boolean {
+  if (membership.status && membership.status !== "active") {
+    return false
+  }
+
+  if (membership.role === "owner" || membership.role === "admin") {
+    return true
+  }
+
+  const permissions = normalizeTenantFeaturePermissions(membership.feature_permissions)
+  return permissions[feature] !== false
+}
+
+export function hasAnyTenantFeatureAccess(
+  memberships: TenantRoleMembership[],
+  feature: TenantFeaturePermission
+): boolean {
+  return memberships.some((membership) => hasTenantFeatureAccess(membership, feature))
 }
 
 export function isInternalStaffEmail(email?: string | null): boolean {
