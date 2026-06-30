@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from './client'
+import type { TenantFeaturePermissions } from '@/lib/tenant-access'
 
 export interface Tenant {
   id: string
@@ -35,6 +36,7 @@ export interface UserTenant {
     }
   }
   role: 'owner' | 'admin' | 'member' | 'guest' | 'supporter'
+  feature_permissions?: TenantFeaturePermissions | null
   status: 'active' | 'pending' | 'suspended'
   invited_by?: string
   invited_at?: string
@@ -121,6 +123,7 @@ export async function getCurrentUserTenants(): Promise<UserTenant[]> {
     tenant_id: ut.tenant_id,
     email: ut.email,
     role: ut.role,
+    feature_permissions: ut.feature_permissions,
     status: ut.status,
     created_at: ut.created_at,
     updated_at: ut.updated_at,
@@ -376,6 +379,26 @@ export async function updateUserTenantRole(
 
   if (!response.ok) {
     throw new Error(result.error || 'Failed to update user tenant role')
+  }
+}
+
+export async function updateUserTenantFeaturePermissions(
+  tenantId: string,
+  userTenantId: string,
+  featurePermissions: TenantFeaturePermissions
+): Promise<void> {
+  const response = await fetch(`/api/tenants/${tenantId}/members/${userTenantId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ featurePermissions }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(result.error || 'Failed to update feature permissions')
   }
 }
 

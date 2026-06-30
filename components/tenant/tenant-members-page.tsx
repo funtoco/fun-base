@@ -18,6 +18,7 @@ import {
   getTenantMembers, 
   getTenantOffices,
   resendTenantInvitation,
+  updateUserTenantFeaturePermissions,
   updateUserTenantRole,
   updateUserTenantOffices,
   removeUserFromTenant,
@@ -27,6 +28,7 @@ import {
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/lib/hooks/use-toast"
 import { canManageCompanyContacts as canManageCompanyContactsForActor } from "@/lib/tenant-access"
+import type { TenantFeaturePermissions } from "@/lib/tenant-access"
 import { TenantMembersLoadingSkeleton } from "@/components/ui/funbase-loading"
 
 interface TenantMembersPageProps {
@@ -154,6 +156,27 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
       await fetchData()
     } catch (error) {
       console.error('Error updating role:', error)
+    }
+  }
+
+  const handleChangeFeaturePermissions = async (
+    memberId: string,
+    permissions: TenantFeaturePermissions
+  ) => {
+    try {
+      await updateUserTenantFeaturePermissions(tenantId, memberId, permissions)
+      await fetchData()
+      toast({
+        title: "完了",
+        description: "機能権限を更新しました",
+      })
+    } catch (error) {
+      console.error('Error updating feature permissions:', error)
+      toast({
+        title: "エラー",
+        description: error instanceof Error ? error.message : "機能権限の更新に失敗しました",
+        variant: "destructive",
+      })
     }
   }
 
@@ -403,6 +426,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectMember={handleSelectMember}
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
+              onChangeFeaturePermissions={handleChangeFeaturePermissions}
               onDeleteMember={showDeleteConfirm}
               onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
@@ -425,6 +449,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectMember={handleSelectMember}
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
+              onChangeFeaturePermissions={handleChangeFeaturePermissions}
               onDeleteMember={showDeleteConfirm}
               onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
@@ -447,6 +472,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectMember={handleSelectMember}
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
+              onChangeFeaturePermissions={handleChangeFeaturePermissions}
               onDeleteMember={showDeleteConfirm}
               onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
@@ -568,6 +594,16 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
                 <li>✓ データの閲覧のみ</li>
                 <li>✗ データの編集不可</li>
                 <li>✗ メンバー管理不可</li>
+              </ul>
+            </div>
+
+            {/* Feature permissions */}
+            <div className="space-y-2 border-t pt-3">
+              <h3 className="font-semibold">機能権限</h3>
+              <ul className="text-sm space-y-1">
+                <li>✓ メンバー・ゲストごとに人材一覧、ビザ、面談、サポート記録、書類、FunEduを個別にON/OFFできます</li>
+                <li>✓ 未設定の機能は既存ユーザー互換のためONとして扱います</li>
+                <li>✗ オーナー・管理者は管理維持のため全機能アクセスです</li>
               </ul>
             </div>
           </div>

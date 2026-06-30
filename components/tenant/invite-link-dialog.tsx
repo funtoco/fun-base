@@ -23,8 +23,21 @@ interface InviteLinkDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
+type InvitableRole = 'admin' | 'member' | 'guest'
+
+function getRoleLabel(role: InvitableRole) {
+  switch (role) {
+    case 'admin':
+      return 'Admin'
+    case 'member':
+      return 'Member'
+    case 'guest':
+      return 'Guest'
+  }
+}
+
 export function InviteLinkDialog({ tenantId, open, onOpenChange }: InviteLinkDialogProps) {
-  const [defaultRole, setDefaultRole] = useState<'admin' | 'member' | 'guest'>('member')
+  const [defaultRole, setDefaultRole] = useState<InvitableRole>('member')
   const [hasExpiration, setHasExpiration] = useState(false)
   const [expirationDays, setExpirationDays] = useState(7)
   const [generatedLink, setGeneratedLink] = useState("")
@@ -108,7 +121,7 @@ export function InviteLinkDialog({ tenantId, open, onOpenChange }: InviteLinkDia
 
             <div className="grid gap-2">
               <Label htmlFor="defaultRole">デフォルトロール</Label>
-              <Select value={defaultRole} onValueChange={(value: 'admin' | 'member' | 'guest') => setDefaultRole(value)}>
+              <Select value={defaultRole} onValueChange={(value: InvitableRole) => setDefaultRole(value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -174,7 +187,7 @@ export function InviteLinkDialog({ tenantId, open, onOpenChange }: InviteLinkDia
             <div className="rounded-lg bg-muted p-3">
               <h4 className="font-medium text-sm mb-2">リンクの詳細</h4>
               <div className="space-y-1 text-sm text-muted-foreground">
-                <p>デフォルトロール: {defaultRole === 'admin' ? 'Admin' : defaultRole === 'member' ? 'Member' : 'Guest'}</p>
+                <p>デフォルトロール: {getRoleLabel(defaultRole)}</p>
                 {hasExpiration && <p>有効期限: {expirationDays}日</p>}
               </div>
             </div>

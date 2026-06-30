@@ -4,10 +4,12 @@ import {
   canManageTenant,
   getTenantMemberRemovalError,
   getTenantMemberRoleUpdateError,
+  TENANT_MANAGEABLE_ROLES,
+  TENANT_FEATURE_PERMISSION_KEYS,
+  type TenantFeaturePermissions,
 } from "@/lib/tenant-access"
 
-const MANAGEABLE_ROLES = ["owner", "admin", "member", "guest"] as const
-type ManageableRole = (typeof MANAGEABLE_ROLES)[number]
+type ManageableRole = (typeof TENANT_MANAGEABLE_ROLES)[number]
 
 function normalizeOfficeIds(value: unknown): string[] | null {
   if (typeof value === "undefined") {
@@ -26,6 +28,28 @@ function normalizeOfficeIds(value: unknown): string[] | null {
   return Array.from(new Set(normalizedIds))
 }
 
+function normalizeFeaturePermissions(value: unknown): TenantFeaturePermissions | null {
+  if (typeof value === "undefined") {
+    return null
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null
+  }
+
+  const input = value as Record<string, unknown>
+  const permissions: TenantFeaturePermissions = {}
+
+  for (const key of TENANT_FEATURE_PERMISSION_KEYS) {
+    const permissionValue = input[key]
+    if (typeof permissionValue === "boolean") {
+      permissions[key] = permissionValue
+    }
+  }
+
+  return permissions
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { tenantId: string; memberId: string } }
@@ -41,17 +65,19 @@ export async function PATCH(
     const body = await request.json()
     const { role } = body
     const officeIds = normalizeOfficeIds(body.officeIds)
+    const featurePermissions = normalizeFeaturePermissions(body.featurePermissions)
     const hasRoleUpdate = typeof role !== "undefined"
     const hasOfficeUpdate = typeof body.officeIds !== "undefined"
+    const hasFeaturePermissionsUpdate = typeof body.featurePermissions !== "undefined"
 
-    if (!hasRoleUpdate && !hasOfficeUpdate) {
+    if (!hasRoleUpdate && !hasOfficeUpdate && !hasFeaturePermissionsUpdate) {
       return NextResponse.json(
-        { error: "Role or officeIds is required" },
+        { error: "Role, officeIds, or featurePermissions is required" },
         { status: 400 }
       )
     }
 
-    if (hasRoleUpdate && (typeof role !== "string" || !MANAGEABLE_ROLES.includes(role as ManageableRole))) {
+    if (hasRoleUpdate && (typeof role !== "string" || !TENANT_MANAGEABLE_ROLES.includes(role as ManageableRole))) {
       return NextResponse.json(
         { error: "Invalid role" },
         { status: 400 }
@@ -61,6 +87,13 @@ export async function PATCH(
     if (hasOfficeUpdate && officeIds === null) {
       return NextResponse.json(
         { error: "Invalid officeIds" },
+        { status: 400 }
+      )
+    }
+
+    if (hasFeaturePermissionsUpdate && featurePermissions === null) {
+      return NextResponse.json(
+        { error: "Invalid featurePermissions" },
         { status: 400 }
       )
     }
@@ -144,6 +177,13 @@ export async function PATCH(
       )
     }
 
+    if (hasFeaturePermissionsUpdate && !canManageTenant(memberships)) {
+      return NextResponse.json(
+        { error: "機能権限を変更する権限がありません" },
+        { status: 403 }
+      )
+    }
+
     if (hasRoleUpdate) {
       const { error: updateError } = await supabase
         .from("user_tenants")
@@ -155,6 +195,22 @@ export async function PATCH(
         console.error("Error updating member role:", updateError)
         return NextResponse.json(
           { error: "Failed to update member role" },
+          { status: 500 }
+        )
+      }
+    }
+
+    if (hasFeaturePermissionsUpdate) {
+      const { error: updateError } = await supabase
+        .from("user_tenants")
+        .update({ feature_permissions: featurePermissions })
+        .eq("id", params.memberId)
+        .eq("tenant_id", params.tenantId)
+
+      if (updateError) {
+        console.error("Error updating feature permissions:", updateError)
+        return NextResponse.json(
+          { error: "Failed to update feature permissions" },
           { status: 500 }
         )
       }

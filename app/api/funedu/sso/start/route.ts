@@ -7,6 +7,7 @@ import {
   getSafeFunEduNextPath,
   signFunEduSsoToken,
 } from "@/lib/funedu-sso"
+import { hasAnyTenantFeatureAccess } from "@/lib/tenant-access"
 
 export async function GET(request: NextRequest) {
   const funEduBaseUrl = getFunEduBaseUrl()
@@ -37,6 +38,27 @@ export async function GET(request: NextRequest) {
     loginUrl.search = ""
     loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`)
     return NextResponse.redirect(loginUrl)
+  }
+
+  const { data: memberships, error: membershipsError } = await supabase
+    .from("user_tenants")
+    .select("role, status, feature_permissions")
+    .eq("user_id", user.id)
+    .eq("status", "active")
+
+  if (membershipsError) {
+    console.error("Error checking FunEdu feature access:", membershipsError)
+    return NextResponse.json(
+      { error: "Failed to verify FunEdu access" },
+      { status: 500 },
+    )
+  }
+
+  if (!hasAnyTenantFeatureAccess(memberships || [], "funedu")) {
+    return NextResponse.json(
+      { error: "FunEdu access is not allowed for this account" },
+      { status: 403 },
+    )
   }
 
   const nextPath = getSafeFunEduNextPath(request.nextUrl.searchParams.get("next"))

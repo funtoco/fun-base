@@ -69,4 +69,20 @@ describe("people company access", () => {
 
     expect(canAccessPersonByCompany({ tenant_id: "tenant-1", company: "名谷病院" }, access)).toBe(false)
   })
+
+  test("denies people access when the people feature is disabled", () => {
+    const access = buildCompanyAccess([
+      {
+        id: "membership-1",
+        tenant_id: "tenant-1",
+        role: "member",
+        status: "active",
+        feature_permissions: { people: false },
+        offices: [{ name: "名谷病院" }],
+      },
+    ])
+
+    expect(canAccessPersonByCompany({ tenant_id: "tenant-1", company: "名谷病院" }, access)).toBe(false)
+    expect(canAccessPersonByCompany({ tenant_id: "tenant-1", company: "天王寺特別養護老人ホーム" }, access)).toBe(false)
+  })
 })
