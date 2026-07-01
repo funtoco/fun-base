@@ -1,6 +1,7 @@
 import { createClient } from './client'
 import type { Visa, VisaStatus } from '@/lib/models'
 import { getAccessiblePersonIdsForCurrentUser } from './people-access'
+import { fetchAllSupabaseRows } from './paginated-query'
 
 export interface VisaListResponse {
   visas: Visa[]
@@ -14,9 +15,41 @@ export interface VisaStatusCounts {
 }
 
 const EXCLUDED_VISA_STATUSES = ["内定取消", "内定辞退", "退職"]
+const PERSON_ID_FILTER_CHUNK_SIZE = 500
 
 const applyVisaStatusExclusions = (query: ReturnType<typeof createClient>["from"]) => {
   return query.not('status', 'in', `(${EXCLUDED_VISA_STATUSES.map((status) => `"${status}"`).join(',')})`)
+}
+
+const mapVisaRow = (visa: any): Visa => ({
+  id: visa.id,
+  personId: visa.person_id,
+  status: visa.status,
+  type: visa.type,
+  expiryDate: visa.expiry_date,
+  submittedAt: visa.submitted_at,
+  resultAt: visa.result_at,
+  manager: visa.manager,
+  updatedAt: visa.updated_at,
+  documentPreparationDate: visa.document_preparation_date,
+  documentCreationDate: visa.document_creation_date,
+  documentConfirmationDate: visa.document_confirmation_date,
+  applicationPreparationDate: visa.application_preparation_date,
+  visaApplicationPreparationDate: visa.visa_application_preparation_date,
+  applicationDate: visa.application_date,
+  additionalDocumentsDate: visa.additional_documents_date,
+  visaAcquiredDate: visa.visa_acquired_date,
+  receptionNumber: visa.reception_number,
+  receptionDate: visa.reception_date,
+  receptionApplicationNumber: visa.reception_application_number
+})
+
+function chunkValues<T>(values: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = []
+  for (let index = 0; index < values.length; index += chunkSize) {
+    chunks.push(values.slice(index, index + chunkSize))
+  }
+  return chunks
 }
 
 export async function getVisas(): Promise<Visa[]> {
@@ -26,43 +59,26 @@ export async function getVisas(): Promise<Visa[]> {
   if (accessiblePersonIds.length === 0) {
     return []
   }
-  
-  const { data, error } = await applyVisaStatusExclusions(
-    supabase
-    .from('visas')
-    .select()
-    .in('person_id', accessiblePersonIds)
-    .order('updated_at', { ascending: false })
+
+  const rows = (
+    await Promise.all(
+      chunkValues(accessiblePersonIds, PERSON_ID_FILTER_CHUNK_SIZE).map((personIds) =>
+        fetchAllSupabaseRows(() =>
+          applyVisaStatusExclusions(
+            supabase
+              .from('visas')
+              .select()
+              .in('person_id', personIds)
+              .order('updated_at', { ascending: false })
+          )
+        )
+      )
+    )
   )
-  
-  if (error) {
-    console.error('Error fetching visas:', error)
-    throw error
-  }
-  
-  // SupabaseのデータをVisa型に変換
-  return data.map((visa: any) => ({
-    id: visa.id,
-    personId: visa.person_id,
-    status: visa.status,
-    type: visa.type,
-    expiryDate: visa.expiry_date,
-    submittedAt: visa.submitted_at,
-    resultAt: visa.result_at,
-    manager: visa.manager,
-    updatedAt: visa.updated_at,
-    documentPreparationDate: visa.document_preparation_date,
-    documentCreationDate: visa.document_creation_date,
-    documentConfirmationDate: visa.document_confirmation_date,
-    applicationPreparationDate: visa.application_preparation_date,
-    visaApplicationPreparationDate: visa.visa_application_preparation_date,
-    applicationDate: visa.application_date,
-    additionalDocumentsDate: visa.additional_documents_date,
-    visaAcquiredDate: visa.visa_acquired_date,
-    receptionNumber: visa.reception_number,
-    receptionDate: visa.reception_date,
-    receptionApplicationNumber: visa.reception_application_number
-  }))
+    .flat()
+    .sort((a: any, b: any) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+
+  return rows.map(mapVisaRow)
 }
 
 export async function getVisaById(id: string): Promise<Visa | null> {

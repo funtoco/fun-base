@@ -2,6 +2,7 @@ import {
   hasTenantFeatureAccess,
   type TenantFeaturePermission,
 } from "@/lib/tenant-access"
+import { fetchAllSupabaseRows } from "./paginated-query"
 
 type TenantMembership = {
   id?: string | null
@@ -319,24 +320,25 @@ export async function getAccessiblePersonIdsForUser(
   feature: TenantFeaturePermission = "people"
 ): Promise<string[]> {
   const access = await getCompanyAccessForUser(supabase, userId, feature)
-  const query = applyPeopleAccessFilter(
-    supabase
-      .from("people")
-      .select("id, tenant_id, company"),
-    access
-  )
+  if (!access.hasActiveMembership) return []
 
-  if (!query) {
-    return []
-  }
+  const data = await fetchAllSupabaseRows(() => {
+    const query = applyPeopleAccessFilter(
+      supabase
+        .from("people")
+        .select("id, tenant_id, company")
+        .order("id"),
+      access
+    )
 
-  const { data, error } = await query
+    if (!query) {
+      throw new Error("No accessible people query could be built")
+    }
 
-  if (error) {
-    throw error
-  }
+    return query
+  })
 
-  return (data || [])
+  return data
     .filter((person: any) => canAccessPersonByCompany(person, access))
     .map((person: any) => person.id)
     .filter((id: unknown): id is string => typeof id === "string")
