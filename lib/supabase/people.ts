@@ -6,6 +6,7 @@ import {
   getCompanyAccessForUser,
   type CompanyAccess,
 } from './people-access'
+import { fetchAllSupabaseRows } from './paginated-query'
 
 async function getCurrentUserCompanyAccess(): Promise<CompanyAccess> {
   const supabase = createClient()
@@ -68,26 +69,30 @@ function mapPersonRow(person: any, tenantName?: string): Person {
 export async function getPeople(): Promise<Person[]> {
   const supabase = createClient()
   const companyAccess = await getCurrentUserCompanyAccess()
-  const query = applyPeopleAccessFilter(
+  if (!companyAccess.hasActiveMembership) return []
+
+  const createQuery = () => applyPeopleAccessFilter(
     supabase
       .from('people')
       .select(`
         *,
         tenant:tenant_id (id, name)
-      `),
+      `)
+      .order('created_at', { ascending: false }),
     companyAccess
   )
 
-  if (!query) return []
+  if (!createQuery()) return []
 
-  const { data, error } = await query.order('created_at', { ascending: false })
+  const data = await fetchAllSupabaseRows(() => {
+    const query = createQuery()
+    if (!query) {
+      throw new Error('No accessible people query could be built')
+    }
+    return query
+  })
 
-  if (error) {
-    console.error('Error fetching people:', error)
-    throw error
-  }
-
-  if (!data || data.length === 0) return []
+  if (data.length === 0) return []
 
   return data
     .filter((person: any) => canAccessPersonByCompany(person, companyAccess))
