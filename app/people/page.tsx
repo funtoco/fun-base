@@ -1,7 +1,10 @@
 "use client"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
+import { Plus } from "lucide-react"
 import { DataTable, type Column } from "@/components/ui/data-table"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { PersonAvatar } from "@/components/ui/person-avatar"
@@ -9,6 +12,7 @@ import { useNavigationProgress } from "@/components/navigation-progress"
 import { getPeople } from "@/lib/supabase/people"
 import { getVisas } from "@/lib/supabase/visas"
 import { PERSON_SEARCH_KEYS } from "@/lib/person-search"
+import { isManualPersonId } from "@/lib/person-source"
 import type { Person } from "@/lib/models"
 
 interface PersonWithVisa extends Person {
@@ -145,7 +149,14 @@ export default function PeoplePage() {
             size="md"
           />
           <div>
-            <div className="font-medium">{value}</div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{value}</span>
+              {isManualPersonId(row.id) && (
+                <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
+                  手動
+                </Badge>
+              )}
+            </div>
             {row.kana && <div className="text-xs text-muted-foreground">{row.kana}</div>}
           </div>
         </div>
@@ -278,6 +289,16 @@ export default function PeoplePage() {
           <h1 className="text-3xl font-bold text-foreground">人材一覧</h1>
           <p className="text-muted-foreground mt-2">人材の一覧と基本情報</p>
         </div>
+        <Button
+          className="gap-2"
+          onClick={() => {
+            startNavigation()
+            router.push("/people/new")
+          }}
+        >
+          <Plus className="h-4 w-4" />
+          新規登録
+        </Button>
       </div>
 
 
