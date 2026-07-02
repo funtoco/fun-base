@@ -10,7 +10,7 @@ import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { PersonAvatar } from "@/components/ui/person-avatar"
 import { useNavigationProgress } from "@/components/navigation-progress"
 import { getPeople } from "@/lib/supabase/people"
-import { getVisas } from "@/lib/supabase/visas"
+import { getVisasByPersonIds } from "@/lib/supabase/visas"
 import { PERSON_SEARCH_KEYS } from "@/lib/person-search"
 import { isManualPersonId } from "@/lib/person-source"
 import type { Person } from "@/lib/models"
@@ -71,9 +71,9 @@ export default function PeoplePage() {
     }
   }
 
-  // Load people data
+  // Load people and related visa data
   useEffect(() => {
-    async function fetchPeopleData() {
+    async function fetchData() {
       try {
         setLoading(true)
         setError(null)
@@ -81,6 +81,13 @@ export default function PeoplePage() {
         setPeople(peopleData)
         setDataSource('sample')
         console.log('PeoplePage: People data loaded', { count: peopleData.length })
+
+        try {
+          const visaData = await getVisasByPersonIds(peopleData.map((person) => person.id))
+          setVisas(visaData)
+        } catch (visaError) {
+          console.error('Error fetching visa data:', visaError)
+        }
       } catch (err) {
         console.error('Error fetching people data:', err)
         setError(err instanceof Error ? err.message : 'Failed to load people data')
@@ -88,20 +95,7 @@ export default function PeoplePage() {
         setLoading(false)
       }
     }
-    fetchPeopleData()
-  }, [])
-
-  // Load visa data (always from sample for now)
-  useEffect(() => {
-    async function fetchVisaData() {
-      try {
-        const visaData = await getVisas()
-        setVisas(visaData)
-      } catch (err) {
-        console.error('Error fetching visa data:', err)
-      }
-    }
-    fetchVisaData()
+    fetchData()
   }, [])
 
   // Combine people with their visa information

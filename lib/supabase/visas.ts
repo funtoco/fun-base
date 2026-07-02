@@ -81,6 +81,38 @@ export async function getVisas(): Promise<Visa[]> {
   return rows.map(mapVisaRow)
 }
 
+export async function getVisasByPersonIds(personIds: string[]): Promise<Visa[]> {
+  const supabase = createClient()
+  const uniquePersonIds = Array.from(new Set(personIds.filter(Boolean)))
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'visas')
+  const accessiblePersonIdSet = new Set(accessiblePersonIds)
+  const filteredPersonIds = uniquePersonIds.filter((personId) => accessiblePersonIdSet.has(personId))
+
+  if (filteredPersonIds.length === 0) {
+    return []
+  }
+
+  const rows = (
+    await Promise.all(
+      chunkValues(filteredPersonIds, PERSON_ID_FILTER_CHUNK_SIZE).map((personIdChunk) =>
+        fetchAllSupabaseRows(() =>
+          applyVisaStatusExclusions(
+            supabase
+              .from('visas')
+              .select()
+              .in('person_id', personIdChunk)
+              .order('updated_at', { ascending: false })
+          )
+        )
+      )
+    )
+  )
+    .flat()
+    .sort((a: any, b: any) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+
+  return rows.map(mapVisaRow)
+}
+
 export async function getVisaById(id: string): Promise<Visa | null> {
   const supabase = createClient()
   const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'visas')
@@ -103,28 +135,7 @@ export async function getVisaById(id: string): Promise<Visa | null> {
     return null
   }
   
-  return {
-    id: data.id,
-    personId: data.person_id,
-    status: data.status,
-    type: data.type,
-    expiryDate: data.expiry_date,
-    submittedAt: data.submitted_at,
-    resultAt: data.result_at,
-    manager: data.manager,
-    updatedAt: data.updated_at,
-    documentPreparationDate: data.document_preparation_date,
-    documentCreationDate: data.document_creation_date,
-    documentConfirmationDate: data.document_confirmation_date,
-    applicationPreparationDate: data.application_preparation_date,
-    visaApplicationPreparationDate: data.visa_application_preparation_date,
-    applicationDate: data.application_date,
-    additionalDocumentsDate: data.additional_documents_date,
-    visaAcquiredDate: data.visa_acquired_date,
-    receptionNumber: data.reception_number,
-    receptionDate: data.reception_date,
-    receptionApplicationNumber: data.reception_application_number
-  }
+  return mapVisaRow(data)
 }
 
 export async function getVisasByPersonId(personId: string): Promise<Visa[]> {
@@ -148,28 +159,7 @@ export async function getVisasByPersonId(personId: string): Promise<Visa[]> {
     throw error
   }
   
-  return data.map((visa: any) => ({
-    id: visa.id,
-    personId: visa.person_id,
-    status: visa.status,
-    type: visa.type,
-    expiryDate: visa.expiry_date,
-    submittedAt: visa.submitted_at,
-    resultAt: visa.result_at,
-    manager: visa.manager,
-    updatedAt: visa.updated_at,
-    documentPreparationDate: visa.document_preparation_date,
-    documentCreationDate: visa.document_creation_date,
-    documentConfirmationDate: visa.document_confirmation_date,
-    applicationPreparationDate: visa.application_preparation_date,
-    visaApplicationPreparationDate: visa.visa_application_preparation_date,
-    applicationDate: visa.application_date,
-    additionalDocumentsDate: visa.additional_documents_date,
-    visaAcquiredDate: visa.visa_acquired_date,
-    receptionNumber: visa.reception_number,
-    receptionDate: visa.reception_date,
-    receptionApplicationNumber: visa.reception_application_number
-  }))
+  return data.map(mapVisaRow)
 }
 
 export async function createVisa(visa: Omit<Visa, 'updatedAt'>): Promise<Visa> {
@@ -206,28 +196,7 @@ export async function createVisa(visa: Omit<Visa, 'updatedAt'>): Promise<Visa> {
     throw error
   }
   
-  return {
-    id: data.id,
-    personId: data.person_id,
-    status: data.status,
-    type: data.type,
-    expiryDate: data.expiry_date,
-    submittedAt: data.submitted_at,
-    resultAt: data.result_at,
-    manager: data.manager,
-    updatedAt: data.updated_at,
-    documentPreparationDate: data.document_preparation_date,
-    documentCreationDate: data.document_creation_date,
-    documentConfirmationDate: data.document_confirmation_date,
-    applicationPreparationDate: data.application_preparation_date,
-    visaApplicationPreparationDate: data.visa_application_preparation_date,
-    applicationDate: data.application_date,
-    additionalDocumentsDate: data.additional_documents_date,
-    visaAcquiredDate: data.visa_acquired_date,
-    receptionNumber: data.reception_number,
-    receptionDate: data.reception_date,
-    receptionApplicationNumber: data.reception_application_number
-  }
+  return mapVisaRow(data)
 }
 
 export async function updateVisa(id: string, updates: Partial<Omit<Visa, 'id' | 'updatedAt'>>): Promise<Visa> {
