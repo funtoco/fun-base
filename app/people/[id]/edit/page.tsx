@@ -8,10 +8,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { FunBaseLoading } from "@/components/ui/funbase-loading"
+import { PersonAvatar } from "@/components/ui/person-avatar"
 import { useNavigationProgress } from "@/components/navigation-progress"
-import { ArrowLeft, Save, AlertTriangle, CheckCircle } from "lucide-react"
+import { ArrowLeft, Save, AlertTriangle, CheckCircle, Upload, X } from "lucide-react"
 import { getPersonById } from "@/lib/supabase/people"
+import { isManualPersonId } from "@/lib/person-source"
 import type { Person } from "@/lib/models"
 
 export default function EditPersonPage() {
@@ -27,6 +30,20 @@ export default function EditPersonPage() {
   const [success, setSuccess] = useState(false)
 
   // フォーム状態
+  const [name, setName] = useState('')
+  const [kana, setKana] = useState('')
+  const [nationality, setNationality] = useState('')
+  const [dob, setDob] = useState('')
+  const [specificSkillField, setSpecificSkillField] = useState('')
+  const [phone, setPhone] = useState('')
+  const [workingStatus, setWorkingStatus] = useState('')
+  const [residenceCardNo, setResidenceCardNo] = useState('')
+  const [residenceCardExpiryDate, setResidenceCardExpiryDate] = useState('')
+  const [residenceCardIssuedDate, setResidenceCardIssuedDate] = useState('')
+  const [email, setEmail] = useState('')
+  const [address, setAddress] = useState('')
+  const [company, setCompany] = useState('')
+  const [note, setNote] = useState('')
   const [employeeNumber, setEmployeeNumber] = useState('')
   const [employmentNotificationDate, setEmploymentNotificationDate] = useState('')
   const [employmentChangeNotificationDate, setEmploymentChangeNotificationDate] = useState('')
@@ -41,6 +58,8 @@ export default function EditPersonPage() {
   // 社会保険
   const [insuranceNumber, setInsuranceNumber] = useState('')
   const [insuranceAcquiredDate, setInsuranceAcquiredDate] = useState('')
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
 
   // 初期データ取得
   useEffect(() => {
@@ -53,6 +72,20 @@ export default function EditPersonPage() {
           return
         }
         setPerson(data)
+        setName(data.name || '')
+        setKana(data.kana || '')
+        setNationality(data.nationality || '')
+        setDob(data.dob || '')
+        setSpecificSkillField(data.specificSkillField || '')
+        setPhone(data.phone || '')
+        setWorkingStatus(data.workingStatus || '')
+        setResidenceCardNo(data.residenceCardNo || '')
+        setResidenceCardExpiryDate(data.residenceCardExpiryDate || '')
+        setResidenceCardIssuedDate(data.residenceCardIssuedDate || '')
+        setEmail(data.email || '')
+        setAddress(data.address || '')
+        setCompany(data.company || '')
+        setNote(data.note || '')
         setEmployeeNumber(data.employeeNumber || '')
         setEmploymentNotificationDate(data.employmentNotificationDate || '')
         setEmploymentChangeNotificationDate(data.employmentChangeNotificationDate || '')
@@ -74,6 +107,20 @@ export default function EditPersonPage() {
     fetchPerson()
   }, [id])
 
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreviewUrl(null)
+      return
+    }
+
+    const previewUrl = URL.createObjectURL(imageFile)
+    setImagePreviewUrl(previewUrl)
+
+    return () => {
+      URL.revokeObjectURL(previewUrl)
+    }
+  }, [imageFile])
+
   // 保存処理
   const handleSave = async () => {
     // 連打防止：既に保存中の場合は何もしない
@@ -86,24 +133,64 @@ export default function EditPersonPage() {
       setError(null)
       setSuccess(false)
 
+      const isManual = isManualPersonId(id)
+      const requestBody = isManual ? new FormData() : null
+      if (requestBody) {
+        const values: Record<string, string> = {
+          name,
+          kana,
+          nationality,
+          dob,
+          specificSkillField,
+          phone,
+          employeeNumber,
+          workingStatus,
+          residenceCardNo,
+          residenceCardExpiryDate,
+          residenceCardIssuedDate,
+          email,
+          address,
+          company,
+          note,
+          employmentNotificationDate,
+          employmentChangeNotificationDate,
+          interviewDate,
+          jobOfferDate,
+          applicationNumber,
+          departureProcedureStatus,
+          entryConfirmedDate,
+          joiningDate,
+          insuranceNumber,
+          insuranceAcquiredDate,
+        }
+        Object.entries(values).forEach(([key, value]) => requestBody.append(key, value))
+        if (imageFile) {
+          requestBody.append('image', imageFile)
+        }
+      }
+
       const response = await fetch(`/api/people/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          employeeNumber: employeeNumber.trim() || null,
-          employmentNotificationDate: employmentNotificationDate || null,
-          employmentChangeNotificationDate: employmentChangeNotificationDate || null,
-          interviewDate: interviewDate || null,
-          jobOfferDate: jobOfferDate || null,
-          applicationNumber: applicationNumber.trim() || null,
-          departureProcedureStatus: departureProcedureStatus.trim() || null,
-          entryConfirmedDate: entryConfirmedDate || null,
-          joiningDate: joiningDate || null,
-          insuranceNumber: insuranceNumber.trim() || null,
-          insuranceAcquiredDate: insuranceAcquiredDate || null,
-        }),
+        ...(requestBody
+          ? { body: requestBody }
+          : {
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                employeeNumber: employeeNumber.trim() || null,
+                employmentNotificationDate: employmentNotificationDate || null,
+                employmentChangeNotificationDate: employmentChangeNotificationDate || null,
+                interviewDate: interviewDate || null,
+                jobOfferDate: jobOfferDate || null,
+                applicationNumber: applicationNumber.trim() || null,
+                departureProcedureStatus: departureProcedureStatus.trim() || null,
+                entryConfirmedDate: entryConfirmedDate || null,
+                joiningDate: joiningDate || null,
+                insuranceNumber: insuranceNumber.trim() || null,
+                insuranceAcquiredDate: insuranceAcquiredDate || null,
+              }),
+            }),
       })
 
       if (!response.ok) {
@@ -154,6 +241,8 @@ export default function EditPersonPage() {
     return null
   }
 
+  const isManual = isManualPersonId(person.id)
+
   return (
     <div className="py-6 px-8 space-y-6 max-w-4xl mx-auto">
       {/* Header */}
@@ -171,7 +260,14 @@ export default function EditPersonPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold">人物情報の編集</h1>
-            <p className="text-muted-foreground mt-1">{person.name} さんの情報を編集</p>
+            <div className="mt-1 flex items-center gap-2">
+              <p className="text-muted-foreground">{person.name} さんの情報を編集</p>
+              {isManual && (
+                <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
+                  手動登録
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -197,6 +293,55 @@ export default function EditPersonPage() {
 
       {/* Form */}
       <div className="space-y-6">
+        {isManual && (
+          <Card>
+            <CardHeader>
+              <CardTitle>写真</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-[150px_1fr] gap-4 items-start">
+                <Label htmlFor="image" className="text-right pt-2">写真</Label>
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted">
+                      {imagePreviewUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={imagePreviewUrl} alt="選択中の写真" className="h-full w-full object-cover" />
+                      ) : person.imagePath ? (
+                        <PersonAvatar name={name || person.name} imagePath={person.imagePath} size="xl" />
+                      ) : (
+                        <Upload className="h-6 w-6 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        id="image"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
+                        onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
+                        disabled={saving}
+                        className="max-w-sm"
+                      />
+                      {imageFile && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setImageFile(null)}
+                          disabled={saving}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">PNG、JPEG、WebP、HEIC、HEIF形式。5MBまで。</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* 基本情報 */}
         <Card>
           <CardHeader>
@@ -207,8 +352,9 @@ export default function EditPersonPage() {
               <Label htmlFor="name" className="text-right">氏名</Label>
               <Input
                 id="name"
-                value={person.name || ''}
-                disabled
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={!isManual || saving}
               />
             </div>
 
@@ -216,8 +362,9 @@ export default function EditPersonPage() {
               <Label htmlFor="kana" className="text-right">フリガナ</Label>
               <Input
                 id="kana"
-                value={person.kana || ''}
-                disabled
+                value={kana}
+                onChange={(e) => setKana(e.target.value)}
+                disabled={!isManual || saving}
               />
             </div>
 
@@ -226,8 +373,9 @@ export default function EditPersonPage() {
               <Input
                 id="dob"
                 type="date"
-                value={person.dob || ''}
-                disabled
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+                disabled={!isManual || saving}
                 className="w-full"
               />
             </div>
@@ -249,8 +397,9 @@ export default function EditPersonPage() {
               <Label htmlFor="nationality" className="text-right">国籍</Label>
               <Input
                 id="nationality"
-                value={person.nationality || ''}
-                disabled
+                value={nationality}
+                onChange={(e) => setNationality(e.target.value)}
+                disabled={!isManual || saving}
               />
             </div>
 
@@ -258,18 +407,20 @@ export default function EditPersonPage() {
               <Label htmlFor="workingStatus" className="text-right">ステータス</Label>
               <Input
                 id="workingStatus"
-                value={person.workingStatus || ''}
-                disabled
+                value={workingStatus}
+                onChange={(e) => setWorkingStatus(e.target.value)}
+                disabled={!isManual || saving}
               />
             </div>
 
-            {person.specificSkillField && (
+            {(isManual || person.specificSkillField) && (
               <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
                 <Label htmlFor="specificSkillField" className="text-right">特定技能分野</Label>
                 <Input
                   id="specificSkillField"
-                  value={person.specificSkillField || ''}
-                  disabled
+                  value={specificSkillField}
+                  onChange={(e) => setSpecificSkillField(e.target.value)}
+                  disabled={!isManual || saving}
                 />
               </div>
             )}
@@ -286,8 +437,9 @@ export default function EditPersonPage() {
               <Label htmlFor="residenceCardNo" className="text-right">在留カード番号</Label>
               <Input
                 id="residenceCardNo"
-                value={person.residenceCardNo || ''}
-                disabled
+                value={residenceCardNo}
+                onChange={(e) => setResidenceCardNo(e.target.value)}
+                disabled={!isManual || saving}
               />
             </div>
 
@@ -296,20 +448,22 @@ export default function EditPersonPage() {
               <Input
                 id="residenceCardIssuedDate"
                 type="date"
-                value={person.residenceCardIssuedDate || ''}
-                disabled
+                value={residenceCardIssuedDate}
+                onChange={(e) => setResidenceCardIssuedDate(e.target.value)}
+                disabled={!isManual || saving}
                 className="w-full"
               />
             </div>
 
-            {person.residenceCardExpiryDate && (
+            {(isManual || person.residenceCardExpiryDate) && (
               <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
                 <Label htmlFor="residenceCardExpiryDate" className="text-right">在留カード有効期限</Label>
                 <Input
                   id="residenceCardExpiryDate"
                   type="date"
-                  value={person.residenceCardExpiryDate || ''}
-                  disabled
+                  value={residenceCardExpiryDate}
+                  onChange={(e) => setResidenceCardExpiryDate(e.target.value)}
+                  disabled={!isManual || saving}
                   className="w-full"
                 />
               </div>
@@ -473,14 +627,15 @@ export default function EditPersonPage() {
             <CardTitle>連絡先情報</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {person.email && (
+            {(isManual || person.email) && (
               <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
                 <Label htmlFor="email" className="text-right">メールアドレス</Label>
                 <Input
                   id="email"
                   type="email"
-                  value={person.email || ''}
-                  disabled
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={!isManual || saving}
                 />
               </div>
             )}
@@ -489,8 +644,9 @@ export default function EditPersonPage() {
               <Label htmlFor="phone" className="text-right">電話番号</Label>
               <Input
                 id="phone"
-                value={person.phone || ''}
-                disabled
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                disabled={!isManual || saving}
               />
             </div>
 
@@ -498,8 +654,9 @@ export default function EditPersonPage() {
               <Label htmlFor="address" className="text-right pt-2">住所</Label>
               <Textarea
                 id="address"
-                value={person.address || ''}
-                disabled
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                disabled={!isManual || saving}
                 rows={3}
               />
             </div>
@@ -507,7 +664,7 @@ export default function EditPersonPage() {
         </Card>
 
         {/* 所属情報（非表示のフィールドがある場合のみ表示） */}
-        {(person.tenantName || person.company || person.note) && (
+        {(person.tenantName || person.company || person.note || isManual) && (
           <Card>
             <CardHeader>
               <CardTitle>所属情報</CardTitle>
@@ -524,24 +681,26 @@ export default function EditPersonPage() {
                 </div>
               )}
 
-              {person.company && (
+              {(person.company || isManual) && (
                 <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
                   <Label htmlFor="company" className="text-right">所属先</Label>
                   <Input
                     id="company"
-                    value={person.company || ''}
-                    disabled
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    disabled={!isManual || saving}
                   />
                 </div>
               )}
 
-              {person.note && (
+              {(person.note || isManual) && (
                 <div className="grid grid-cols-[150px_1fr] gap-4 items-start">
                   <Label htmlFor="note" className="text-right pt-2">メモ</Label>
                   <Textarea
                     id="note"
-                    value={person.note || ''}
-                    disabled
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    disabled={!isManual || saving}
                     rows={4}
                   />
                 </div>

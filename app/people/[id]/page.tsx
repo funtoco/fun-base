@@ -11,6 +11,7 @@ import { getPersonById } from "@/lib/supabase/people-server"
 import { getVisasByPersonId } from "@/lib/supabase/visas-server"
 import { getPersonDocumentsByPersonId } from "@/lib/supabase/person-documents-server"
 import { getRegularInterviewsByPersonId, getDailySupportRecordsByPersonId } from "@/lib/kintone-data-server"
+import { isManualPersonId } from "@/lib/person-source"
 import { formatDate, formatDateTime } from "@/lib/utils"
 import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase } from "lucide-react"
 
@@ -67,6 +68,11 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                   <h1 className="text-2xl font-bold">{person.name}</h1>
                   {person.kana && <p className="text-muted-foreground">{person.kana}</p>}
                   <div className="flex items-center gap-4 mt-2">
+                    {isManualPersonId(person.id) && (
+                      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
+                        手動登録
+                      </Badge>
+                    )}
                     {person.nationality && (
                       <Badge variant="outline" className="gap-1">
                         <User className="h-3 w-3" />

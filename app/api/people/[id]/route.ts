@@ -3,6 +3,40 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { Person } from '@/lib/models'
 import { getAccessiblePersonIdsForCurrentUser } from '@/lib/supabase/people-access'
+import { isManualPersonId } from '@/lib/person-source'
+import { deleteFileFromStorage, uploadFileToStorage } from '@/lib/storage/file-uploader'
+
+const PEOPLE_IMAGES_BUCKET = 'people-images'
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+const VALID_IMAGE_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif']
+
+function getRequestValue(body: Record<string, unknown> | FormData, field: string): unknown {
+  return body instanceof FormData ? body.get(field) : body[field]
+}
+
+function getRequestFile(body: Record<string, unknown> | FormData, field: string): File | null {
+  if (!(body instanceof FormData)) return null
+  const value = body.get(field)
+  return value instanceof File && value.size > 0 ? value : null
+}
+
+function normalizeString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function getSafeImageExtension(file: File): string {
+  const extension = file.name.split('.').pop()?.toLowerCase()
+  if (extension && /^[a-z0-9]+$/.test(extension)) return extension
+
+  if (file.type === 'image/jpeg') return 'jpg'
+  if (file.type === 'image/png') return 'png'
+  if (file.type === 'image/webp') return 'webp'
+  if (file.type === 'image/heic') return 'heic'
+  if (file.type === 'image/heif') return 'heif'
+  return 'bin'
+}
 
 export async function PUT(
   request: NextRequest,
@@ -10,7 +44,10 @@ export async function PUT(
 ) {
   try {
     const { id } = params
-    const body = await request.json()
+    const contentType = request.headers.get('content-type') || ''
+    const body = contentType.includes('multipart/form-data')
+      ? await request.formData()
+      : await request.json()
 
     if (!id) {
       return NextResponse.json(
@@ -19,26 +56,28 @@ export async function PUT(
       )
     }
 
-    const {
-      employeeNumber, employmentNotificationDate, employmentChangeNotificationDate,
-      interviewDate, jobOfferDate, applicationNumber, departureProcedureStatus,
-      entryConfirmedDate, myNumber, joiningDate,
-      insuranceNumber, insuranceAcquiredDate, insuranceEnrollmentStatus
-    } = body
-
     // 文字列フィールドのバリデーション
-    const stringFields = [
+    const baseStringFields = [
       'employeeNumber', 'employmentNotificationDate', 'employmentChangeNotificationDate',
       'interviewDate', 'jobOfferDate', 'applicationNumber', 'departureProcedureStatus',
       'entryConfirmedDate', 'myNumber', 'joiningDate',
       'insuranceNumber', 'insuranceAcquiredDate'
     ] as const
+    const manualStringFields = [
+      'name', 'kana', 'nationality', 'dob', 'specificSkillField', 'phone',
+      'workingStatus', 'residenceCardNo', 'residenceCardExpiryDate',
+      'residenceCardIssuedDate', 'email', 'address', 'company', 'note',
+    ] as const
+    const stringFields = isManualPersonId(id)
+      ? [...baseStringFields, ...manualStringFields]
+      : [...baseStringFields]
     for (const field of stringFields) {
-      const value = body[field]
+      const value = getRequestValue(body, field)
       if (value !== undefined && value !== null && typeof value !== 'string') {
         return NextResponse.json({ error: `${field} must be a string or null` }, { status: 400 })
       }
     }
+    const insuranceEnrollmentStatus = getRequestValue(body, 'insuranceEnrollmentStatus')
     if (insuranceEnrollmentStatus !== undefined && insuranceEnrollmentStatus !== null && typeof insuranceEnrollmentStatus !== 'object') {
       return NextResponse.json({ error: 'insuranceEnrollmentStatus must be an object or null' }, { status: 400 })
     }
@@ -52,6 +91,43 @@ export async function PUT(
         { error: 'Person not found' },
         { status: 404 }
       )
+    }
+
+    const { data: currentPerson, error: currentPersonError } = await supabase
+      .from('people')
+      .select('id, tenant_id, image_path')
+      .eq('id', id)
+      .single()
+
+    if (currentPersonError || !currentPerson) {
+      return NextResponse.json(
+        { error: 'Person not found' },
+        { status: 404 }
+      )
+    }
+
+    const isManual = isManualPersonId(id)
+    const imageFile = getRequestFile(body, 'image')
+
+    if (isManual && getRequestValue(body, 'name') !== undefined && !normalizeString(getRequestValue(body, 'name'))) {
+      return NextResponse.json({ error: '氏名は必須です' }, { status: 400 })
+    }
+
+    if (imageFile && !isManual) {
+      return NextResponse.json(
+        { error: 'Kintone連携された人材の写真はこの画面では変更できません' },
+        { status: 403 }
+      )
+    }
+
+    if (imageFile) {
+      if (imageFile.size > MAX_IMAGE_SIZE) {
+        return NextResponse.json({ error: '写真は5MB以下にしてください' }, { status: 400 })
+      }
+
+      if (!VALID_IMAGE_CONTENT_TYPES.includes(imageFile.type)) {
+        return NextResponse.json({ error: '写真はPNG、JPEG、WebP、HEIC、HEIF形式で登録してください' }, { status: 400 })
+      }
     }
 
     // 更新対象のフィールドを構築
@@ -74,14 +150,56 @@ export async function PUT(
       insuranceNumber: 'insurance_number',
       insuranceAcquiredDate: 'insurance_acquired_date',
     }
-    for (const [camelKey, snakeKey] of Object.entries(fieldMapping)) {
-      const value = body[camelKey]
+    const manualFieldMapping: Record<string, string> = {
+      name: 'name',
+      kana: 'kana',
+      nationality: 'nationality',
+      dob: 'dob',
+      specificSkillField: 'specific_skill_field',
+      phone: 'phone',
+      workingStatus: 'working_status',
+      residenceCardNo: 'residence_card_no',
+      residenceCardExpiryDate: 'residence_card_expiry_date',
+      residenceCardIssuedDate: 'residence_card_issued_date',
+      email: 'email',
+      address: 'address',
+      company: 'company',
+      note: 'note',
+    }
+    const activeFieldMapping = isManual
+      ? { ...fieldMapping, ...manualFieldMapping }
+      : fieldMapping
+    for (const [camelKey, snakeKey] of Object.entries(activeFieldMapping)) {
+      const value = getRequestValue(body, camelKey)
       if (value !== undefined) {
         updateFields[snakeKey] = (typeof value === 'string' && value.trim()) ? value.trim() : null
       }
     }
     if (insuranceEnrollmentStatus !== undefined) {
       updateFields.insurance_enrollment_status = insuranceEnrollmentStatus || {}
+    }
+
+    let uploadedImagePath: string | null = null
+    if (imageFile) {
+      const extension = getSafeImageExtension(imageFile)
+      const filePath = `${currentPerson.tenant_id}/manual_people_image/${id}/profile.${extension}`
+      const uploadResult = await uploadFileToStorage(
+        PEOPLE_IMAGES_BUCKET,
+        filePath,
+        await imageFile.arrayBuffer(),
+        imageFile.type,
+        { upsert: true }
+      )
+
+      if (!uploadResult.success) {
+        return NextResponse.json(
+          { error: uploadResult.error || '写真のアップロードに失敗しました' },
+          { status: 500 }
+        )
+      }
+
+      uploadedImagePath = uploadResult.path || filePath
+      updateFields.image_path = uploadedImagePath
     }
 
     // 更新処理
@@ -96,11 +214,21 @@ export async function PUT(
       .single()
 
     if (error) {
+      if (uploadedImagePath) {
+        await deleteFileFromStorage(PEOPLE_IMAGES_BUCKET, uploadedImagePath)
+      }
       console.error('Error updating person:', error)
       return NextResponse.json(
         { error: 'Failed to update person' },
         { status: 500 }
       )
+    }
+
+    if (uploadedImagePath && currentPerson.image_path && currentPerson.image_path !== uploadedImagePath) {
+      const storageResult = await deleteFileFromStorage(PEOPLE_IMAGES_BUCKET, currentPerson.image_path)
+      if (!storageResult.success) {
+        console.error('Failed to delete old person image:', storageResult.error)
+      }
     }
 
     if (!data) {
