@@ -12,7 +12,7 @@ import { BoardLoadingSkeleton } from "@/components/ui/funbase-loading"
 import { useNavigationProgress } from "@/components/navigation-progress"
 import { Search, Filter as FilterIcon, X, ChevronDown, ChevronUp, Building2 } from "lucide-react"
 import { getPeople } from "@/lib/supabase/people"
-import { getVisas } from "@/lib/supabase/visas"
+import { getVisasByPersonIds } from "@/lib/supabase/visas"
 import { matchesPersonSearch } from "@/lib/person-search"
 import { cn, formatDate, isExpiringSoon } from "@/lib/utils"
 import { toggleQueryMultiValue } from "@/lib/interview-list-query"
@@ -68,10 +68,8 @@ export default function VisasPage() {
     async function fetchData() {
       try {
         setLoading(true)
-        const [peopleData, visaData] = await Promise.all([
-          getPeople(),
-          getVisas()
-        ])
+        const peopleData = await getPeople()
+        const visaData = await getVisasByPersonIds(peopleData.map((person) => person.id))
         setPeople(peopleData)
         setVisas(visaData)
       } catch (err) {
