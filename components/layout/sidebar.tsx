@@ -4,7 +4,18 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Calendar, CheckSquare, Clock, ExternalLink, FileText, FolderOpen, Home, Users, type LucideIcon } from "lucide-react"
+import {
+  Calendar,
+  CheckSquare,
+  CircleHelp,
+  Clock,
+  ExternalLink,
+  FileText,
+  FolderOpen,
+  Home,
+  Users,
+  type LucideIcon,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getCurrentUserTenants } from "@/lib/supabase/tenants"
 import {
@@ -61,6 +72,11 @@ const navigation: NavigationItem[] = [
     href: "/documents",
     icon: FolderOpen,
     feature: "documents",
+  },
+  {
+    name: "よくある問い合わせ",
+    href: "/faq",
+    icon: CircleHelp,
   },
 ]
 
