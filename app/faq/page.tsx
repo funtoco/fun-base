@@ -1,4 +1,4 @@
-import { HelpCircle, Mail, Search, ShieldCheck } from "lucide-react"
+import { HelpCircle, Mail, Search } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { faqSections, quickStartSteps } from "@/lib/funbase-faq"
 
@@ -13,27 +13,18 @@ export default function FaqPage() {
     <div className="min-h-full bg-muted/20">
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-8 lg:px-10">
         <section className="overflow-hidden rounded-3xl border bg-gradient-to-br from-primary/10 via-background to-background p-6 shadow-sm md:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl space-y-4">
-              <div className="w-fit rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
-                企業様向け FunBaseガイド
-              </div>
-              <div className="space-y-3">
-                <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-                  よくある問い合わせ
-                </h1>
-                <p className="text-base leading-7 text-muted-foreground md:text-lg">
-                  はじめてFunBaseを使う企業担当者様向けに、最初に見る場所と困ったときの確認方法をまとめました。
-                  忙しい方は、まず下の3ステップだけ見れば大丈夫です。
-                </p>
-              </div>
+          <div className="max-w-3xl space-y-4">
+            <div className="w-fit rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+              企業様向け FunBaseガイド
             </div>
-            <div className="rounded-2xl border bg-background/80 p-4 text-sm text-muted-foreground shadow-sm lg:w-72">
-              <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                迷ったら
-              </div>
-              <p>「ホーム → 人材詳細 → Funtoco担当者へ確認」の順番で見るとスムーズです。</p>
+            <div className="space-y-3">
+              <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+                よくある問い合わせ
+              </h1>
+              <p className="text-base leading-7 text-muted-foreground md:text-lg">
+                はじめてFunBaseを使う企業担当者様向けに、最初に見る場所と困ったときの確認方法をまとめました。
+                忙しい方は、まず下の3ステップだけ見れば大丈夫です。
+              </p>
             </div>
           </div>
         </section>
