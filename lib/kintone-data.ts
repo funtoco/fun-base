@@ -85,6 +85,9 @@ async function fetchInterviewRecordRowsByType(
 
   for (const personIdChunk of chunkPersonIds(personIds)) {
     let offset = 0
+    const pageSize = options.limit
+      ? Math.min(INTERVIEW_RECORD_PAGE_SIZE, Math.max(options.limit, 1))
+      : INTERVIEW_RECORD_PAGE_SIZE
 
     while (true) {
       let query = supabase
@@ -100,7 +103,7 @@ async function fetchInterviewRecordRowsByType(
       const { data, error } = await query
         .order("interview_date", { ascending: false })
         .order("created_at", { ascending: false })
-        .range(offset, offset + INTERVIEW_RECORD_PAGE_SIZE - 1)
+        .range(offset, offset + pageSize - 1)
 
       if (error) {
         return handleInterviewRecordsFetchError(`fetch ${recordType} records`, error)
@@ -109,8 +112,8 @@ async function fetchInterviewRecordRowsByType(
       const batch = (data || []) as InterviewRecordRow[]
       rows.push(...batch)
 
-      if (batch.length < INTERVIEW_RECORD_PAGE_SIZE) break
-      offset += INTERVIEW_RECORD_PAGE_SIZE
+      if (options.limit || batch.length < pageSize) break
+      offset += pageSize
     }
   }
 
