@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { buildCompanyAccess, canAccessPersonByCompany } from "./people-access"
+import { buildCompanyAccess, canAccessPersonByCompany, getAccessiblePersonIdsForUser } from "./people-access"
 
 describe("people company access", () => {
   test("allows owner-like roles to see every company in their tenant", () => {
@@ -84,5 +84,47 @@ describe("people company access", () => {
 
     expect(canAccessPersonByCompany({ tenant_id: "tenant-1", company: "名谷病院" }, access)).toBe(false)
     expect(canAccessPersonByCompany({ tenant_id: "tenant-1", company: "天王寺特別養護老人ホーム" }, access)).toBe(false)
+  })
+
+  test("returns no accessible people when a feature is disabled", async () => {
+    const supabase = {
+      from(tableName: string) {
+        if (tableName === "user_tenants") {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: async () => ({
+                  data: [
+                    {
+                      id: "membership-1",
+                      tenant_id: "tenant-1",
+                      role: "member",
+                      status: "active",
+                      feature_permissions: { meetings: false },
+                    },
+                  ],
+                  error: null,
+                }),
+              }),
+            }),
+          }
+        }
+
+        if (tableName === "user_tenant_offices") {
+          return {
+            select: () => ({
+              in: async () => ({
+                data: [],
+                error: null,
+              }),
+            }),
+          }
+        }
+
+        throw new Error(`Unexpected table: ${tableName}`)
+      },
+    }
+
+    await expect(getAccessiblePersonIdsForUser(supabase, "user-1", "meetings")).resolves.toEqual([])
   })
 })

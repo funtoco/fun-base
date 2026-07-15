@@ -305,6 +305,16 @@ function buildPeopleAccessOrFilter(access: CompanyAccess): string | null {
   return clauses.length > 0 ? clauses.join(",") : null
 }
 
+function hasVisibleCompanyAccess(access: CompanyAccess): boolean {
+  if (access.fullTenantIds.size > 0) return true
+
+  for (const companies of access.restrictedTenantCompanies.values()) {
+    if (companies.size > 0) return true
+  }
+
+  return false
+}
+
 export function applyPeopleAccessFilter<TQuery extends { or: (filters: string) => TQuery }>(
   query: TQuery,
   access: CompanyAccess
@@ -320,7 +330,7 @@ export async function getAccessiblePersonIdsForUser(
   feature: TenantFeaturePermission = "people"
 ): Promise<string[]> {
   const access = await getCompanyAccessForUser(supabase, userId, feature)
-  if (!access.hasActiveMembership) return []
+  if (!access.hasActiveMembership || !hasVisibleCompanyAccess(access)) return []
 
   const data = await fetchAllSupabaseRows(() => {
     const query = applyPeopleAccessFilter(

@@ -8,6 +8,8 @@
 import type { CompanyConfirmationStatus, RegularInterview, DailySupportRecord, DailySupportEntry } from "@/lib/models"
 import { FUNBASE_REGULAR_MEETING_START_DATE } from "@/lib/meeting-scope"
 import { createClient } from "@/lib/supabase/client"
+import { getAccessiblePersonIdsForCurrentUser } from "@/lib/supabase/people-access"
+import type { TenantFeaturePermission } from "@/lib/tenant-access"
 import {
   DEFAULT_COMPANY_CONFIRMATION_STATUS,
   ELIGIBLE_REGULAR_INTERVIEW_KINTONE_STATUS,
@@ -28,6 +30,32 @@ import {
 // ============================================================================
 
 const INTERVIEW_RECORD_PAGE_SIZE = 1000
+const PERSON_ID_FILTER_CHUNK_SIZE = 500
+
+type InterviewRecordType = "regular_interview" | "daily_support"
+
+function getFeatureForInterviewRecordType(recordType: InterviewRecordType): TenantFeaturePermission {
+  return recordType === "regular_interview" ? "meetings" : "support_actions"
+}
+
+function chunkPersonIds(personIds: string[]): string[][] {
+  const chunks: string[][] = []
+
+  for (let index = 0; index < personIds.length; index += PERSON_ID_FILTER_CHUNK_SIZE) {
+    chunks.push(personIds.slice(index, index + PERSON_ID_FILTER_CHUNK_SIZE))
+  }
+
+  return chunks
+}
+
+function sortInterviewRecordRows(rows: InterviewRecordRow[]): InterviewRecordRow[] {
+  return [...rows].sort((a, b) => {
+    const interviewDateOrder = (b.interview_date || "").localeCompare(a.interview_date || "")
+    if (interviewDateOrder !== 0) return interviewDateOrder
+
+    return (b.created_at || "").localeCompare(a.created_at || "")
+  })
+}
 
 function handleInterviewRecordsFetchError<T>(context: string, error: { code?: string; message?: string }): T[] {
   if (isMissingInterviewRecordsTableError(error)) {
@@ -39,38 +67,54 @@ function handleInterviewRecordsFetchError<T>(context: string, error: { code?: st
   throw error
 }
 
-async function fetchInterviewRecordRowsByType(recordType: "regular_interview" | "daily_support"): Promise<InterviewRecordRow[]> {
+async function fetchInterviewRecordRowsByType(
+  recordType: InterviewRecordType,
+  options: { personId?: string; limit?: number } = {}
+): Promise<InterviewRecordRow[]> {
   const supabase = createClient()
   const rows: InterviewRecordRow[] = []
-  let offset = 0
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(
+    supabase,
+    getFeatureForInterviewRecordType(recordType)
+  )
 
-  while (true) {
-    let query = supabase
-      .from("interview_records")
-      .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
-      .eq("record_type", recordType)
+  if (accessiblePersonIds.length === 0) return []
 
-    if (recordType === "regular_interview") {
-      query = query.gte("interview_date", FUNBASE_REGULAR_MEETING_START_DATE)
+  const personIds = options.personId ? [options.personId] : accessiblePersonIds
+  if (options.personId && !accessiblePersonIds.includes(options.personId)) return []
+
+  for (const personIdChunk of chunkPersonIds(personIds)) {
+    let offset = 0
+
+    while (true) {
+      let query = supabase
+        .from("interview_records")
+        .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
+        .eq("record_type", recordType)
+        .in("person_id", personIdChunk)
+
+      if (recordType === "regular_interview") {
+        query = query.gte("interview_date", FUNBASE_REGULAR_MEETING_START_DATE)
+      }
+
+      const { data, error } = await query
+        .order("interview_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + INTERVIEW_RECORD_PAGE_SIZE - 1)
+
+      if (error) {
+        return handleInterviewRecordsFetchError(`fetch ${recordType} records`, error)
+      }
+
+      const batch = (data || []) as InterviewRecordRow[]
+      rows.push(...batch)
+
+      if (batch.length < INTERVIEW_RECORD_PAGE_SIZE) break
+      offset += INTERVIEW_RECORD_PAGE_SIZE
     }
-
-    const { data, error } = await query
-      .order("interview_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .range(offset, offset + INTERVIEW_RECORD_PAGE_SIZE - 1)
-
-    if (error) {
-      return handleInterviewRecordsFetchError(`fetch ${recordType} records`, error)
-    }
-
-    const batch = (data || []) as InterviewRecordRow[]
-    rows.push(...batch)
-
-    if (batch.length < INTERVIEW_RECORD_PAGE_SIZE) break
-    offset += INTERVIEW_RECORD_PAGE_SIZE
   }
 
-  return rows
+  return sortInterviewRecordRows(rows).slice(0, options.limit)
 }
 
 /**
@@ -86,21 +130,8 @@ export async function getRegularInterviews(): Promise<RegularInterview[]> {
  * Get latest regular interviews for compact dashboard widgets.
  */
 export async function getLatestRegularInterviews(limit = 5): Promise<RegularInterview[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("interview_records")
-    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
-    .eq("record_type", "regular_interview")
-    .gte("interview_date", FUNBASE_REGULAR_MEETING_START_DATE)
-    .order("interview_date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(limit)
-
-  if (error) {
-    return handleInterviewRecordsFetchError("fetch latest regular interviews", error)
-  }
-
-  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToRegularInterview)
+  const rows = await fetchInterviewRecordRowsByType("regular_interview", { limit })
+  return rows.map(mapInterviewRecordToRegularInterview)
 }
 
 /**
@@ -108,21 +139,8 @@ export async function getLatestRegularInterviews(limit = 5): Promise<RegularInte
  * @param personId - The FunBase people.id
  */
 export async function getRegularInterviewsByPersonId(personId: string): Promise<RegularInterview[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("interview_records")
-    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
-    .eq("record_type", "regular_interview")
-    .gte("interview_date", FUNBASE_REGULAR_MEETING_START_DATE)
-    .eq("person_id", personId)
-    .order("interview_date", { ascending: false })
-    .order("created_at", { ascending: false })
-
-  if (error) {
-    return handleInterviewRecordsFetchError("fetch regular interviews by person", error)
-  }
-
-  return ((data || []) as InterviewRecordRow[]).map(mapInterviewRecordToRegularInterview)
+  const rows = await fetchInterviewRecordRowsByType("regular_interview", { personId })
+  return rows.map(mapInterviewRecordToRegularInterview)
 }
 
 /**
@@ -138,21 +156,9 @@ export async function getDailySupportRecords(): Promise<DailySupportRecord[]> {
  * Get latest daily support records for compact dashboard widgets.
  */
 export async function getLatestDailySupportRecords(limit = 5): Promise<DailySupportRecord[]> {
-  const supabase = createClient()
   const fetchLimit = Math.min(Math.max(limit * 5, limit), 100)
-  const { data, error } = await supabase
-    .from("interview_records")
-    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
-    .eq("record_type", "daily_support")
-    .order("interview_date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(fetchLimit)
-
-  if (error) {
-    return handleInterviewRecordsFetchError("fetch latest daily support records", error)
-  }
-
-  return mapInterviewRecordRowsToDailySupportRecords((data || []) as InterviewRecordRow[]).slice(0, limit)
+  const rows = await fetchInterviewRecordRowsByType("daily_support", { limit: fetchLimit })
+  return mapInterviewRecordRowsToDailySupportRecords(rows).slice(0, limit)
 }
 
 /**
@@ -160,20 +166,8 @@ export async function getLatestDailySupportRecords(limit = 5): Promise<DailySupp
  * @param personId - The FunBase people.id
  */
 export async function getDailySupportRecordsByPersonId(personId: string): Promise<DailySupportRecord[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("interview_records")
-    .select(INTERVIEW_RECORD_SELECT_COLUMNS_WITH_PERSON)
-    .eq("record_type", "daily_support")
-    .eq("person_id", personId)
-    .order("interview_date", { ascending: false })
-    .order("created_at", { ascending: false })
-
-  if (error) {
-    return handleInterviewRecordsFetchError("fetch daily support records by person", error)
-  }
-
-  return mapInterviewRecordRowsToDailySupportRecords((data || []) as InterviewRecordRow[])
+  const rows = await fetchInterviewRecordRowsByType("daily_support", { personId })
+  return mapInterviewRecordRowsToDailySupportRecords(rows)
 }
 
 /**
