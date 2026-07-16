@@ -167,8 +167,12 @@ export function getInterviewRecordSourceWorkId(record: KintoneRecord): string | 
   return toStringOrNull(fieldValue(record, 'WOID'))
 }
 
+export function getInterviewRecordSourceHumanResourceId(record: KintoneRecord): string | null {
+  return toStringOrNull(fieldValue(record, 'HRID'))
+}
+
 export function getInterviewRecordSourcePersonId(record: KintoneRecord): string | null {
-  return getInterviewRecordSourceWorkId(record)
+  return getInterviewRecordSourceWorkId(record) ?? getInterviewRecordSourceHumanResourceId(record)
 }
 
 export function getInterviewRecordSourceRecordId(record: KintoneRecord): string | null {
