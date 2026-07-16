@@ -201,7 +201,7 @@ test('transformInterviewRecord maps daily support regardless of source status', 
   ])
 })
 
-test('transformInterviewRecord falls back to HRID when WOID is missing', () => {
+test('transformInterviewRecord keeps source_person_id based on WOID, not HRID', () => {
   const row = transformInterviewRecord(
     {
       $id: { value: '9562' },
@@ -219,7 +219,7 @@ test('transformInterviewRecord falls back to HRID when WOID is missing', () => {
     }
   )
 
-  assert.equal(row.source_person_id, '3505')
+  assert.equal(row.source_person_id, null)
 })
 
 test('parseActivityEntries normalizes Kintone subtable rows for daily support', () => {
