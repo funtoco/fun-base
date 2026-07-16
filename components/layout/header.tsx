@@ -589,6 +589,10 @@ export function Header() {
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel>管理者設定</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate('/settings/notifications')}>
+                <Bell className="mr-2 h-4 w-4" />
+                通知設定
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate('/admin/tenants')}>
                 <Users className="mr-2 h-4 w-4" />
                 テナント管理
