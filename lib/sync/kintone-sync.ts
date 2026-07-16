@@ -15,7 +15,6 @@ import { uploadFileToStorage } from '@/lib/storage/file-uploader'
 import { getDataMappings, mapFieldValues, type DataMapping } from '@/lib/mappings/value-mapper'
 import {
   buildInterviewRecordsQuery,
-  getInterviewRecordSourceHumanResourceId,
   getInterviewRecordSourceRecordId,
   getInterviewRecordSourceWorkId,
   isImportableInterviewRecord,
@@ -1064,82 +1063,37 @@ export class KintoneDataSync {
           }
 
           const sourceWorkId = getInterviewRecordSourceWorkId(record)
-          const sourceHumanResourceId = getInterviewRecordSourceHumanResourceId(record)
-          if (!sourceWorkId && !sourceHumanResourceId) {
+          if (!sourceWorkId) {
             skippedUnlinked++
             console.warn('[sync] interview-records:skip', {
               sourceRecordId,
-              reason: 'missing-source-person-link-id',
+              reason: 'missing-source-work-id',
             })
             return
           }
 
-          let personId: string | null = null
-          if (sourceWorkId) {
-            const { data: workIdPeople, error: workIdPersonError } = await this.supabase
-              .from('people')
-              .select('id')
-              .eq('tenant_id', this.tenantId)
-              .eq('id', sourceWorkId)
-              .limit(1)
+          const { data: workIdPeople, error: workIdPersonError } = await this.supabase
+            .from('people')
+            .select('id')
+            .eq('tenant_id', this.tenantId)
+            .eq('id', sourceWorkId)
+            .limit(1)
 
-            if (workIdPersonError) {
-              console.error('[sync] interview-records:person-lookup-error', {
-                sourceRecordId,
-                lookup: 'WOID',
-                error: workIdPersonError.message,
-              })
-              throw workIdPersonError
-            }
-
-            personId = workIdPeople?.[0]?.id ?? null
-          }
-
-          let fallbackPeople: Array<{ id: string }> | null = null
-          if (!personId && sourceHumanResourceId) {
-            const { data: people, error: personError } = await this.supabase
-              .from('people')
-              .select('id')
-              .eq('tenant_id', this.tenantId)
-              .eq('external_id', sourceHumanResourceId)
-              .limit(2)
-
-            if (personError) {
-              console.error('[sync] interview-records:person-lookup-error', {
-                sourceRecordId,
-                lookup: 'HRID',
-                error: personError.message,
-              })
-              throw personError
-            }
-
-            fallbackPeople = people
-          }
-
-          if (!personId && (!fallbackPeople || fallbackPeople.length === 0)) {
-            skippedUnlinked++
-            console.warn('[sync] interview-records:skip', {
+          if (workIdPersonError) {
+            console.error('[sync] interview-records:person-lookup-error', {
               sourceRecordId,
-              reason: 'person-not-found',
+              lookup: 'WOID',
+              error: workIdPersonError.message,
             })
-            return
+            throw workIdPersonError
           }
 
-          if (!personId && fallbackPeople && fallbackPeople.length > 1) {
-            skippedAmbiguousPerson++
-            console.warn('[sync] interview-records:skip', {
-              sourceRecordId,
-              reason: 'ambiguous-person',
-            })
-            return
-          }
-
-          personId = personId ?? fallbackPeople?.[0]?.id ?? null
+          const personId = workIdPeople?.[0]?.id ?? null
           if (!personId) {
             skippedUnlinked++
             console.warn('[sync] interview-records:skip', {
               sourceRecordId,
-              reason: 'person-not-found',
+              reason: 'work-id-person-not-found',
             })
             return
           }
