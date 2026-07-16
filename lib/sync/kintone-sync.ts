@@ -13,6 +13,11 @@ import { SyncLogger, createSyncLogger } from './sync-logger'
 import { getUpdateKeysByConnector, buildConflictColumns, buildUpdateCondition, getKintoneRecordValue } from './update-key-utils'
 import { uploadFileToStorage } from '@/lib/storage/file-uploader'
 import { getDataMappings, mapFieldValues, type DataMapping } from '@/lib/mappings/value-mapper'
+import { notifyInterviewRecordCreated } from '@/lib/notifications/interview-record-notification-service'
+import {
+  INTERVIEW_RECORD_EMAIL_NOTIFICATION_TYPE,
+  shouldNotifyInterviewRecordCreation,
+} from '@/lib/notifications/interview-record-notifications'
 import {
   buildInterviewRecordsQuery,
   getInterviewRecordSourceHumanResourceId,
@@ -1020,6 +1025,25 @@ export class KintoneDataSync {
     }
   }
 
+  private async getPersonNameForInterviewNotification(personId: string): Promise<string | null> {
+    const { data, error } = await this.supabase
+      .from('people')
+      .select('name')
+      .eq('tenant_id', this.tenantId)
+      .eq('id', personId)
+      .maybeSingle()
+
+    if (error) {
+      console.warn('[sync] interview-records:notification-person-name-lookup-error', {
+        personId,
+        error: error.message,
+      })
+      return null
+    }
+
+    return typeof data?.name === 'string' ? data.name : null
+  }
+
   private async syncInterviewRecords(
     appMappings: AppMapping[],
     options: KintoneSyncOptions = {}
@@ -1151,7 +1175,24 @@ export class KintoneDataSync {
             sourceAppId: appMapping.source_app_id,
           })
 
-          const { error: upsertError } = await this.supabase
+          const { data: existingRecord, error: existingRecordError } = await this.supabase
+            .from('interview_records')
+            .select('id, activity_entries')
+            .eq('tenant_id', this.tenantId)
+            .eq('source_system', payload.source_system)
+            .eq('source_app_id', payload.source_app_id)
+            .eq('source_record_id', payload.source_record_id)
+            .maybeSingle()
+
+          if (existingRecordError) {
+            console.error('[sync] interview-records:existing-lookup-error', {
+              sourceRecordId,
+              error: existingRecordError.message,
+            })
+            throw existingRecordError
+          }
+
+          const { data: upsertedRecord, error: upsertError } = await this.supabase
             .from('interview_records')
             .upsert(
               {
@@ -1161,6 +1202,8 @@ export class KintoneDataSync {
               },
               { onConflict: 'tenant_id,source_system,source_app_id,source_record_id' }
             )
+            .select('id')
+            .single()
 
           if (upsertError) {
             console.error('[sync] interview-records:db-error', {
@@ -1168,6 +1211,57 @@ export class KintoneDataSync {
               error: upsertError.message,
             })
             throw upsertError
+          }
+
+          let shouldAttemptInterviewNotification = shouldNotifyInterviewRecordCreation({
+            existingRecordId: existingRecord?.id ?? null,
+            recordType: payload.record_type,
+            activityEntries: payload.activity_entries,
+            previousActivityEntries: existingRecord?.activity_entries as unknown[] | null | undefined,
+          })
+
+          if (!shouldAttemptInterviewNotification && existingRecord?.id) {
+            const { data: failedNotificationEvent, error: failedNotificationError } = await this.supabase
+              .from('notification_events')
+              .select('id')
+              .eq('tenant_id', this.tenantId)
+              .eq('notification_type', INTERVIEW_RECORD_EMAIL_NOTIFICATION_TYPE)
+              .eq('source_type', 'interview_record')
+              .eq('source_id', existingRecord.id)
+              .eq('status', 'failed')
+              .maybeSingle()
+
+            if (failedNotificationError) {
+              console.error('[sync] interview-records:notification-retry-lookup-error', {
+                sourceRecordId,
+                error: failedNotificationError.message,
+              })
+            }
+
+            shouldAttemptInterviewNotification = Boolean(failedNotificationEvent)
+          }
+
+          if (shouldAttemptInterviewNotification) {
+            try {
+              await notifyInterviewRecordCreated({
+                supabase: this.supabase,
+                tenantId: this.tenantId,
+                interviewRecord: {
+                  id: upsertedRecord.id,
+                  person_id: personId,
+                  person_name: await this.getPersonNameForInterviewNotification(personId),
+                  company_name: payload.company_name,
+                  interview_date: payload.interview_date,
+                  record_type: payload.record_type,
+                  support_staff_name: payload.support_staff_name,
+                },
+              })
+            } catch (notificationError) {
+              console.error('[sync] interview-records:notification-error', {
+                sourceRecordId,
+                error: notificationError instanceof Error ? notificationError.message : notificationError,
+              })
+            }
           }
 
           syncedCount++
