@@ -140,8 +140,17 @@ jobs:
 
       - name: Sync Interview Records
         env:
+          NODE_ENV: production
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || secrets.NEXT_PUBLIC_APP_URL }}
+          APP_BASE_URL: ${{ vars.APP_BASE_URL || secrets.APP_BASE_URL }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           BATCH_SIZE: ${{ github.event.inputs.batch_size }}
           RECORD_ID_FROM: ${{ github.event.inputs.record_id_from }}
