@@ -31,6 +31,11 @@ export type InterviewRecordAnnouncementInput = {
   appBaseUrl: string
 }
 
+export type InterviewRecordBatchAnnouncementInput = {
+  count: number
+  appBaseUrl: string
+}
+
 export type InterviewRecordEmailInput = {
   title: string
   body: string
@@ -121,6 +126,23 @@ export function buildInterviewRecordAnnouncement({
 
   return {
     title: '新しい面談記録が追加されました',
+    body: lines.join('\n'),
+  }
+}
+
+export function buildInterviewRecordBatchAnnouncement({
+  count,
+  appBaseUrl,
+}: InterviewRecordBatchAnnouncementInput): { title: string; body: string } {
+  const listUrl = `${trimTrailingSlash(appBaseUrl)}/meetings`
+  const lines = [
+    `新しい面談記録が${count}件FunBaseに追加されました。`,
+    '',
+    `面談一覧: ${listUrl}`,
+  ]
+
+  return {
+    title: `新しい面談記録が${count}件追加されました`,
     body: lines.join('\n'),
   }
 }

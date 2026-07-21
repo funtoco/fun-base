@@ -142,7 +142,7 @@ jobs:
         env:
           NODE_ENV: production
           NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || secrets.NEXT_PUBLIC_APP_URL }}
-          APP_BASE_URL: ${{ vars.APP_BASE_URL || secrets.APP_BASE_URL }}
+          APP_BASE_URL: ${{ vars.APP_BASE_URL || secrets.APP_BASE_URL || 'https://funbase.funtoco.jp' }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -158,6 +158,12 @@ jobs:
           RECORD_ID_TAIL_SIZE: ${{ github.event.inputs.record_id_tail_size }}
         run: |
           echo "🕐 Starting interview_records sync at $(date)"
+          for required_env in SMTP_HOST SMTP_USER SMTP_PASS; do
+            if [ -z "${!required_env:-}" ]; then
+              echo "::error title=Missing SMTP configuration::${required_env} is required for interview record email notifications"
+              exit 1
+            fi
+          done
           cmd=(pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type interview_records)
 
           add_numeric_arg() {

@@ -15,6 +15,7 @@ import {
   markAnnouncementAsRead,
 } from "@/lib/supabase/announcements"
 import type { Announcement } from "@/lib/models"
+import { AnnouncementBody } from "./announcement-body"
 
 export default function AnnouncementsPage() {
   const router = useRouter()
@@ -141,9 +142,7 @@ export default function AnnouncementsPage() {
                       {formatDate(selected.createdAt)}
                     </p>
                   </div>
-                  <div className="prose prose-sm max-w-none whitespace-pre-wrap text-foreground">
-                    {selected.body}
-                  </div>
+                  <AnnouncementBody body={selected.body} />
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
