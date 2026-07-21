@@ -1,6 +1,6 @@
 "use client"
 
-import { Building2, MailPlus, MoreHorizontal, Pencil, RefreshCw, Trash2 } from "lucide-react"
+import { Building2, MoreHorizontal, Pencil, RefreshCw, Trash2 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   DropdownMenu,
@@ -42,7 +42,6 @@ interface MembersTableProps {
   onDeleteMember: (memberId: string) => void
   onEditOffices?: (member: UserTenant) => void
   onResendInvite?: (memberId: string) => void
-  onReinviteMember?: (member: UserTenant) => void
   currentUserRole: DisplayRole
   currentUserId?: string
 }
@@ -61,7 +60,6 @@ export function MembersTable({
   onDeleteMember,
   onEditOffices,
   onResendInvite,
-  onReinviteMember,
   currentUserRole,
   currentUserId,
 }: MembersTableProps) {
@@ -107,12 +105,6 @@ export function MembersTable({
     Boolean(targetMember.email) &&
     isManagerRole(currentUserRole)
 
-  const canReinviteMember = (targetMember: UserTenant) =>
-    Boolean(onReinviteMember) &&
-    targetMember.status === "pending" &&
-    Boolean(targetMember.email) &&
-    canDeleteMember(targetMember)
-
   const canEditOffices = (targetMember: UserTenant) =>
     Boolean(onEditOffices) &&
     isManagerRole(currentUserRole) &&
@@ -141,7 +133,6 @@ export function MembersTable({
     canChangeRole(targetMember) ||
     canEditOffices(targetMember) ||
     canResendInvite(targetMember) ||
-    canReinviteMember(targetMember) ||
     canDeleteMember(targetMember)
 
   const hasDropdownActions = (targetMember: UserTenant) =>
@@ -179,11 +170,6 @@ export function MembersTable({
   const handleResendInvite = (member: UserTenant) => {
     if (!canResendInvite(member)) return
     onResendInvite?.(member.id)
-  }
-
-  const handleReinviteMember = (member: UserTenant) => {
-    if (!canReinviteMember(member)) return
-    onReinviteMember?.(member)
   }
 
   return (
@@ -341,19 +327,6 @@ export function MembersTable({
                       >
                         <RefreshCw className="size-3.5" />
                         再送
-                      </Button>
-                    )}
-
-                    {member.status === "pending" && canReinviteMember(member) && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 px-2 text-xs"
-                        onClick={() => handleReinviteMember(member)}
-                      >
-                        <MailPlus className="size-3.5" />
-                        再招待
                       </Button>
                     )}
 

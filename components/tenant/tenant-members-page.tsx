@@ -45,11 +45,6 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   const [activeTab, setActiveTab] = useState("all")
   const [loading, setLoading] = useState(true)
   const [officeEditingMember, setOfficeEditingMember] = useState<UserTenant | null>(null)
-  const [inviteInitialValues, setInviteInitialValues] = useState<{
-    email?: string
-    role?: 'admin' | 'member' | 'guest'
-    officeIds?: string[]
-  } | null>(null)
 
   // Dialog states
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
@@ -213,35 +208,6 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
     }
   }
 
-  const handleReinviteMember = async (member: UserTenant) => {
-    const reinviteRole =
-      member.role === "owner" || member.role === "supporter" ? "member" : member.role
-    const reinviteOfficeIds = (member.offices || []).map((office) => office.id)
-
-    try {
-      await removeUserFromTenant(tenantId, member.id)
-      await fetchData()
-      setSelectedMembers(prev => prev.filter(id => id !== member.id))
-      setInviteInitialValues({
-        email: member.email || "",
-        role: reinviteRole,
-        officeIds: reinviteOfficeIds,
-      })
-      setIsInviteDialogOpen(true)
-      toast({
-        title: "招待を削除しました",
-        description: "内容を確認して、招待メールを再送信してください",
-      })
-    } catch (error) {
-      console.error("Error preparing reinvitation:", error)
-      toast({
-        title: "エラー",
-        description: error instanceof Error ? error.message : "再招待の準備に失敗しました",
-        variant: "destructive",
-      })
-    }
-  }
-
   const handleResendInvite = async (memberId: string) => {
     try {
       await resendTenantInvitation(tenantId, memberId)
@@ -293,21 +259,10 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
       title: member.status === "pending" ? "招待を削除" : "メンバーを削除",
       description:
         member.status === "pending"
-          ? `${member.email || 'このメンバー'}さんの招待を削除しますか？必要な場合は削除後にメールで再招待できます。`
+          ? `${member.email || 'このメンバー'}さんの招待を削除しますか？必要な場合は削除後にメールで招待し直せます。`
           : `${member.email || 'このメンバー'}さんをテナントから削除しますか？この操作は取り消せません。`,
       confirmText: member.status === "pending" ? "招待を削除" : "削除",
       onConfirm: () => handleDeleteMember(memberId),
-      variant: "destructive",
-    })
-  }
-
-  const showReinviteConfirm = (member: UserTenant) => {
-    setConfirmDialog({
-      open: true,
-      title: "削除して再招待し直す",
-      description: `${member.email || 'このメンバー'}さんの現在の招待を削除し、同じ内容で新しい招待メールを送る準備をします。`,
-      confirmText: "削除して再招待へ",
-      onConfirm: () => handleReinviteMember(member),
       variant: "destructive",
     })
   }
@@ -430,7 +385,6 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onDeleteMember={showDeleteConfirm}
               onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
-              onReinviteMember={showReinviteConfirm}
               currentUserRole={currentUserRole}
               currentUserId={user?.id}
             />
@@ -453,7 +407,6 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onDeleteMember={showDeleteConfirm}
               onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
-              onReinviteMember={showReinviteConfirm}
               currentUserRole={currentUserRole}
               currentUserId={user?.id}
             />
@@ -476,7 +429,6 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onDeleteMember={showDeleteConfirm}
               onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
-              onReinviteMember={showReinviteConfirm}
               currentUserRole={currentUserRole}
               currentUserId={user?.id}
             />
@@ -488,16 +440,10 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
       <InviteMemberDialog
         tenantId={tenantId}
         open={isInviteDialogOpen}
-        onOpenChange={(open) => {
-          setIsInviteDialogOpen(open)
-          if (!open) {
-            setInviteInitialValues(null)
-          }
-        }}
+        onOpenChange={setIsInviteDialogOpen}
         onInviteSent={fetchData}
         canChooseRole={canManageMembers}
         offices={offices}
-        initialValues={inviteInitialValues}
       />
 
       <AddExistingMemberDialog
