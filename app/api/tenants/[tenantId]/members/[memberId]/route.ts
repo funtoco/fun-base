@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/client"
 import {
   canManageTenant,
   getTenantMemberRemovalError,
@@ -300,7 +301,7 @@ export async function DELETE(
 
     const { data: targetMember, error: targetMemberError } = await supabase
       .from("user_tenants")
-      .select("id, user_id, role, email")
+      .select("id, user_id, role, email, status")
       .eq("id", params.memberId)
       .eq("tenant_id", params.tenantId)
       .single()
@@ -350,6 +351,31 @@ export async function DELETE(
       return NextResponse.json({ error: permissionError }, { status })
     }
 
+    let shouldDeleteAuthAfterMembershipRemoval = false
+    const shouldCheckPendingAuthCleanup =
+      targetMember.status === "pending" &&
+      Boolean(targetMember.user_id) &&
+      targetMember.user_id !== user.id
+
+    if (shouldCheckPendingAuthCleanup) {
+      const adminSupabase = createAdminClient()
+      const { count: otherMembershipCount, error: otherMembershipsError } = await adminSupabase
+        .from("user_tenants")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", targetMember.user_id)
+        .neq("id", params.memberId)
+
+      if (otherMembershipsError) {
+        console.error("Error checking pending invitee memberships:", otherMembershipsError)
+        return NextResponse.json(
+          { error: "Failed to verify pending invitee cleanup" },
+          { status: 500 }
+        )
+      }
+
+      shouldDeleteAuthAfterMembershipRemoval = (otherMembershipCount ?? 0) === 0
+    }
+
     const { error: deleteError } = await supabase
       .from("user_tenants")
       .delete()
@@ -362,6 +388,15 @@ export async function DELETE(
         { error: "Failed to remove member" },
         { status: 500 }
       )
+    }
+
+    if (shouldDeleteAuthAfterMembershipRemoval) {
+      const adminSupabase = createAdminClient()
+      const { error: deleteAuthUserError } = await adminSupabase.auth.admin.deleteUser(targetMember.user_id)
+
+      if (deleteAuthUserError) {
+        console.error("Error deleting pending invitee auth user:", deleteAuthUserError)
+      }
     }
 
     return NextResponse.json({ success: true })
