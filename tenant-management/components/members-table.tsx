@@ -197,7 +197,7 @@ export function MembersTable({
                       {PermissionService.canResendInvite(context) && (
                         <DropdownMenuItem onClick={() => onResendInvite(member.id)}>
                           <RotateCcw className="size-4 mr-2" />
-                          再招待
+                          再送
                         </DropdownMenuItem>
                       )}
 
