@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 
 import {
   buildInterviewRecordAnnouncement,
+  buildInterviewRecordBatchAnnouncement,
   buildInterviewRecordEmail,
   getInterviewNotificationRecipients,
   shouldNotifyInterviewRecordCreation,
@@ -81,6 +82,18 @@ describe('interview record notifications', () => {
     expect(announcement.body).not.toContain('山田 太郎')
     expect(announcement.body).not.toContain('株式会社サンプル')
     expect(announcement.body).toContain('https://funbase.example.com/interview-records/record-1')
+  })
+
+  test('builds a single batch announcement for multiple interview records', () => {
+    const announcement = buildInterviewRecordBatchAnnouncement({
+      count: 12,
+      appBaseUrl: 'https://funbase.example.com/',
+    })
+
+    expect(announcement.title).toBe('新しい面談記録が12件追加されました')
+    expect(announcement.body).toContain('新しい面談記録が12件FunBaseに追加されました。')
+    expect(announcement.body).toContain('面談一覧: https://funbase.example.com/meetings')
+    expect(announcement.body).not.toContain('interview-records/')
   })
 
   test('builds email body with notification settings link', () => {
