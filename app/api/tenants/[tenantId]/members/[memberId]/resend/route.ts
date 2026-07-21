@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/client"
+import { sendEmail } from "@/lib/notifications/email"
 import { getInviteRedirectUrl } from "@/lib/supabase/invite-redirect"
+import { buildTenantInvitationEmail, buildTenantInviteUrl } from "@/lib/tenant-invitation-email"
 import { createClient } from "@/lib/supabase/server"
-import { canManageTenant } from "@/lib/tenant-access"
+import { canManageTenant, TENANT_INVITABLE_ROLES } from "@/lib/tenant-access"
+
+const INVITABLE_ROLES = new Set(TENANT_INVITABLE_ROLES)
 
 export async function POST(
   request: NextRequest,
@@ -70,29 +74,52 @@ export async function POST(
       )
     }
 
-    let redirectTo: string
-    try {
-      redirectTo = getInviteRedirectUrl({ requestOrigin: request.nextUrl.origin })
-    } catch (error) {
-      console.error("Error resolving resend redirect URL:", error)
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "Failed to resolve redirect URL" },
-        { status: 500 }
-      )
+    const adminSupabase = createAdminClient()
+    const { data: tenant, error: tenantError } = await adminSupabase
+      .from("tenants")
+      .select("name")
+      .eq("id", params.tenantId)
+      .single()
+
+    if (tenantError || !tenant) {
+      console.error("Error fetching tenant for resend:", tenantError)
+      return NextResponse.json({ error: "Failed to fetch tenant" }, { status: 500 })
     }
 
-    const adminSupabase = createAdminClient()
-    const { error } = await adminSupabase.auth.admin.inviteUserByEmail(targetMember.email, {
-      redirectTo,
+    const inviteLinkDefaultRole = INVITABLE_ROLES.has(targetMember.role as any)
+      ? targetMember.role
+      : "member"
+
+    const { data: link, error: inviteLinkError } = await adminSupabase
+      .from("tenant_invite_links")
+      .insert({
+        tenant_id: params.tenantId,
+        // Targeted email invites activate target_user_tenant_id, so default_role is
+        // only a schema-compatible fallback for the invite-link row.
+        default_role: inviteLinkDefaultRole,
+        is_active: true,
+        created_by: user.id,
+        target_user_tenant_id: targetMember.id,
+      })
+      .select("token")
+      .single()
+
+    if (inviteLinkError || !link) {
+      console.error("Error creating reusable resend invite link:", inviteLinkError)
+      return NextResponse.json({ error: "Failed to create invite link" }, { status: 500 })
+    }
+
+    const baseUrl = getInviteRedirectUrl({ requestOrigin: request.nextUrl.origin })
+    const inviteUrl = buildTenantInviteUrl(baseUrl, link.token)
+    const emailMessage = buildTenantInvitationEmail({
+      tenantName: tenant.name ?? "FunBase",
+      inviteUrl,
     })
 
-    if (error) {
-      console.error("Error resending invitation:", error)
-      return NextResponse.json(
-        { error: error.message || "Failed to resend invitation" },
-        { status: 500 }
-      )
-    }
+    await sendEmail({
+      to: targetMember.email,
+      ...emailMessage,
+    })
 
     return NextResponse.json({
       success: true,
