@@ -1,8 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import {
+  getSafeAuthNextPath,
+  shouldActivateMembershipAfterPasswordSet,
+} from "@/lib/auth-next-path"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,7 +30,12 @@ export default function SetPasswordPage() {
   const [authType, setAuthType] = useState<"signup" | "invite" | "recovery" | null>(null)
   
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+  const [successRedirectPath] = useState(() =>
+    getSafeAuthNextPath(searchParams.get("next"), "/admin/tenants")
+  )
+  const shouldActivateMembership = shouldActivateMembershipAfterPasswordSet(successRedirectPath)
 
   useEffect(() => {
     const initializeSession = async () => {
@@ -297,28 +306,31 @@ export default function SetPasswordPage() {
         return
       }
 
-      // Update tenant member status
-      try {
-        const response = await fetch('/api/auth/activate-membership', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
+      // Update tenant member status for legacy Supabase invite links. Token-scoped
+      // FunBase invite links are accepted after redirecting back to /invite/[token].
+      if (shouldActivateMembership) {
+        try {
+          const response = await fetch('/api/auth/activate-membership', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          })
 
-        if (!response.ok) {
-          console.error('Failed to activate membership, but password was set successfully')
+          if (!response.ok) {
+            console.error('Failed to activate membership, but password was set successfully')
+          }
+        } catch (membershipError) {
+          console.error('Error activating membership:', membershipError)
+          // Don't block the user flow if membership activation fails
         }
-      } catch (membershipError) {
-        console.error('Error activating membership:', membershipError)
-        // Don't block the user flow if membership activation fails
       }
 
       setSuccess(true)
       
       // Redirect after 3 seconds
       setTimeout(() => {
-        router.replace('/admin/tenants')
+        router.replace(successRedirectPath)
       }, 3000)
 
     } catch (error) {
@@ -345,8 +357,8 @@ export default function SetPasswordPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button 
-              onClick={() => router.push('/admin/tenants')} 
+            <Button
+              onClick={() => router.push(successRedirectPath)}
               className="w-full"
             >
               ホームへ

@@ -3,6 +3,11 @@
 import { useState, useEffect, type FormEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { isExistingAccountSignUpError } from "@/lib/supabase/auth-errors"
+import {
+  isLikelyExistingAccountSignUpResponse,
+  validateInviteRegistrationPasswords,
+} from "@/lib/invite-registration-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,6 +28,7 @@ type PageStatus =
 interface InviteInfo {
   tenantName: string
   defaultRole: string
+  invitedEmail?: string | null
 }
 
 const roleLabel: Record<string, string> = {
@@ -43,11 +49,13 @@ export default function InviteAcceptancePage() {
   const [acceptError, setAcceptError] = useState("")
 
   // Auth form state
-  const [authMode, setAuthMode] = useState<"login" | "register">("login")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [passwordConfirmation, setPasswordConfirmation] = useState("")
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState("")
+  const invitedEmail = inviteInfo?.invitedEmail?.trim() || ""
+  const registrationEmail = invitedEmail || email.trim()
 
   // Step 1: fetch invite info and check login state
   useEffect(() => {
@@ -63,12 +71,28 @@ export default function InviteAcceptancePage() {
           return
         }
 
-        setInviteInfo({ tenantName: data.tenantName, defaultRole: data.defaultRole })
+        setInviteInfo({
+          tenantName: data.tenantName,
+          defaultRole: data.defaultRole,
+          invitedEmail: data.invitedEmail ?? null,
+        })
 
         // Check if user is logged in
         const { data: { user } } = await supabase.auth.getUser()
 
         if (user) {
+          const invitedEmail = typeof data.invitedEmail === "string"
+            ? data.invitedEmail.trim().toLowerCase()
+            : ""
+          const currentEmail = user.email?.trim().toLowerCase() || ""
+
+          if (invitedEmail && currentEmail !== invitedEmail) {
+            await supabase.auth.signOut()
+            setAuthError("招待されたメールアドレスで参加してください。別アカウントからログアウトしました。")
+            setStatus("notLoggedIn")
+            return
+          }
+
           setStatus("accepting")
           await acceptInvite()
         } else {
@@ -103,46 +127,103 @@ export default function InviteAcceptancePage() {
     }
   }
 
-  const handleLogin = async (e: FormEvent) => {
-    e.preventDefault()
-    setAuthLoading(true)
-    setAuthError("")
-
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-
-      if (error) {
-        setAuthError("ログインに失敗しました。メールアドレスとパスワードを確認してください。")
-        return
-      }
-
-      // Logged in successfully → accept invite
-      await acceptInvite()
-    } catch (error) {
-      console.error("Error during login:", error)
-      setAuthError("ログイン中にエラーが発生しました。")
-    } finally {
-      setAuthLoading(false)
-    }
-  }
-
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault()
     setAuthLoading(true)
     setAuthError("")
 
+    if (!registrationEmail) {
+      setAuthError("メールアドレスを確認してください")
+      setAuthLoading(false)
+      return
+    }
+
+    const passwordError = validateInviteRegistrationPasswords(password, passwordConfirmation)
+    if (passwordError) {
+      setAuthError(passwordError)
+      setAuthLoading(false)
+      return
+    }
+
     const origin = window.location.origin
-    // After email confirmation, redirect back to this invite page
-    const emailRedirectTo = `${origin}/auth/callback?next=/invite/${token}`
+    const invitePath = `/invite/${token}`
+    const emailRedirectTo = `${origin}/auth/callback?next=${invitePath}`
+    const setPasswordNext = `/auth/set-password?type=recovery&next=${encodeURIComponent(invitePath)}`
+    const passwordResetRedirectTo = `${origin}/auth/callback?type=recovery&next=${encodeURIComponent(setPasswordNext)}`
 
     try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: registrationEmail,
+        password,
+      })
+
+      if (!signInError) {
+        await acceptInvite()
+        return
+      }
+
+      if (invitedEmail) {
+        const registerResponse = await fetch(`/api/invite/${token}/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: registrationEmail, password }),
+        })
+        const registerResult = await registerResponse.json().catch(() => ({}))
+
+        if (registerResponse.status === 409) {
+          const { error: resetError } = await supabase.auth.resetPasswordForEmail(registrationEmail, {
+            redirectTo: passwordResetRedirectTo,
+          })
+
+          if (resetError) {
+            setAuthError("既にアカウントがあります。ログイン、またはパスワード再設定をお試しください。")
+            return
+          }
+
+          setStatus("signupSent")
+          return
+        }
+
+        if (!registerResponse.ok || !registerResult.success) {
+          setAuthError(registerResult.error || "アカウント作成に失敗しました。")
+          return
+        }
+
+        const { error: createdSignInError } = await supabase.auth.signInWithPassword({
+          email: registrationEmail,
+          password,
+        })
+
+        if (createdSignInError) {
+          setAuthError("アカウント作成後のログインに失敗しました。ログイン画面からお試しください。")
+          return
+        }
+
+        await acceptInvite()
+        return
+      }
+
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: registrationEmail,
         password,
         options: { emailRedirectTo },
       })
 
       if (error) {
+        if (isExistingAccountSignUpError(error.message)) {
+          const { error: resetError } = await supabase.auth.resetPasswordForEmail(registrationEmail, {
+            redirectTo: passwordResetRedirectTo,
+          })
+
+          if (resetError) {
+            setAuthError("既にアカウントがあります。ログイン、またはパスワード再設定をお試しください。")
+            return
+          }
+
+          setStatus("signupSent")
+          return
+        }
+
         setAuthError("アカウント作成に失敗しました。メールアドレスを確認してください。")
         return
       }
@@ -150,6 +231,17 @@ export default function InviteAcceptancePage() {
       if (data.session) {
         await acceptInvite()
         return
+      }
+
+      if (isLikelyExistingAccountSignUpResponse(data.user)) {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(registrationEmail, {
+          redirectTo: passwordResetRedirectTo,
+        })
+
+        if (resetError) {
+          setAuthError("既にアカウントがあります。ログイン、またはパスワード再設定をお試しください。")
+          return
+        }
       }
 
       setStatus("signupSent")
@@ -244,7 +336,7 @@ export default function InviteAcceptancePage() {
             <CheckCircle className="h-12 w-12 text-blue-500 mx-auto mb-2" />
             <CardTitle>確認メールを送信しました</CardTitle>
             <CardDescription>
-              {email} に確認メールを送りました。<br />
+              {registrationEmail} に確認メールを送りました。<br />
               メール内のリンクをクリックすると、自動的に {inviteInfo?.tenantName} に参加します。
             </CardDescription>
           </CardHeader>
@@ -274,46 +366,33 @@ export default function InviteAcceptancePage() {
           )}
         </CardHeader>
         <CardContent>
-          {/* Mode tabs */}
-          <div className="flex rounded-lg border mb-4 overflow-hidden">
-            <button
-              type="button"
-              className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                authMode === "login" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
-              }`}
-              onClick={() => { setAuthMode("login"); setAuthError("") }}
-            >
-              ログイン
-            </button>
-            <button
-              type="button"
-              className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                authMode === "register" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
-              }`}
-              onClick={() => { setAuthMode("register"); setAuthError("") }}
-            >
-              新規登録
-            </button>
-          </div>
-
-          <form onSubmit={authMode === "login" ? handleLogin : handleRegister} className="space-y-4">
+          <form onSubmit={handleRegister} className="space-y-4">
             {authError && (
               <Alert variant="destructive">
                 <AlertDescription>{authError}</AlertDescription>
               </Alert>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="email">メールアドレス</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={authLoading}
-              />
-            </div>
+            {invitedEmail ? (
+              <div className="space-y-2">
+                <Label>メールアドレス</Label>
+                <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-foreground">
+                  {invitedEmail}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="email">メールアドレス</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={authLoading}
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="password">パスワード</Label>
@@ -324,17 +403,26 @@ export default function InviteAcceptancePage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={authLoading}
-                minLength={authMode === "register" ? 6 : undefined}
+                minLength={6}
               />
-              {authMode === "register" && (
-                <p className="text-xs text-muted-foreground">6文字以上で入力してください</p>
-              )}
+              <p className="text-xs text-muted-foreground">6文字以上で入力してください</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="passwordConfirmation">パスワード（確認）</Label>
+              <Input
+                id="passwordConfirmation"
+                type="password"
+                value={passwordConfirmation}
+                onChange={(e) => setPasswordConfirmation(e.target.value)}
+                required
+                disabled={authLoading}
+                minLength={6}
+              />
             </div>
 
             <Button type="submit" className="w-full" disabled={authLoading}>
-              {authLoading
-                ? authMode === "login" ? "ログイン中..." : "登録中..."
-                : authMode === "login" ? "ログインして参加" : "アカウントを作成して参加"}
+              {authLoading ? "登録中..." : "アカウントを作成して参加"}
             </Button>
           </form>
         </CardContent>

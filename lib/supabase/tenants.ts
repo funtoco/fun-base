@@ -569,8 +569,58 @@ export interface InviteLinkInfo {
   tenantId: string
   tenantName: string
   defaultRole: 'admin' | 'member' | 'guest'
+  invitedEmail?: string | null
   isActive: boolean
   isExpired: boolean
+}
+
+type InvitationMembershipCandidate = {
+  id: string
+  status: string
+  role?: string | null
+  user_id?: string | null
+  email?: string | null
+}
+
+export function getTenantMembershipIdentityFilter(userId: string, userEmail: string): string {
+  const normalizedEmail = userEmail.trim().toLowerCase()
+  return normalizedEmail ? `user_id.eq.${userId},email.eq.${normalizedEmail}` : `user_id.eq.${userId}`
+}
+
+export function pickTenantMembershipForInviteAcceptance(
+  memberships: InvitationMembershipCandidate[],
+  userEmail: string
+): InvitationMembershipCandidate | undefined {
+  const normalizedEmail = userEmail.trim().toLowerCase()
+
+  return (
+    memberships.find(
+      (membership) =>
+        membership.status === 'pending' &&
+        membership.email?.trim().toLowerCase() === normalizedEmail &&
+        membership.role !== 'supporter'
+    ) ?? memberships.find(
+      (membership) => membership.status === 'active' && membership.role !== 'supporter'
+    ) ?? memberships.find(
+      (membership) => membership.status === 'suspended' && membership.role !== 'supporter'
+    )
+  )
+}
+
+export function pickExistingMembershipForTargetedInvite(
+  memberships: InvitationMembershipCandidate[],
+  targetRole?: string | null
+): InvitationMembershipCandidate | undefined {
+  return (
+    memberships.find(
+      (membership) => membership.status === 'active' && membership.role !== 'supporter'
+    ) ?? memberships.find(
+      (membership) =>
+        membership.status === 'suspended' &&
+        membership.role !== 'supporter' &&
+        membership.role === targetRole
+    )
+  )
 }
 
 // Public: look up invite link info without authentication (uses admin client)
@@ -580,12 +630,33 @@ export async function getInviteLinkInfo(token: string): Promise<{ success: boole
 
     const { data, error } = await adminSupabase
       .from('tenant_invite_links')
-      .select('tenant_id, default_role, expires_at, is_active, tenants(name)')
+      .select('tenant_id, default_role, expires_at, is_active, target_user_tenant_id, tenants(name)')
       .eq('token', token)
       .single()
 
     if (error || !data) {
       return { success: false, error: '招待リンクが見つかりません' }
+    }
+
+    let invitedEmail: string | null = null
+    if (data.target_user_tenant_id) {
+      const { data: targetMembership, error: targetMembershipError } = await adminSupabase
+        .from('user_tenants')
+        .select('email, status')
+        .eq('id', data.target_user_tenant_id)
+        .eq('tenant_id', data.tenant_id)
+        .maybeSingle()
+
+      if (targetMembershipError) {
+        console.error('Error fetching target invite email:', targetMembershipError)
+        return { success: false, error: '招待情報の確認に失敗しました' }
+      }
+
+      if (!targetMembership || targetMembership.status !== 'pending') {
+        return { success: false, error: 'この招待リンクは無効化されています' }
+      }
+
+      invitedEmail = targetMembership.email ?? null
     }
 
     const isExpired = data.expires_at ? new Date(data.expires_at) < new Date() : false
@@ -599,6 +670,7 @@ export async function getInviteLinkInfo(token: string): Promise<{ success: boole
         tenantId: data.tenant_id,
         tenantName: tenant?.name ?? '不明なテナント',
         defaultRole: data.default_role as 'admin' | 'member' | 'guest',
+        invitedEmail,
         isActive: data.is_active,
         isExpired,
       },
@@ -621,7 +693,7 @@ export async function acceptTenantInvitation(
     // 1. Look up the invite link
     const { data: link, error: linkError } = await adminSupabase
       .from('tenant_invite_links')
-      .select('id, tenant_id, default_role, expires_at, is_active')
+      .select('id, tenant_id, default_role, expires_at, is_active, target_user_tenant_id')
       .eq('token', token)
       .single()
 
@@ -637,27 +709,185 @@ export async function acceptTenantInvitation(
       return { success: false, error: 'この招待リンクは期限切れです' }
     }
 
-    // 2. Check if user is already a member
-    const { data: existing, error: existingError } = await adminSupabase
+    const normalizedUserEmail = userEmail.trim().toLowerCase()
+    const deactivateTargetedInviteLink = async () => {
+      const { error: deactivateError } = await adminSupabase
+        .from('tenant_invite_links')
+        .update({ is_active: false })
+        .eq('id', link.id)
+        .eq('target_user_tenant_id', link.target_user_tenant_id)
+
+      if (deactivateError) {
+        console.error('Error deactivating targeted invite link:', deactivateError)
+        return false
+      }
+
+      return true
+    }
+
+    if (link.target_user_tenant_id) {
+      const { data: targetMembership, error: targetMembershipError } = await adminSupabase
+        .from('user_tenants')
+        .select('id, status, email, user_id, role')
+        .eq('id', link.target_user_tenant_id)
+        .eq('tenant_id', link.tenant_id)
+        .maybeSingle()
+
+      if (targetMembershipError) {
+        console.error('Error fetching target invite membership:', targetMembershipError)
+        return { success: false, error: '招待情報の確認に失敗しました' }
+      }
+
+      if (!targetMembership) {
+        return { success: false, error: '招待情報が見つかりません' }
+      }
+
+      if (targetMembership.email?.trim().toLowerCase() !== normalizedUserEmail) {
+        return { success: false, error: '招待されたメールアドレスでログインしてください' }
+      }
+
+      if (targetMembership.status === 'active') {
+        if (targetMembership.user_id === userId) {
+          await deactivateTargetedInviteLink()
+          return { success: true, tenantId: link.tenant_id }
+        }
+        return { success: false, error: 'すでにこのテナントのメンバーです' }
+      }
+
+      if (targetMembership.status !== 'pending') {
+        return { success: false, error: 'この招待リンクは利用できません' }
+      }
+
+      const { data: existingMemberships, error: existingMembershipError } = await adminSupabase
+        .from('user_tenants')
+        .select('id, status, role')
+        .eq('tenant_id', link.tenant_id)
+        .eq('user_id', userId)
+        .in('status', ['active', 'suspended'])
+        .neq('role', 'supporter')
+
+      if (existingMembershipError) {
+        console.error('Error checking existing memberships for targeted invite:', existingMembershipError)
+        return { success: false, error: '既存メンバー情報の確認に失敗しました' }
+      }
+
+      const existingMembership = pickExistingMembershipForTargetedInvite(
+        existingMemberships || [],
+        targetMembership.role
+      )
+
+      if (existingMembership) {
+        if (existingMembership.status === 'suspended') {
+          const { data: targetOfficeAssignments, error: targetOfficeAssignmentsError } = await adminSupabase
+            .from('user_tenant_offices')
+            .select('tenant_office_id')
+            .eq('tenant_id', link.tenant_id)
+            .eq('user_tenant_id', targetMembership.id)
+
+          if (targetOfficeAssignmentsError) {
+            console.error('Error fetching targeted invite office assignments:', targetOfficeAssignmentsError)
+            return { success: false, error: '所属先情報の確認に失敗しました' }
+          }
+
+          const { error: deleteExistingOfficesError } = await adminSupabase
+            .from('user_tenant_offices')
+            .delete()
+            .eq('tenant_id', link.tenant_id)
+            .eq('user_tenant_id', existingMembership.id)
+
+          if (deleteExistingOfficesError) {
+            console.error('Error clearing existing suspended membership offices:', deleteExistingOfficesError)
+            return { success: false, error: '所属先情報の更新に失敗しました' }
+          }
+
+          if ((targetOfficeAssignments || []).length > 0) {
+            const { error: moveTargetOfficesError } = await adminSupabase
+              .from('user_tenant_offices')
+              .update({ user_tenant_id: existingMembership.id })
+              .eq('tenant_id', link.tenant_id)
+              .eq('user_tenant_id', targetMembership.id)
+
+            if (moveTargetOfficesError) {
+              console.error('Error moving targeted invite office assignments:', moveTargetOfficesError)
+              return { success: false, error: '所属先情報の更新に失敗しました' }
+            }
+          }
+
+          const { error: reactivateError } = await adminSupabase
+            .from('user_tenants')
+            .update({
+              email: normalizedUserEmail,
+              status: 'active',
+              joined_at: new Date().toISOString(),
+            })
+            .eq('id', existingMembership.id)
+
+          if (reactivateError) {
+            console.error('Error reactivating existing targeted invite membership:', reactivateError)
+            return { success: false, error: 'テナント参加処理に失敗しました' }
+          }
+        }
+
+        const { error: deletePendingError } = await adminSupabase
+          .from('user_tenants')
+          .delete()
+          .eq('id', targetMembership.id)
+          .eq('status', 'pending')
+
+        if (deletePendingError) {
+          console.error('Error deleting duplicate pending targeted invite:', deletePendingError)
+        }
+
+        await deactivateTargetedInviteLink()
+        return { success: true, tenantId: link.tenant_id }
+      }
+
+      const { error: updateError } = await adminSupabase
+        .from('user_tenants')
+        .update({
+          user_id: userId,
+          email: normalizedUserEmail,
+          status: 'active',
+          joined_at: new Date().toISOString(),
+        })
+        .eq('id', targetMembership.id)
+
+      if (updateError) {
+        console.error('Error activating target membership:', updateError)
+        return { success: false, error: 'テナント参加処理に失敗しました' }
+      }
+
+      await deactivateTargetedInviteLink()
+      return { success: true, tenantId: link.tenant_id }
+    }
+
+    // 2. Check if user is already a member or has a pending invite for this email
+    const { data: existingMemberships, error: existingError } = await adminSupabase
       .from('user_tenants')
-      .select('id, status')
+      .select('id, status, role, email')
       .eq('tenant_id', link.tenant_id)
-      .eq('user_id', userId)
-      .maybeSingle()
+      .or(getTenantMembershipIdentityFilter(userId, userEmail))
 
     if (existingError) {
       console.error('Error fetching existing membership:', existingError)
       return { success: false, error: '既存メンバー情報の確認に失敗しました' }
     }
 
+    const existing = pickTenantMembershipForInviteAcceptance(existingMemberships || [], userEmail)
+
     if (existing) {
       if (existing.status === 'active') {
         return { success: false, error: 'すでにこのテナントのメンバーです' }
       }
-      // Activate pending membership
+      // Activate pending membership and attach it to the authenticated user.
       const { error: updateError } = await adminSupabase
         .from('user_tenants')
-        .update({ status: 'active', joined_at: new Date().toISOString() })
+        .update({
+          user_id: userId,
+          email: userEmail.trim().toLowerCase(),
+          status: 'active',
+          joined_at: new Date().toISOString(),
+        })
         .eq('id', existing.id)
 
       if (updateError) {
