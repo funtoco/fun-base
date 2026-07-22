@@ -4,6 +4,7 @@ import { useState, useEffect, type FormEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { isExistingAccountSignUpError } from "@/lib/supabase/auth-errors"
+import { validateInviteRegistrationPasswords } from "@/lib/invite-registration-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -44,9 +45,9 @@ export default function InviteAcceptancePage() {
   const [acceptError, setAcceptError] = useState("")
 
   // Auth form state
-  const [authMode, setAuthMode] = useState<"login" | "register">("login")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [passwordConfirmation, setPasswordConfirmation] = useState("")
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState("")
 
@@ -104,33 +105,17 @@ export default function InviteAcceptancePage() {
     }
   }
 
-  const handleLogin = async (e: FormEvent) => {
-    e.preventDefault()
-    setAuthLoading(true)
-    setAuthError("")
-
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-
-      if (error) {
-        setAuthError("ログインに失敗しました。メールアドレスとパスワードを確認してください。")
-        return
-      }
-
-      // Logged in successfully → accept invite
-      await acceptInvite()
-    } catch (error) {
-      console.error("Error during login:", error)
-      setAuthError("ログイン中にエラーが発生しました。")
-    } finally {
-      setAuthLoading(false)
-    }
-  }
-
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault()
     setAuthLoading(true)
     setAuthError("")
+
+    const passwordError = validateInviteRegistrationPasswords(password, passwordConfirmation)
+    if (passwordError) {
+      setAuthError(passwordError)
+      setAuthLoading(false)
+      return
+    }
 
     const origin = window.location.origin
     // After email confirmation, redirect back to this invite page
@@ -289,29 +274,7 @@ export default function InviteAcceptancePage() {
           )}
         </CardHeader>
         <CardContent>
-          {/* Mode tabs */}
-          <div className="flex rounded-lg border mb-4 overflow-hidden">
-            <button
-              type="button"
-              className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                authMode === "login" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
-              }`}
-              onClick={() => { setAuthMode("login"); setAuthError("") }}
-            >
-              ログイン
-            </button>
-            <button
-              type="button"
-              className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                authMode === "register" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
-              }`}
-              onClick={() => { setAuthMode("register"); setAuthError("") }}
-            >
-              新規登録
-            </button>
-          </div>
-
-          <form onSubmit={authMode === "login" ? handleLogin : handleRegister} className="space-y-4">
+          <form onSubmit={handleRegister} className="space-y-4">
             {authError && (
               <Alert variant="destructive">
                 <AlertDescription>{authError}</AlertDescription>
@@ -339,17 +302,26 @@ export default function InviteAcceptancePage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={authLoading}
-                minLength={authMode === "register" ? 6 : undefined}
+                minLength={6}
               />
-              {authMode === "register" && (
-                <p className="text-xs text-muted-foreground">6文字以上で入力してください</p>
-              )}
+              <p className="text-xs text-muted-foreground">6文字以上で入力してください</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="passwordConfirmation">パスワード（確認）</Label>
+              <Input
+                id="passwordConfirmation"
+                type="password"
+                value={passwordConfirmation}
+                onChange={(e) => setPasswordConfirmation(e.target.value)}
+                required
+                disabled={authLoading}
+                minLength={6}
+              />
             </div>
 
             <Button type="submit" className="w-full" disabled={authLoading}>
-              {authLoading
-                ? authMode === "login" ? "ログイン中..." : "登録中..."
-                : authMode === "login" ? "ログインして参加" : "アカウントを作成して参加"}
+              {authLoading ? "登録中..." : "アカウントを作成して参加"}
             </Button>
           </form>
         </CardContent>
