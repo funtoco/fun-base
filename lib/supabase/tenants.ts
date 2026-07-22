@@ -631,7 +631,7 @@ export async function getInviteLinkInfo(token: string): Promise<{ success: boole
     if (data.target_user_tenant_id) {
       const { data: targetMembership, error: targetMembershipError } = await adminSupabase
         .from('user_tenants')
-        .select('email')
+        .select('email, status')
         .eq('id', data.target_user_tenant_id)
         .eq('tenant_id', data.tenant_id)
         .maybeSingle()
@@ -641,7 +641,11 @@ export async function getInviteLinkInfo(token: string): Promise<{ success: boole
         return { success: false, error: '招待情報の確認に失敗しました' }
       }
 
-      invitedEmail = targetMembership?.email ?? null
+      if (!targetMembership || targetMembership.status !== 'pending') {
+        return { success: false, error: 'この招待リンクは無効化されています' }
+      }
+
+      invitedEmail = targetMembership.email ?? null
     }
 
     const isExpired = data.expires_at ? new Date(data.expires_at) < new Date() : false
@@ -695,6 +699,20 @@ export async function acceptTenantInvitation(
     }
 
     const normalizedUserEmail = userEmail.trim().toLowerCase()
+    const deactivateTargetedInviteLink = async () => {
+      const { error: deactivateError } = await adminSupabase
+        .from('tenant_invite_links')
+        .update({ is_active: false })
+        .eq('id', link.id)
+        .eq('target_user_tenant_id', link.target_user_tenant_id)
+
+      if (deactivateError) {
+        console.error('Error deactivating targeted invite link:', deactivateError)
+        return false
+      }
+
+      return true
+    }
 
     if (link.target_user_tenant_id) {
       const { data: targetMembership, error: targetMembershipError } = await adminSupabase
@@ -719,6 +737,7 @@ export async function acceptTenantInvitation(
 
       if (targetMembership.status === 'active') {
         if (targetMembership.user_id === userId) {
+          await deactivateTargetedInviteLink()
           return { success: true, tenantId: link.tenant_id }
         }
         return { success: false, error: 'すでにこのテナントのメンバーです' }
@@ -808,6 +827,7 @@ export async function acceptTenantInvitation(
           console.error('Error deleting duplicate pending targeted invite:', deletePendingError)
         }
 
+        await deactivateTargetedInviteLink()
         return { success: true, tenantId: link.tenant_id }
       }
 
@@ -826,6 +846,7 @@ export async function acceptTenantInvitation(
         return { success: false, error: 'テナント参加処理に失敗しました' }
       }
 
+      await deactivateTargetedInviteLink()
       return { success: true, tenantId: link.tenant_id }
     }
 

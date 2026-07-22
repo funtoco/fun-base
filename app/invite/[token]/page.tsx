@@ -81,6 +81,18 @@ export default function InviteAcceptancePage() {
         const { data: { user } } = await supabase.auth.getUser()
 
         if (user) {
+          const invitedEmail = typeof data.invitedEmail === "string"
+            ? data.invitedEmail.trim().toLowerCase()
+            : ""
+          const currentEmail = user.email?.trim().toLowerCase() || ""
+
+          if (invitedEmail && currentEmail !== invitedEmail) {
+            await supabase.auth.signOut()
+            setAuthError("招待されたメールアドレスで参加してください。別アカウントからログアウトしました。")
+            setStatus("notLoggedIn")
+            return
+          }
+
           setStatus("accepting")
           await acceptInvite()
         } else {
@@ -146,6 +158,47 @@ export default function InviteAcceptancePage() {
       })
 
       if (!signInError) {
+        await acceptInvite()
+        return
+      }
+
+      if (invitedEmail) {
+        const registerResponse = await fetch(`/api/invite/${token}/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: registrationEmail, password }),
+        })
+        const registerResult = await registerResponse.json().catch(() => ({}))
+
+        if (registerResponse.status === 409) {
+          const { error: resetError } = await supabase.auth.resetPasswordForEmail(registrationEmail, {
+            redirectTo: passwordResetRedirectTo,
+          })
+
+          if (resetError) {
+            setAuthError("既にアカウントがあります。ログイン、またはパスワード再設定をお試しください。")
+            return
+          }
+
+          setStatus("signupSent")
+          return
+        }
+
+        if (!registerResponse.ok || !registerResult.success) {
+          setAuthError(registerResult.error || "アカウント作成に失敗しました。")
+          return
+        }
+
+        const { error: createdSignInError } = await supabase.auth.signInWithPassword({
+          email: registrationEmail,
+          password,
+        })
+
+        if (createdSignInError) {
+          setAuthError("アカウント作成後のログインに失敗しました。ログイン画面からお試しください。")
+          return
+        }
+
         await acceptInvite()
         return
       }
