@@ -1,5 +1,8 @@
 import { createClient, createAdminClient } from './client'
-import type { TenantFeaturePermissions } from '@/lib/tenant-access'
+import {
+  isVisibleCompanyTenantMember,
+  type TenantFeaturePermissions,
+} from '@/lib/tenant-access'
 
 export interface Tenant {
   id: string
@@ -157,7 +160,15 @@ export async function getTenantMembers(tenantId: string): Promise<UserTenant[]> 
     return []
   }
 
-  const memberIds = members.map((member: UserTenant) => member.id)
+  const visibleMembers = members.filter((member: UserTenant) =>
+    isVisibleCompanyTenantMember(member)
+  )
+
+  if (visibleMembers.length === 0) {
+    return []
+  }
+
+  const memberIds = visibleMembers.map((member: UserTenant) => member.id)
 
   const { data: assignments, error: assignmentsError } = await supabase
     .from('user_tenant_offices')
@@ -200,7 +211,7 @@ export async function getTenantMembers(tenantId: string): Promise<UserTenant[]> 
     officeIdsByMemberId.set(assignment.user_tenant_id, currentOfficeIds)
   }
 
-  return members.map((member: UserTenant) => ({
+  return visibleMembers.map((member: UserTenant) => ({
     ...member,
     offices: (officeIdsByMemberId.get(member.id) || [])
       .map((officeId) => officesById.get(officeId))

@@ -15,6 +15,7 @@ import { MemberOfficesDialog } from "./member-offices-dialog"
 import { ConfirmDialog } from "./confirm-dialog"
 import { EmptyState } from "./empty-state"
 import { 
+  getCurrentUserTenants,
   getTenantMembers, 
   getTenantOffices,
   resendTenantInvitation,
@@ -39,6 +40,7 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   const { user } = useAuth()
   const { toast } = useToast()
   const [members, setMembers] = useState<UserTenant[]>([])
+  const [currentUserTenants, setCurrentUserTenants] = useState<UserTenant[]>([])
   const [offices, setOffices] = useState<TenantOffice[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
@@ -70,12 +72,14 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const [membersData, officesData] = await Promise.all([
+      const [membersData, officesData, currentUserTenantsData] = await Promise.all([
         getTenantMembers(tenantId),
         getTenantOffices(tenantId),
+        getCurrentUserTenants(),
       ])
       setMembers(membersData)
       setOffices(officesData)
+      setCurrentUserTenants(currentUserTenantsData)
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
@@ -88,7 +92,9 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   }, [fetchData])
 
   // Get current user's role in this tenant
-  const currentUserMember = members.find(m => m.user_id === user?.id)
+  const currentUserMember =
+    currentUserTenants.find((membership) => membership.tenant_id === tenantId)
+    || members.find(m => m.user_id === user?.id)
   const currentUserRole =
     currentUserMember?.role && currentUserMember.role !== 'supporter'
       ? currentUserMember.role
