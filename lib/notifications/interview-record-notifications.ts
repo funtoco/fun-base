@@ -32,14 +32,19 @@ export type InterviewRecordAnnouncementInput = {
 }
 
 export type InterviewRecordBatchAnnouncementInput = {
-  count: number
+  records: Array<{
+    personName?: string | null
+    companyName?: string | null
+    interviewDate?: string | null
+  }>
   appBaseUrl: string
 }
 
 export type InterviewRecordEmailInput = {
   title: string
   body: string
-  announcementUrl: string
+  actionUrl: string
+  actionLabel?: string
   settingsUrl: string
 }
 
@@ -131,30 +136,43 @@ export function buildInterviewRecordAnnouncement({
 }
 
 export function buildInterviewRecordBatchAnnouncement({
-  count,
+  records,
   appBaseUrl,
-}: InterviewRecordBatchAnnouncementInput): { title: string; body: string } {
+}: InterviewRecordBatchAnnouncementInput): {
+  title: string
+  body: string
+  emailBody: string
+  actionUrl: string
+} {
+  if (records.length === 0) {
+    throw new Error('At least one interview record is required')
+  }
+
+  const count = records.length
   const listUrl = `${trimTrailingSlash(appBaseUrl)}/meetings`
-  const lines = [
-    `新しい面談記録が${count}件FunBaseに追加されました。`,
-    '',
-    `面談一覧: ${listUrl}`,
-  ]
+  const summaryLines = count === 1
+    ? buildSingleRecordSummary(records[0])
+    : buildMultipleRecordSummary(records)
+  const emailBody = summaryLines.join('\n')
 
   return {
-    title: `新しい面談記録が${count}件追加されました`,
-    body: lines.join('\n'),
+    title: `面談記録の追加（${count}件）`,
+    body: `${emailBody}\n\n面談一覧：${listUrl}`,
+    emailBody,
+    actionUrl: listUrl,
   }
 }
 
 export function buildInterviewRecordEmail({
   title,
   body,
-  announcementUrl,
+  actionUrl,
+  actionLabel = '面談記録を確認する',
   settingsUrl,
 }: InterviewRecordEmailInput): { subject: string; text: string; html: string } {
   const safeTitle = escapeHtml(title)
-  const bodyText = `${body}\n\nFunBaseで確認: ${announcementUrl}\n通知設定: ${settingsUrl}`
+  const safeActionLabel = escapeHtml(actionLabel)
+  const bodyText = `${body}\n\n${actionLabel}：${actionUrl}\n通知設定：${settingsUrl}`
   const htmlBody = body
     .split('\n')
     .map((line) => escapeHtml(line))
@@ -168,7 +186,7 @@ export function buildInterviewRecordEmail({
         <h2 style="font-size: 18px; margin: 0 0 16px;">${safeTitle}</h2>
         <p>${htmlBody}</p>
         <p style="margin-top: 24px;">
-          <a href="${escapeAttribute(announcementUrl)}" style="color: #2563eb;">FunBaseで確認する</a>
+          <a href="${escapeAttribute(actionUrl)}" style="display: inline-block; padding: 10px 16px; border-radius: 6px; background: #2563eb; color: #ffffff; text-decoration: none;">${safeActionLabel}</a>
         </p>
         <p style="font-size: 12px; color: #6b7280; margin-top: 24px;">
           このメールはFunBaseの面談通知設定に基づいて送信されています。<br />
@@ -177,6 +195,40 @@ export function buildInterviewRecordEmail({
       </div>
     `.trim(),
   }
+}
+
+function buildSingleRecordSummary(record: InterviewRecordBatchAnnouncementInput['records'][number]): string[] {
+  return [
+    `対象者：${displayValue(record.personName, '対象者名未登録')}`,
+    record.interviewDate ? `面談日：${formatInterviewDate(record.interviewDate)}` : null,
+    record.companyName ? `法人：${record.companyName}` : null,
+  ].filter((line): line is string => line !== null)
+}
+
+function buildMultipleRecordSummary(records: InterviewRecordBatchAnnouncementInput['records']): string[] {
+  return [
+    '対象者：',
+    ...records.map((record) => {
+      const details = [
+        record.interviewDate ? formatInterviewDate(record.interviewDate) : null,
+        record.companyName || null,
+      ].filter((detail): detail is string => detail !== null)
+      const suffix = details.length > 0 ? `（${details.join('・')}）` : ''
+      return `・${displayValue(record.personName, '対象者名未登録')}${suffix}`
+    }),
+  ]
+}
+
+function displayValue(value: string | null | undefined, fallback: string): string {
+  const trimmed = value?.trim()
+  return trimmed || fallback
+}
+
+function formatInterviewDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return value
+
+  return `${Number(match[1])}年${Number(match[2])}月${Number(match[3])}日`
 }
 
 function trimTrailingSlash(value: string): string {

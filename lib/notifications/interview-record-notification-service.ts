@@ -131,7 +131,7 @@ export async function notifyInterviewRecordCreated({
       const email = buildInterviewRecordEmail({
         title: createdAnnouncement.title,
         body: createdAnnouncement.body,
-        announcementUrl,
+        actionUrl: announcementUrl,
         settingsUrl,
       })
 
@@ -282,7 +282,11 @@ export async function notifyInterviewRecordsCreatedBatch({
       if (claimedEvents.length === 0) continue
 
       const announcement = buildInterviewRecordBatchAnnouncement({
-        count: claimedEvents.length,
+        records: claimedEvents.map(({ record }) => ({
+          personName: record.person_name,
+          companyName: record.company_name,
+          interviewDate: record.interview_date,
+        })),
         appBaseUrl,
       })
 
@@ -315,12 +319,11 @@ export async function notifyInterviewRecordsCreatedBatch({
         if (recipientInsertError) throw recipientInsertError
 
         if (group.emailRecipients.length > 0) {
-          const announcementUrl = `${appBaseUrl}/announcements?id=${encodeURIComponent(createdAnnouncement.id)}`
           const settingsUrl = `${appBaseUrl}/settings/notifications`
           const email = buildInterviewRecordEmail({
             title: createdAnnouncement.title,
-            body: createdAnnouncement.body,
-            announcementUrl,
+            body: announcement.emailBody,
+            actionUrl: announcement.actionUrl,
             settingsUrl,
           })
 

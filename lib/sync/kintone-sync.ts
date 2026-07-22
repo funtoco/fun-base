@@ -1255,6 +1255,7 @@ export class KintoneDataSync {
                 interviewRecord: {
                   id: upsertedRecord.id,
                   person_id: personId,
+                  person_name: await this.getPersonNameForInterviewNotification(personId),
                   company_name: payload.company_name,
                   interview_date: payload.interview_date,
                   record_type: payload.record_type,
