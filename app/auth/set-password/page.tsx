@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { getSafeAuthNextPath } from "@/lib/auth-next-path"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,7 +27,9 @@ export default function SetPasswordPage() {
   const [authType, setAuthType] = useState<"signup" | "invite" | "recovery" | null>(null)
   
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+  const successRedirectPath = getSafeAuthNextPath(searchParams.get("next"), "/admin/tenants")
 
   useEffect(() => {
     const initializeSession = async () => {
@@ -318,7 +321,7 @@ export default function SetPasswordPage() {
       
       // Redirect after 3 seconds
       setTimeout(() => {
-        router.replace('/admin/tenants')
+        router.replace(successRedirectPath)
       }, 3000)
 
     } catch (error) {
@@ -346,7 +349,7 @@ export default function SetPasswordPage() {
           </CardHeader>
           <CardContent>
             <Button 
-              onClick={() => router.push('/admin/tenants')} 
+              onClick={() => router.push(successRedirectPath)} 
               className="w-full"
             >
               ホームへ

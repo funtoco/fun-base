@@ -3,7 +3,8 @@ type SignUpUserLike = {
 }
 
 export function isLikelyExistingAccountSignUpResponse(user: SignUpUserLike | null | undefined): boolean {
-  return Array.isArray(user?.identities) && user.identities.length === 0
+  const identities = user?.identities
+  return Array.isArray(identities) && identities.length === 0
 }
 
 export function validateInviteRegistrationPasswords(

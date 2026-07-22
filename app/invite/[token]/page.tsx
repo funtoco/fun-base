@@ -123,6 +123,7 @@ export default function InviteAcceptancePage() {
     const origin = window.location.origin
     // After email confirmation, redirect back to this invite page
     const emailRedirectTo = `${origin}/auth/callback?next=/invite/${token}`
+    const passwordResetRedirectTo = `${origin}/auth/set-password?next=${encodeURIComponent(`/invite/${token}`)}`
 
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -134,7 +135,7 @@ export default function InviteAcceptancePage() {
       if (error) {
         if (isExistingAccountSignUpError(error.message)) {
           const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: emailRedirectTo,
+            redirectTo: passwordResetRedirectTo,
           })
 
           if (resetError) {
@@ -157,7 +158,7 @@ export default function InviteAcceptancePage() {
 
       if (isLikelyExistingAccountSignUpResponse(data.user)) {
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: emailRedirectTo,
+          redirectTo: passwordResetRedirectTo,
         })
 
         if (resetError) {
