@@ -127,6 +127,13 @@ export default function InviteAcceptancePage() {
     const passwordResetRedirectTo = `${origin}/auth/callback?type=recovery&next=${encodeURIComponent(setPasswordNext)}`
 
     try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+
+      if (!signInError) {
+        await acceptInvite()
+        return
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,

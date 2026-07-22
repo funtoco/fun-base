@@ -589,6 +589,8 @@ export function pickTenantMembershipForInviteAcceptance(
         membership.role !== 'supporter'
     ) ?? memberships.find(
       (membership) => membership.status === 'active' && membership.role !== 'supporter'
+    ) ?? memberships.find(
+      (membership) => membership.status === 'suspended' && membership.role !== 'supporter'
     )
   )
 }
