@@ -12,22 +12,84 @@ interface AnnouncementRow {
   updated_at: string
 }
 
+type SupabaseLikeError = {
+  code?: string
+  message?: string
+  details?: string
+  hint?: string
+}
+
+function isMissingAnnouncementScopeSchemaError(error: SupabaseLikeError | null | undefined): boolean {
+  const text = [error?.code, error?.message, error?.details, error?.hint]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  return (
+    text.includes('tenant_id') ||
+    text.includes('announcement_recipients') ||
+    text.includes('relationship') ||
+    text.includes('schema cache')
+  )
+}
+
 /** 公開済みお知らせ一覧を取得 */
 export async function getPublishedAnnouncements(): Promise<Announcement[]> {
   const supabase = createClient()
+  const { data: userData } = await supabase.auth.getUser()
 
-  const { data, error } = await supabase
+  let { data: globalData, error: globalError } = await supabase
     .from('announcements')
     .select('*')
     .eq('published', true)
+    .is('tenant_id', null)
     .order('created_at', { ascending: false })
 
-  if (error) {
-    console.error('Error fetching announcements:', error)
-    throw error
+  if (globalError && isMissingAnnouncementScopeSchemaError(globalError)) {
+    console.warn('Announcement recipient schema is not deployed yet; falling back to global announcements only')
+    const fallback = await supabase
+      .from('announcements')
+      .select('*')
+      .eq('published', true)
+      .order('created_at', { ascending: false })
+    globalData = fallback.data
+    globalError = fallback.error
   }
 
-  return data.map(mapToAnnouncement)
+  if (globalError) {
+    console.error('Error fetching global announcements:', globalError)
+    throw globalError
+  }
+
+  let targetedData: AnnouncementRow[] = []
+  if (userData.user) {
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('*, announcement_recipients!inner(user_id)')
+      .eq('published', true)
+      .eq('announcement_recipients.user_id', userData.user.id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      if (isMissingAnnouncementScopeSchemaError(error)) {
+        console.warn('Announcement recipients are not deployed yet; skipping targeted announcements')
+      } else {
+        console.error('Error fetching targeted announcements:', error)
+        throw error
+      }
+    } else {
+      targetedData = (data || []) as unknown as AnnouncementRow[]
+    }
+  }
+
+  const byId = new Map<string, Announcement>()
+  ;[...(globalData || []), ...targetedData]
+    .map((row) => mapToAnnouncement(row as AnnouncementRow))
+    .forEach((announcement) => byId.set(announcement.id, announcement))
+
+  return Array.from(byId.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
 }
 
 /**

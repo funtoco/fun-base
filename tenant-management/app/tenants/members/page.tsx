@@ -110,7 +110,7 @@ export default function MembersPage() {
     })
   }
 
-  // 再招待
+  // 招待メール再送
   const handleResendInvite = (memberId: string) => {
     toast({
       title: "招待を再送信しました",

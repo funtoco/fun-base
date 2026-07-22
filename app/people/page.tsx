@@ -1,14 +1,18 @@
 "use client"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
+import { Plus } from "lucide-react"
 import { DataTable, type Column } from "@/components/ui/data-table"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { PersonAvatar } from "@/components/ui/person-avatar"
 import { useNavigationProgress } from "@/components/navigation-progress"
 import { getPeople } from "@/lib/supabase/people"
-import { getVisas } from "@/lib/supabase/visas"
+import { getVisasByPersonIds } from "@/lib/supabase/visas"
 import { PERSON_SEARCH_KEYS } from "@/lib/person-search"
+import { isManualPersonId } from "@/lib/person-source"
 import type { Person } from "@/lib/models"
 
 interface PersonWithVisa extends Person {
@@ -67,9 +71,9 @@ export default function PeoplePage() {
     }
   }
 
-  // Load people data
+  // Load people and related visa data
   useEffect(() => {
-    async function fetchPeopleData() {
+    async function fetchData() {
       try {
         setLoading(true)
         setError(null)
@@ -77,6 +81,13 @@ export default function PeoplePage() {
         setPeople(peopleData)
         setDataSource('sample')
         console.log('PeoplePage: People data loaded', { count: peopleData.length })
+
+        try {
+          const visaData = await getVisasByPersonIds(peopleData.map((person) => person.id))
+          setVisas(visaData)
+        } catch (visaError) {
+          console.error('Error fetching visa data:', visaError)
+        }
       } catch (err) {
         console.error('Error fetching people data:', err)
         setError(err instanceof Error ? err.message : 'Failed to load people data')
@@ -84,20 +95,7 @@ export default function PeoplePage() {
         setLoading(false)
       }
     }
-    fetchPeopleData()
-  }, [])
-
-  // Load visa data (always from sample for now)
-  useEffect(() => {
-    async function fetchVisaData() {
-      try {
-        const visaData = await getVisas()
-        setVisas(visaData)
-      } catch (err) {
-        console.error('Error fetching visa data:', err)
-      }
-    }
-    fetchVisaData()
+    fetchData()
   }, [])
 
   // Combine people with their visa information
@@ -132,21 +130,42 @@ export default function PeoplePage() {
     })
   }
 
+  const renderTruncatedText = (value: unknown) => {
+    const text = value?.toString() ?? ""
+
+    return text ? (
+      <span className="block truncate" title={text}>
+        {text}
+      </span>
+    ) : (
+      <span className="text-muted-foreground">-</span>
+    )
+  }
+
   const columns: Column<PersonWithVisa>[] = [
     {
       key: "name",
       label: "名前",
       sortable: true,
+      headerClassName: "w-[260px]",
+      cellClassName: "w-[260px] max-w-[260px] overflow-hidden",
       render: (value, row) => (
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <PersonAvatar 
             name={value || ""} 
             imagePath={row.imagePath}
             size="md"
           />
-          <div>
-            <div className="font-medium">{value}</div>
-            {row.kana && <div className="text-xs text-muted-foreground">{row.kana}</div>}
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="block truncate font-medium" title={value?.toString()}>{value}</span>
+              {isManualPersonId(row.id) && (
+                <Badge variant="outline" className="shrink-0 border-amber-300 bg-amber-50 text-amber-700">
+                  手動
+                </Badge>
+              )}
+            </div>
+            {row.kana && <div className="truncate text-xs text-muted-foreground" title={row.kana}>{row.kana}</div>}
           </div>
         </div>
       ),
@@ -156,31 +175,44 @@ export default function PeoplePage() {
       label: "国籍",
       sortable: true,
       filterable: true,
+      headerClassName: "w-[120px]",
+      cellClassName: "w-[120px] max-w-[120px] overflow-hidden",
+      render: renderTruncatedText,
     },
     {
       key: "tenantName",
       label: "会社",
       sortable: true,
       filterable: true,
+      headerClassName: "w-[220px]",
+      cellClassName: "w-[220px] max-w-[220px] overflow-hidden",
+      render: renderTruncatedText,
     },
     {
       key: "company",
       label: "所属先",
       sortable: true,
       filterable: true,
+      headerClassName: "w-[320px]",
+      cellClassName: "w-[320px] max-w-[320px] overflow-hidden",
+      render: renderTruncatedText,
     },
     {
       key: "employeeNumber",
       label: "従業員番号",
       sortable: true,
+      headerClassName: "w-[130px]",
+      cellClassName: "w-[130px] max-w-[130px] overflow-hidden",
       render: (value) =>
-        value ? <span className="text-sm font-mono">{value}</span> : <span className="text-muted-foreground">-</span>,
+        value ? <span className="block truncate text-sm font-mono" title={value.toString()}>{value}</span> : <span className="text-muted-foreground">-</span>,
     },
     {
       key: "workingStatus",
       label: "就労ステータス",
       sortable: true,
       filterable: true,
+      headerClassName: "w-[130px]",
+      cellClassName: "w-[130px] max-w-[130px] overflow-hidden",
       render: (value) =>
         value ? <StatusBadge status={value} type="working" /> : <span className="text-muted-foreground">-</span>,
     },
@@ -278,6 +310,16 @@ export default function PeoplePage() {
           <h1 className="text-3xl font-bold text-foreground">人材一覧</h1>
           <p className="text-muted-foreground mt-2">人材の一覧と基本情報</p>
         </div>
+        <Button
+          className="gap-2"
+          onClick={() => {
+            startNavigation()
+            router.push("/people/new")
+          }}
+        >
+          <Plus className="h-4 w-4" />
+          新規登録
+        </Button>
       </div>
 
 
@@ -291,6 +333,7 @@ export default function PeoplePage() {
         searchPlaceholder="人材名、法人名、事業所名で検索..."
         onRowClick={handleRowClick}
         loading={loading}
+        tableClassName="min-w-[1180px] table-fixed"
         initialSearchTerm={searchParams.get('search') || ''}
         initialActiveFilters={getFiltersFromUrl()}
         onFilterChange={updateUrl}

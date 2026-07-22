@@ -1,5 +1,10 @@
 import { createClient } from './server'
 import type { Visa } from '@/lib/models'
+import {
+  applyPeopleAccessFilter,
+  canAccessPersonByCompany,
+  getCompanyAccessForUser,
+} from './people-access'
 
 /**
  * Server-side only function to get visas by person ID
@@ -7,18 +12,41 @@ import type { Visa } from '@/lib/models'
  */
 export async function getVisasByPersonId(personId: string): Promise<Visa[]> {
   const supabase = await createClient()
-  
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) return []
+
+  const companyAccess = await getCompanyAccessForUser(supabase, user.id, "visas")
+  const personQuery = applyPeopleAccessFilter(
+    supabase
+      .from('people')
+      .select('id, tenant_id, company')
+      .eq('id', personId),
+    companyAccess
+  )
+
+  if (!personQuery) return []
+
+  const { data: person, error: personError } = await personQuery.single()
+
+  if (personError || !person || !canAccessPersonByCompany(person, companyAccess)) {
+    if (personError) {
+      console.error('Error verifying visa person access:', personError)
+    }
+    return []
+  }
+
   const { data, error } = await supabase
     .from('visas')
     .select()
     .eq('person_id', personId)
     .order('updated_at', { ascending: false })
-  
+
   if (error) {
     console.error('Error fetching visas by person ID:', error)
     throw error
   }
-  
+
   return data.map((visa: any) => ({
     id: visa.id,
     personId: visa.person_id,
@@ -42,4 +70,3 @@ export async function getVisasByPersonId(personId: string): Promise<Visa[]> {
     receptionApplicationNumber: visa.reception_application_number
   }))
 }
-

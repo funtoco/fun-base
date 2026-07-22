@@ -30,10 +30,12 @@
 
 ```bash
 # .env.local ファイルを作成
-NEXT_PUBLIC_SUPABASE_URL=https://afqiufwmrahkautvsfcv.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFmcWl1ZndtcmFoa2F1dHZzZmN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1NTc3MjUsImV4cCI6MjA3MzEzMzcyNX0.IIEdefiCIx7fHfMNTu_T5Gn8v6DQasBTKDUMYBGZCBg
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFmcWl1ZndtcmFoa2F1dHZzZmN2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NzU1NzcyNSwiZXhwIjoyMDczMTMzNzI1fQ.erxUsC6TTDA8_LkyPbFU8J1OwaIejGmiiZOzLtEOQto
+NEXT_PUBLIC_SUPABASE_URL=<your-supabase-url>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<never-commit-service-role-key>
 ```
+
+> **Security note:** 実際のSupabase認証情報はGitにコミットせず、ローカルの`.env.local`、Vercel環境変数、GitHub SecretsなどのSecret Managerにのみ保存してください。`SUPABASE_SERVICE_ROLE_KEY`は管理者権限を持つため、過去にコミットされた可能性がある場合は必ずローテーションしてください。
 
 ## データベース構造
 

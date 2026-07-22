@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
-import { canManageTenant } from "@/lib/tenant-access"
+import { canManageTenant, TENANT_INVITABLE_ROLES } from "@/lib/tenant-access"
 
 export async function POST(
   request: NextRequest,
@@ -35,7 +35,7 @@ export async function POST(
     const body = await request.json()
     const { defaultRole = "member", expiresInDays } = body
 
-    if (!["admin", "member", "guest"].includes(defaultRole)) {
+    if (!TENANT_INVITABLE_ROLES.includes(defaultRole)) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 })
     }
 

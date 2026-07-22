@@ -19,6 +19,7 @@ const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   resume: "履歴書",
   designation_document: "指定書写し",
   employment_insurance_notice: "雇用保険通知書",
+  other: "その他書類",
 }
 
 function formatFileSize(bytes?: number): string {
@@ -113,11 +114,31 @@ export default function DocumentsPage() {
         DOCUMENT_TYPE_LABELS[row.documentType as DocumentType] || row.documentType,
     },
     {
+      key: "title",
+      label: "タイトル",
+      sortable: true,
+      render: (value) => (
+        <span className="truncate max-w-[180px] block text-sm">
+          {value || "-"}
+        </span>
+      ),
+    },
+    {
       key: "fileName",
       label: "ファイル名",
       sortable: true,
       render: (value) => (
         <span className="truncate max-w-[200px] block text-sm">
+          {value || "-"}
+        </span>
+      ),
+    },
+    {
+      key: "note",
+      label: "メモ",
+      sortable: true,
+      render: (value) => (
+        <span className="line-clamp-2 max-w-[260px] text-sm text-muted-foreground">
           {value || "-"}
         </span>
       ),
@@ -197,7 +218,7 @@ export default function DocumentsPage() {
         data={documentsWithLabel}
         columns={columns}
         filters={filters}
-        searchKeys={["personName", "fileName", "documentTypeLabel"]}
+        searchKeys={["personName", "title", "fileName", "documentTypeLabel", "note"]}
         onRowClick={handleRowClick}
         initialSearchTerm={searchParams.get("search") || ""}
         initialActiveFilters={getFiltersFromUrl()}

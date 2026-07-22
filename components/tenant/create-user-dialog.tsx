@@ -16,6 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/lib/hooks/use-toast"
 import { Eye, EyeOff } from "lucide-react"
 
+type InvitableRole = 'admin' | 'member' | 'guest'
+
 interface CreateUserDialogProps {
   tenantId: string
   open: boolean
@@ -32,7 +34,7 @@ export function CreateUserDialog({
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [role, setRole] = useState<'admin' | 'member' | 'guest'>('member')
+  const [role, setRole] = useState<InvitableRole>('member')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -205,7 +207,7 @@ export function CreateUserDialog({
 
             <div className="grid gap-2">
               <Label htmlFor="role">ロール</Label>
-              <Select value={role} onValueChange={(value: 'admin' | 'member' | 'guest') => setRole(value)}>
+              <Select value={role} onValueChange={(value: InvitableRole) => setRole(value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -230,4 +232,3 @@ export function CreateUserDialog({
     </Dialog>
   )
 }
-

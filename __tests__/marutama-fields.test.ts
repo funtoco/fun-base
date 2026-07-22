@@ -88,7 +88,7 @@ describe('DocumentType: 新規書類タイプ', () => {
     'passport_front', 'passport_back',
     'residence_card_front', 'residence_card_back',
     'coe_copy', 'flight_ticket_copy', 'bank_card_copy',
-    'resume', 'designation_document', 'employment_insurance_notice',
+    'resume', 'designation_document', 'employment_insurance_notice', 'other',
   ]
 
   it('既存の4タイプが含まれること', () => {
@@ -114,8 +114,12 @@ describe('DocumentType: 新規書類タイプ', () => {
     expect(VALID_DOCUMENT_TYPES).not.toContain('resident_card_copy')
   })
 
-  it('合計10タイプであること', () => {
-    expect(VALID_DOCUMENT_TYPES).toHaveLength(10)
+  it('その他書類タイプが含まれること', () => {
+    expect(VALID_DOCUMENT_TYPES).toContain('other')
+  })
+
+  it('合計11タイプであること', () => {
+    expect(VALID_DOCUMENT_TYPES).toHaveLength(11)
   })
 })
 
@@ -328,10 +332,16 @@ describe('書類セクション: 入社前・入社後書類の構成', () => {
         { type: 'employment_insurance_notice', label: '雇用保険通知書' },
       ],
     },
+    {
+      title: 'その他書類',
+      types: [
+        { type: 'other', label: 'その他書類' },
+      ],
+    },
   ]
 
-  it('4つのセクションが存在すること', () => {
-    expect(DOCUMENT_SECTIONS).toHaveLength(4)
+  it('5つのセクションが存在すること', () => {
+    expect(DOCUMENT_SECTIONS).toHaveLength(5)
   })
 
   it('入社前書類セクションに3つの書類タイプがあること', () => {
@@ -352,9 +362,16 @@ describe('書類セクション: 入社前・入社後書類の構成', () => {
     ])
   })
 
-  it('全書類タイプの合計が10であること', () => {
+  it('その他書類セクションに1つの書類タイプがあること', () => {
+    const otherDocuments = DOCUMENT_SECTIONS.find(s => s.title === 'その他書類')
+    expect(otherDocuments).toBeDefined()
+    expect(otherDocuments!.types).toHaveLength(1)
+    expect(otherDocuments!.types.map(t => t.type)).toEqual(['other'])
+  })
+
+  it('全書類タイプの合計が11であること', () => {
     const allTypes = DOCUMENT_SECTIONS.flatMap(s => s.types)
-    expect(allTypes).toHaveLength(10)
+    expect(allTypes).toHaveLength(11)
   })
 
   it('住民票写しがどのセクションにも表示されないこと', () => {

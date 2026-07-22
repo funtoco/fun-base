@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/client"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { Tenant } from "@/tenant-management/types/tenant"
+import { TENANT_INVITABLE_ROLES, TENANT_MANAGEABLE_ROLES } from "@/lib/tenant-access"
 
 export interface CreateTenantData {
   name: string
@@ -225,6 +226,10 @@ export async function inviteMemberAction(data: InviteMemberData) {
     throw new Error('認証が必要です')
   }
 
+  if (!TENANT_INVITABLE_ROLES.includes(data.role)) {
+    throw new Error('無効なロールです')
+  }
+
   // Check if user has permission to invite
   const { data: userTenant } = await supabase
     .from('user_tenants')
@@ -285,6 +290,10 @@ export async function updateMemberRoleAction(data: UpdateMemberRoleData) {
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
     throw new Error('認証が必要です')
+  }
+
+  if (!TENANT_MANAGEABLE_ROLES.includes(data.role)) {
+    throw new Error('無効なロールです')
   }
 
   // Get current user's role in the tenant

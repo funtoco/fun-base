@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/client"
 import {
-  canManageCompanyContacts,
   canManageTenant,
   getTenantMemberRemovalError,
   getTenantMemberRoleUpdateError,
-  isCompanyContactEmail,
-  isCompanyContactRole,
+  TENANT_MANAGEABLE_ROLES,
+  TENANT_FEATURE_PERMISSION_KEYS,
+  type TenantFeaturePermissions,
 } from "@/lib/tenant-access"
 
-const MANAGEABLE_ROLES = ["owner", "admin", "member", "guest"] as const
-type ManageableRole = (typeof MANAGEABLE_ROLES)[number]
+type ManageableRole = (typeof TENANT_MANAGEABLE_ROLES)[number]
 
 function normalizeOfficeIds(value: unknown): string[] | null {
   if (typeof value === "undefined") {
@@ -29,6 +29,28 @@ function normalizeOfficeIds(value: unknown): string[] | null {
   return Array.from(new Set(normalizedIds))
 }
 
+function normalizeFeaturePermissions(value: unknown): TenantFeaturePermissions | null {
+  if (typeof value === "undefined") {
+    return null
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null
+  }
+
+  const input = value as Record<string, unknown>
+  const permissions: TenantFeaturePermissions = {}
+
+  for (const key of TENANT_FEATURE_PERMISSION_KEYS) {
+    const permissionValue = input[key]
+    if (typeof permissionValue === "boolean") {
+      permissions[key] = permissionValue
+    }
+  }
+
+  return permissions
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { tenantId: string; memberId: string } }
@@ -44,17 +66,19 @@ export async function PATCH(
     const body = await request.json()
     const { role } = body
     const officeIds = normalizeOfficeIds(body.officeIds)
+    const featurePermissions = normalizeFeaturePermissions(body.featurePermissions)
     const hasRoleUpdate = typeof role !== "undefined"
     const hasOfficeUpdate = typeof body.officeIds !== "undefined"
+    const hasFeaturePermissionsUpdate = typeof body.featurePermissions !== "undefined"
 
-    if (!hasRoleUpdate && !hasOfficeUpdate) {
+    if (!hasRoleUpdate && !hasOfficeUpdate && !hasFeaturePermissionsUpdate) {
       return NextResponse.json(
-        { error: "Role or officeIds is required" },
+        { error: "Role, officeIds, or featurePermissions is required" },
         { status: 400 }
       )
     }
 
-    if (hasRoleUpdate && (typeof role !== "string" || !MANAGEABLE_ROLES.includes(role as ManageableRole))) {
+    if (hasRoleUpdate && (typeof role !== "string" || !TENANT_MANAGEABLE_ROLES.includes(role as ManageableRole))) {
       return NextResponse.json(
         { error: "Invalid role" },
         { status: 400 }
@@ -64,6 +88,13 @@ export async function PATCH(
     if (hasOfficeUpdate && officeIds === null) {
       return NextResponse.json(
         { error: "Invalid officeIds" },
+        { status: 400 }
+      )
+    }
+
+    if (hasFeaturePermissionsUpdate && featurePermissions === null) {
+      return NextResponse.json(
+        { error: "Invalid featurePermissions" },
         { status: 400 }
       )
     }
@@ -147,6 +178,13 @@ export async function PATCH(
       )
     }
 
+    if (hasFeaturePermissionsUpdate && !canManageTenant(memberships)) {
+      return NextResponse.json(
+        { error: "機能権限を変更する権限がありません" },
+        { status: 403 }
+      )
+    }
+
     if (hasRoleUpdate) {
       const { error: updateError } = await supabase
         .from("user_tenants")
@@ -158,6 +196,22 @@ export async function PATCH(
         console.error("Error updating member role:", updateError)
         return NextResponse.json(
           { error: "Failed to update member role" },
+          { status: 500 }
+        )
+      }
+    }
+
+    if (hasFeaturePermissionsUpdate) {
+      const { error: updateError } = await supabase
+        .from("user_tenants")
+        .update({ feature_permissions: featurePermissions })
+        .eq("id", params.memberId)
+        .eq("tenant_id", params.tenantId)
+
+      if (updateError) {
+        console.error("Error updating feature permissions:", updateError)
+        return NextResponse.json(
+          { error: "Failed to update feature permissions" },
           { status: 500 }
         )
       }
@@ -247,7 +301,7 @@ export async function DELETE(
 
     const { data: targetMember, error: targetMemberError } = await supabase
       .from("user_tenants")
-      .select("id, user_id, role, email")
+      .select("id, user_id, role, email, status")
       .eq("id", params.memberId)
       .eq("tenant_id", params.tenantId)
       .single()
@@ -277,47 +331,49 @@ export async function DELETE(
 
     const memberships = actorMemberships || []
     const canManageAllMembers = canManageTenant(memberships)
-    const canManageCompanyContactDelete = canManageCompanyContacts(
-      memberships,
-      user.email
-    )
 
-    if (!canManageAllMembers && !canManageCompanyContactDelete) {
+    if (!canManageAllMembers) {
       return NextResponse.json(
         { error: "メンバーを削除する権限がありません" },
         { status: 403 }
       )
     }
 
-    if (!canManageAllMembers) {
-      if (targetMember.user_id === user.id) {
+    const permissionError = getTenantMemberRemovalError({
+      currentUserId: user.id,
+      targetUserId: targetMember.user_id,
+      targetRole: targetMember.role,
+      actorMemberships: memberships,
+    })
+
+    if (permissionError) {
+      const status = permissionError === "メンバーを削除する権限がありません" ? 403 : 400
+      return NextResponse.json({ error: permissionError }, { status })
+    }
+
+    let shouldDeleteAuthAfterMembershipRemoval = false
+    const shouldCheckPendingAuthCleanup =
+      targetMember.status === "pending" &&
+      Boolean(targetMember.user_id) &&
+      targetMember.user_id !== user.id
+
+    if (shouldCheckPendingAuthCleanup) {
+      const adminSupabase = createAdminClient()
+      const { count: otherMembershipCount, error: otherMembershipsError } = await adminSupabase
+        .from("user_tenants")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", targetMember.user_id)
+        .neq("id", params.memberId)
+
+      if (otherMembershipsError) {
+        console.error("Error checking pending invitee memberships:", otherMembershipsError)
         return NextResponse.json(
-          { error: "自分自身を削除することはできません" },
-          { status: 400 }
+          { error: "Failed to verify pending invitee cleanup" },
+          { status: 500 }
         )
       }
 
-      if (
-        !isCompanyContactEmail(targetMember.email) ||
-        !isCompanyContactRole(targetMember.role)
-      ) {
-        return NextResponse.json(
-          { error: "企業担当者のみ削除できます" },
-          { status: 403 }
-        )
-      }
-    } else {
-      const permissionError = getTenantMemberRemovalError({
-        currentUserId: user.id,
-        targetUserId: targetMember.user_id,
-        targetRole: targetMember.role,
-        actorMemberships: memberships,
-      })
-
-      if (permissionError) {
-        const status = permissionError === "メンバーを削除する権限がありません" ? 403 : 400
-        return NextResponse.json({ error: permissionError }, { status })
-      }
+      shouldDeleteAuthAfterMembershipRemoval = (otherMembershipCount ?? 0) === 0
     }
 
     const { error: deleteError } = await supabase
@@ -332,6 +388,15 @@ export async function DELETE(
         { error: "Failed to remove member" },
         { status: 500 }
       )
+    }
+
+    if (shouldDeleteAuthAfterMembershipRemoval) {
+      const adminSupabase = createAdminClient()
+      const { error: deleteAuthUserError } = await adminSupabase.auth.admin.deleteUser(targetMember.user_id)
+
+      if (deleteAuthUserError) {
+        console.error("Error deleting pending invitee auth user:", deleteAuthUserError)
+      }
     }
 
     return NextResponse.json({ success: true })

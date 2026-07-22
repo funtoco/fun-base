@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
-import { canManageTenant } from "@/lib/tenant-access"
+import { canManageTenant, TENANT_INVITABLE_ROLES } from "@/lib/tenant-access"
 
 function normalizeOfficeIds(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -74,6 +74,13 @@ export async function POST(
     if (!userId || !role) {
       return NextResponse.json(
         { error: "UserId and role are required" },
+        { status: 400 }
+      )
+    }
+
+    if (typeof role !== "string" || !TENANT_INVITABLE_ROLES.includes(role as any)) {
+      return NextResponse.json(
+        { error: "Invalid role" },
         { status: 400 }
       )
     }

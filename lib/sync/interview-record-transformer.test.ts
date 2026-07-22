@@ -62,27 +62,32 @@ test('isImportableInterviewRecord only requires completed status for regular int
 test('buildInterviewRecordsQuery keeps connector filters and limits record categories', () => {
   assert.equal(
     buildInterviewRecordsQuery('COID = "3222"'),
-    '(COID = "3222") and timeInterview in ("定期面談", "日々の面談")'
+    '(COID = "3222") and ((timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談")))'
   )
 
   assert.equal(
     buildInterviewRecordsQuery('COID = "3222" or Status = "確認不要"'),
-    '(COID = "3222" or Status = "確認不要") and timeInterview in ("定期面談", "日々の面談")'
+    '(COID = "3222" or Status = "確認不要") and ((timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談")))'
   )
 
   assert.equal(
     buildInterviewRecordsQuery('(COID = "3222" or Status = "確認不要")'),
-    '(COID = "3222" or Status = "確認不要") and timeInterview in ("定期面談", "日々の面談")'
+    '(COID = "3222" or Status = "確認不要") and ((timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談")))'
   )
 
   assert.equal(
     buildInterviewRecordsQuery('COID = "3222" and timeInterview in ("定期面談", "日々の面談")'),
-    'COID = "3222" and timeInterview in ("定期面談", "日々の面談")'
+    '(COID = "3222" and timeInterview in ("定期面談", "日々の面談")) and ((timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談")))'
   )
 
   assert.equal(
     buildInterviewRecordsQuery(),
-    'timeInterview in ("定期面談", "日々の面談")'
+    '(timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談"))'
+  )
+
+  assert.equal(
+    buildInterviewRecordsQuery('(timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談"))'),
+    '(timeInterview in ("定期面談") and interviewDate >= "2026-04-01") or (timeInterview in ("日々の面談"))'
   )
 })
 
@@ -238,6 +243,56 @@ test('parseActivityEntries normalizes Kintone subtable rows for daily support', 
       chu: '銀行・送金',
       shou: '口座開設, 海外送金',
       notes: '本人へ案内済み',
+    },
+  ])
+})
+
+test('parseActivityEntries normalizes serialized tableStorageDaily values', () => {
+  const entries = parseActivityEntries({
+    value: JSON.stringify([
+      {
+        dai: '日々の対応報告',
+        chu: 'ビザ更新対応',
+        shou: ['申請に必要な公的書類の案内（課税証明等）', '健康診断の受診案内'],
+        notes: '健康診断の有効性と申請について必要な書類についての案内をしました。',
+      },
+    ]),
+  })
+
+  assert.deepEqual(entries, [
+    {
+      dai: '日々の対応報告',
+      chu: 'ビザ更新対応',
+      shou: '申請に必要な公的書類の案内（課税証明等）, 健康診断の受診案内',
+      notes: '健康診断の有効性と申請について必要な書類についての案内をしました。',
+    },
+  ])
+})
+
+test('parseActivityEntries preserves row-level FunBase visibility review metadata', () => {
+  const entries = parseActivityEntries({
+    value: JSON.stringify([
+      {
+        dai: '日々の対応報告',
+        chu: '退職後対応',
+        shou: ['転出手続きの案内'],
+        notes: '退職日について案内済み',
+        funbaseVisibility: 'pending',
+        salesReviewReasons: ['job_change', 'health_mental_pregnancy'],
+        salesReviewMemo: '営業確認待ち',
+      },
+    ]),
+  })
+
+  assert.deepEqual(entries, [
+    {
+      dai: '日々の対応報告',
+      chu: '退職後対応',
+      shou: '転出手続きの案内',
+      notes: '退職日について案内済み',
+      funbaseVisibility: 'pending',
+      salesReviewReasons: ['job_change', 'health_mental_pregnancy'],
+      salesReviewMemo: '営業確認待ち',
     },
   ])
 })

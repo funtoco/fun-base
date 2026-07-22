@@ -27,6 +27,8 @@ import {
   markAllAnnouncementsAsRead,
 } from "@/lib/supabase/announcements"
 import { getPeople } from "@/lib/supabase/people"
+import { getCurrentUserTenants } from "@/lib/supabase/tenants"
+import { hasAnyTenantFeatureAccess } from "@/lib/tenant-access"
 import { matchesPersonSearch, normalizePersonSearchText as normalizeSearchText } from "@/lib/person-search"
 import type { Announcement, Person } from "@/lib/models"
 
@@ -57,6 +59,7 @@ export function Header() {
   const { startNavigation } = useNavigationProgress()
   const [searchQuery, setSearchQuery] = useState("")
   const [people, setPeople] = useState<Person[]>([])
+  const [canViewPeopleData, setCanViewPeopleData] = useState(true)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([])
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
@@ -108,9 +111,22 @@ export function Header() {
 
     let cancelled = false
 
-    getPeople()
-      .then((items) => {
-        if (!cancelled) setPeople(items)
+    getCurrentUserTenants()
+      .then(async (memberships) => {
+        if (cancelled) return
+
+        const canView = hasAnyTenantFeatureAccess(memberships, "people")
+        setCanViewPeopleData(canView)
+
+        if (!canView) {
+          setPeople([])
+          return
+        }
+
+        const items = await getPeople()
+        if (!cancelled) {
+          setPeople(items)
+        }
       })
       .catch((err) => {
         console.debug("Failed to load search suggestions:", err)
@@ -130,6 +146,7 @@ export function Header() {
         target?.isContentEditable
 
       if (event.key === "/" && !isTyping) {
+        if (!canViewPeopleData) return
         event.preventDefault()
         document.getElementById("global-search-input")?.focus()
         setSearchOpen(true)
@@ -138,7 +155,7 @@ export function Header() {
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [])
+  }, [canViewPeopleData])
 
   const searchText = normalizeSearchText(searchQuery)
 
@@ -323,6 +340,7 @@ export function Header() {
     <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4 md:px-6">
       {/* Search and Company Switcher */}
       <div className="flex items-center gap-4 flex-1">
+        {canViewPeopleData ? (
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -466,6 +484,7 @@ export function Header() {
             </div>
           )}
         </div>
+        ) : null}
 
       </div>
 
@@ -570,25 +589,31 @@ export function Header() {
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel>管理者設定</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate('/settings/notifications')}>
+                <Bell className="mr-2 h-4 w-4" />
+                通知設定
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate('/admin/tenants')}>
                 <Users className="mr-2 h-4 w-4" />
                 テナント管理
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/admin/connectors/dashboard')}>
-                <Cable className="mr-2 h-4 w-4" />
-                コネクター管理
-              </DropdownMenuItem>
               {user?.email?.endsWith("@funtoco.jp") && (
-                <DropdownMenuItem onClick={() => navigate('/admin/announcements')}>
-                  <Megaphone className="mr-2 h-4 w-4" />
-                  お知らせ管理
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem onClick={() => navigate('/admin/connectors/dashboard')}>
+                    <Cable className="mr-2 h-4 w-4" />
+                    コネクター管理
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/admin/announcements')}>
+                    <Megaphone className="mr-2 h-4 w-4" />
+                    お知らせ管理
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate('/admin/access-logs')}>
+                    <ShieldCheck className="mr-2 h-4 w-4" />
+                    アクセスログ
+                  </DropdownMenuItem>
+                </>
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate('/admin/access-logs')}>
-                <ShieldCheck className="mr-2 h-4 w-4" />
-                アクセスログ
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}

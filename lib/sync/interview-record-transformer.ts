@@ -1,10 +1,14 @@
 import type { KintoneRecord } from '@/lib/kintone/api-client'
+import { FUNBASE_REGULAR_MEETING_START_DATE } from '@/lib/meeting-scope'
 
 export const DEFAULT_EXTERNAL_CONFIRMATION_STATUS = '確認待ち'
 export const IMPORTABLE_INTERVIEW_STATUS = '完了'
 export const KINTONE_INTERVIEW_SOURCE_SYSTEM = 'kintone'
+const KINTONE_REGULAR_INTERVIEW_QUERY =
+  `timeInterview in ("定期面談") and interviewDate >= "${FUNBASE_REGULAR_MEETING_START_DATE}"`
+const KINTONE_DAILY_SUPPORT_QUERY = 'timeInterview in ("日々の面談")'
 const KINTONE_INTERVIEW_RECORD_TYPE_QUERY =
-  'timeInterview in ("定期面談", "日々の面談")'
+  `(${KINTONE_REGULAR_INTERVIEW_QUERY}) or (${KINTONE_DAILY_SUPPORT_QUERY})`
 
 type RecordType = 'regular_interview' | 'daily_support'
 
@@ -19,6 +23,9 @@ export interface ActivityEntry {
   chu: string
   shou: string
   notes?: string
+  funbaseVisibility?: string
+  salesReviewReasons?: string[]
+  salesReviewMemo?: string
 }
 
 export interface InterviewRecordPayload {
@@ -126,11 +133,11 @@ function recordTypeValue(record: KintoneRecord): any {
   return toStringOrNull(fieldValue(record, 'timeInterview')) ?? fieldValue(record, 'interview')
 }
 
-function hasRecordTypeFilter(query: string): boolean {
+function hasScopedInterviewRecordFilter(query: string): boolean {
   return (
-    /\btimeInterview\s+in\s*\([^)]*"定期面談"[^)]*"日々の面談"[^)]*\)/.test(query) ||
-    (/\btimeInterview\s*=\s*"定期面談"/.test(query) &&
-      /\btimeInterview\s*=\s*"日々の面談"/.test(query))
+    query.includes(FUNBASE_REGULAR_MEETING_START_DATE) &&
+    /\btimeInterview\b/.test(query) &&
+    /日々の面談/.test(query)
   )
 }
 
@@ -142,9 +149,9 @@ export function buildInterviewRecordsQuery(baseQuery = ''): string {
   const trimmed = baseQuery.trim()
 
   if (!trimmed) return KINTONE_INTERVIEW_RECORD_TYPE_QUERY
-  if (hasRecordTypeFilter(trimmed)) return trimmed
+  if (hasScopedInterviewRecordFilter(trimmed)) return trimmed
 
-  return `${parenthesizeQuery(trimmed)} and ${KINTONE_INTERVIEW_RECORD_TYPE_QUERY}`
+  return `${parenthesizeQuery(trimmed)} and (${KINTONE_INTERVIEW_RECORD_TYPE_QUERY})`
 }
 
 export function isImportableInterviewRecord(record: KintoneRecord): boolean {
@@ -181,16 +188,70 @@ function pickSubtableValue(row: Record<string, any>, fieldCodes: string[]): any 
   return undefined
 }
 
+function toStringArray(value: any): string[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map(labelValue)
+    .map(nonEmptyStringOrNull)
+    .filter((item): item is string => item !== null)
+}
+
+function withActivityReviewFields(entry: ActivityEntry, source: Record<string, any>): ActivityEntry {
+  const funbaseVisibility = toStringOrNull(source.funbaseVisibility)
+  const salesReviewReasons = toStringArray(source.salesReviewReasons)
+  const salesReviewMemo = toStringOrNull(source.salesReviewMemo)
+
+  return {
+    ...entry,
+    ...(funbaseVisibility ? { funbaseVisibility } : {}),
+    ...(salesReviewReasons.length > 0 ? { salesReviewReasons } : {}),
+    ...(salesReviewMemo ? { salesReviewMemo } : {}),
+  }
+}
+
 export function parseActivityEntries(tableStorageDaily: any): ActivityEntry[] {
-  const rows = Array.isArray(tableStorageDaily?.value) ? tableStorageDaily.value : []
+  const rawValue = tableStorageDaily?.value ?? tableStorageDaily
+
+  if (typeof rawValue === 'string' && rawValue.trim()) {
+    try {
+      const parsed = JSON.parse(rawValue)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((row: any) => {
+            const dai = toStringOrNull(row?.dai)
+            const chu = toStringOrNull(row?.chu)
+            const shou = toStringOrNull(row?.shou)
+            const notes = toStringOrNull(row?.notes)
+
+            if (!dai && !chu && !shou && !notes) return null
+
+            return withActivityReviewFields({
+              dai: dai || '',
+              chu: chu || '',
+              shou: shou || '',
+              ...(notes ? { notes } : {}),
+            }, row)
+          })
+          .filter((entry): entry is ActivityEntry => entry !== null)
+      }
+    } catch {
+      return []
+    }
+  }
+
+  const rows = Array.isArray(rawValue) ? rawValue : []
 
   return rows
     .map((row: any) => {
       const values = row?.value || {}
-      const dai = toStringOrNull(pickSubtableValue(values, ['dai', '大分類']))
-      const chu = toStringOrNull(pickSubtableValue(values, ['chu', '中分類']))
-      const shou = toStringOrNull(pickSubtableValue(values, ['shou', '小分類']))
-      const notes = toStringOrNull(pickSubtableValue(values, ['notes', 'note', '備考', '対応内容']))
+      const dai = toStringOrNull(pickSubtableValue(values, ['dai', 'tableStorageDaily_大項目', '大分類']))
+      const chu = toStringOrNull(pickSubtableValue(values, ['chu', 'tableStorageDaily_中項目', '中分類']))
+      const shou = toStringOrNull(pickSubtableValue(values, ['shou', 'tableStorageDaily_小項目', '小分類']))
+      const notes = toStringOrNull(pickSubtableValue(values, ['notes', 'tableStorageDaily_内容', 'note', '備考', '対応内容']))
+      const funbaseVisibility = toStringOrNull(pickSubtableValue(values, ['funbaseVisibility']))
+      const salesReviewReasons = toStringArray(pickSubtableValue(values, ['salesReviewReasons']))
+      const salesReviewMemo = toStringOrNull(pickSubtableValue(values, ['salesReviewMemo']))
 
       if (!dai && !chu && !shou && !notes) return null
 
@@ -199,6 +260,9 @@ export function parseActivityEntries(tableStorageDaily: any): ActivityEntry[] {
         chu: chu || '',
         shou: shou || '',
         ...(notes ? { notes } : {}),
+        ...(funbaseVisibility ? { funbaseVisibility } : {}),
+        ...(salesReviewReasons.length > 0 ? { salesReviewReasons } : {}),
+        ...(salesReviewMemo ? { salesReviewMemo } : {}),
       }
     })
     .filter((entry: ActivityEntry | null): entry is ActivityEntry => entry !== null)

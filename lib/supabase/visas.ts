@@ -1,5 +1,7 @@
 import { createClient } from './client'
 import type { Visa, VisaStatus } from '@/lib/models'
+import { getAccessiblePersonIdsForCurrentUser } from './people-access'
+import { fetchAllSupabaseRows } from './paginated-query'
 
 export interface VisaListResponse {
   visas: Visa[]
@@ -13,59 +15,118 @@ export interface VisaStatusCounts {
 }
 
 const EXCLUDED_VISA_STATUSES = ["内定取消", "内定辞退", "退職"]
+const PERSON_ID_FILTER_CHUNK_SIZE = 500
 
 const applyVisaStatusExclusions = (query: ReturnType<typeof createClient>["from"]) => {
   return query.not('status', 'in', `(${EXCLUDED_VISA_STATUSES.map((status) => `"${status}"`).join(',')})`)
 }
 
+const mapVisaRow = (visa: any): Visa => ({
+  id: visa.id,
+  personId: visa.person_id,
+  status: visa.status,
+  type: visa.type,
+  expiryDate: visa.expiry_date,
+  submittedAt: visa.submitted_at,
+  resultAt: visa.result_at,
+  manager: visa.manager,
+  updatedAt: visa.updated_at,
+  documentPreparationDate: visa.document_preparation_date,
+  documentCreationDate: visa.document_creation_date,
+  documentConfirmationDate: visa.document_confirmation_date,
+  applicationPreparationDate: visa.application_preparation_date,
+  visaApplicationPreparationDate: visa.visa_application_preparation_date,
+  applicationDate: visa.application_date,
+  additionalDocumentsDate: visa.additional_documents_date,
+  visaAcquiredDate: visa.visa_acquired_date,
+  receptionNumber: visa.reception_number,
+  receptionDate: visa.reception_date,
+  receptionApplicationNumber: visa.reception_application_number
+})
+
+function chunkValues<T>(values: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = []
+  for (let index = 0; index < values.length; index += chunkSize) {
+    chunks.push(values.slice(index, index + chunkSize))
+  }
+  return chunks
+}
+
 export async function getVisas(): Promise<Visa[]> {
   const supabase = createClient()
-  
-  const { data, error } = await applyVisaStatusExclusions(
-    supabase
-    .from('visas')
-    .select()
-    .order('updated_at', { ascending: false })
-  )
-  
-  if (error) {
-    console.error('Error fetching visas:', error)
-    throw error
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'visas')
+
+  if (accessiblePersonIds.length === 0) {
+    return []
   }
-  
-  // SupabaseのデータをVisa型に変換
-  return data.map(visa => ({
-    id: visa.id,
-    personId: visa.person_id,
-    status: visa.status,
-    type: visa.type,
-    expiryDate: visa.expiry_date,
-    submittedAt: visa.submitted_at,
-    resultAt: visa.result_at,
-    manager: visa.manager,
-    updatedAt: visa.updated_at,
-    documentPreparationDate: visa.document_preparation_date,
-    documentCreationDate: visa.document_creation_date,
-    documentConfirmationDate: visa.document_confirmation_date,
-    applicationPreparationDate: visa.application_preparation_date,
-    visaApplicationPreparationDate: visa.visa_application_preparation_date,
-    applicationDate: visa.application_date,
-    additionalDocumentsDate: visa.additional_documents_date,
-    visaAcquiredDate: visa.visa_acquired_date,
-    receptionNumber: visa.reception_number,
-    receptionDate: visa.reception_date,
-    receptionApplicationNumber: visa.reception_application_number
-  }))
+
+  const rows = (
+    await Promise.all(
+      chunkValues(accessiblePersonIds, PERSON_ID_FILTER_CHUNK_SIZE).map((personIds) =>
+        fetchAllSupabaseRows(() =>
+          applyVisaStatusExclusions(
+            supabase
+              .from('visas')
+              .select()
+              .in('person_id', personIds)
+              .order('updated_at', { ascending: false })
+          )
+        )
+      )
+    )
+  )
+    .flat()
+    .sort((a: any, b: any) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+
+  return rows.map(mapVisaRow)
+}
+
+export async function getVisasByPersonIds(personIds: string[]): Promise<Visa[]> {
+  const supabase = createClient()
+  const uniquePersonIds = Array.from(new Set(personIds.filter(Boolean)))
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'visas')
+  const accessiblePersonIdSet = new Set(accessiblePersonIds)
+  const filteredPersonIds = uniquePersonIds.filter((personId) => accessiblePersonIdSet.has(personId))
+
+  if (filteredPersonIds.length === 0) {
+    return []
+  }
+
+  const rows = (
+    await Promise.all(
+      chunkValues(filteredPersonIds, PERSON_ID_FILTER_CHUNK_SIZE).map((personIdChunk) =>
+        fetchAllSupabaseRows(() =>
+          applyVisaStatusExclusions(
+            supabase
+              .from('visas')
+              .select()
+              .in('person_id', personIdChunk)
+              .order('updated_at', { ascending: false })
+          )
+        )
+      )
+    )
+  )
+    .flat()
+    .sort((a: any, b: any) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+
+  return rows.map(mapVisaRow)
 }
 
 export async function getVisaById(id: string): Promise<Visa | null> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'visas')
+
+  if (accessiblePersonIds.length === 0) {
+    return null
+  }
   
   const { data, error } = await applyVisaStatusExclusions(
     supabase
     .from('visas')
     .select()
     .eq('id', id)
+    .in('person_id', accessiblePersonIds)
     .single()
   )
   
@@ -74,32 +135,16 @@ export async function getVisaById(id: string): Promise<Visa | null> {
     return null
   }
   
-  return {
-    id: data.id,
-    personId: data.person_id,
-    status: data.status,
-    type: data.type,
-    expiryDate: data.expiry_date,
-    submittedAt: data.submitted_at,
-    resultAt: data.result_at,
-    manager: data.manager,
-    updatedAt: data.updated_at,
-    documentPreparationDate: data.document_preparation_date,
-    documentCreationDate: data.document_creation_date,
-    documentConfirmationDate: data.document_confirmation_date,
-    applicationPreparationDate: data.application_preparation_date,
-    visaApplicationPreparationDate: data.visa_application_preparation_date,
-    applicationDate: data.application_date,
-    additionalDocumentsDate: data.additional_documents_date,
-    visaAcquiredDate: data.visa_acquired_date,
-    receptionNumber: data.reception_number,
-    receptionDate: data.reception_date,
-    receptionApplicationNumber: data.reception_application_number
-  }
+  return mapVisaRow(data)
 }
 
 export async function getVisasByPersonId(personId: string): Promise<Visa[]> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'visas')
+
+  if (!accessiblePersonIds.includes(personId)) {
+    return []
+  }
   
   const { data, error } = await applyVisaStatusExclusions(
     supabase
@@ -114,28 +159,7 @@ export async function getVisasByPersonId(personId: string): Promise<Visa[]> {
     throw error
   }
   
-  return data.map((visa: any) => ({
-    id: visa.id,
-    personId: visa.person_id,
-    status: visa.status,
-    type: visa.type,
-    expiryDate: visa.expiry_date,
-    submittedAt: visa.submitted_at,
-    resultAt: visa.result_at,
-    manager: visa.manager,
-    updatedAt: visa.updated_at,
-    documentPreparationDate: visa.document_preparation_date,
-    documentCreationDate: visa.document_creation_date,
-    documentConfirmationDate: visa.document_confirmation_date,
-    applicationPreparationDate: visa.application_preparation_date,
-    visaApplicationPreparationDate: visa.visa_application_preparation_date,
-    applicationDate: visa.application_date,
-    additionalDocumentsDate: visa.additional_documents_date,
-    visaAcquiredDate: visa.visa_acquired_date,
-    receptionNumber: visa.reception_number,
-    receptionDate: visa.reception_date,
-    receptionApplicationNumber: visa.reception_application_number
-  }))
+  return data.map(mapVisaRow)
 }
 
 export async function createVisa(visa: Omit<Visa, 'updatedAt'>): Promise<Visa> {
@@ -172,28 +196,7 @@ export async function createVisa(visa: Omit<Visa, 'updatedAt'>): Promise<Visa> {
     throw error
   }
   
-  return {
-    id: data.id,
-    personId: data.person_id,
-    status: data.status,
-    type: data.type,
-    expiryDate: data.expiry_date,
-    submittedAt: data.submitted_at,
-    resultAt: data.result_at,
-    manager: data.manager,
-    updatedAt: data.updated_at,
-    documentPreparationDate: data.document_preparation_date,
-    documentCreationDate: data.document_creation_date,
-    documentConfirmationDate: data.document_confirmation_date,
-    applicationPreparationDate: data.application_preparation_date,
-    visaApplicationPreparationDate: data.visa_application_preparation_date,
-    applicationDate: data.application_date,
-    additionalDocumentsDate: data.additional_documents_date,
-    visaAcquiredDate: data.visa_acquired_date,
-    receptionNumber: data.reception_number,
-    receptionDate: data.reception_date,
-    receptionApplicationNumber: data.reception_application_number
-  }
+  return mapVisaRow(data)
 }
 
 export async function updateVisa(id: string, updates: Partial<Omit<Visa, 'id' | 'updatedAt'>>): Promise<Visa> {
@@ -269,22 +272,10 @@ export async function deleteVisa(id: string): Promise<void> {
 }
 
 export async function getVisaStatusCounts(): Promise<VisaStatusCounts> {
-  const supabase = createClient()
-  
-  const { data, error } = await applyVisaStatusExclusions(
-    supabase
-    .from('visas')
-    .select('status')
-  )
-
-  if (error) {
-    console.error('Error fetching visa status counts:', error)
-    throw error
-  }
-  
-  // Count occurrences of each status
   const counts: VisaStatusCounts = {}
-  data.forEach(visa => {
+
+  const visas = await getVisas()
+  visas.forEach(visa => {
     counts[visa.status] = (counts[visa.status] || 0) + 1
   })
   
@@ -297,6 +288,16 @@ export async function getVisasPaginated(
   pageSize: number = 20
 ): Promise<VisaListResponse> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'visas')
+  
+  if (accessiblePersonIds.length === 0) {
+    return {
+      visas: [],
+      totalCount: 0,
+      hasNextPage: false,
+      hasPrevPage: false,
+    }
+  }
   
   const offset = (page - 1) * pageSize
   
@@ -312,6 +313,7 @@ export async function getVisasPaginated(
         tenant_id
       )
     `, { count: 'exact' })
+    .in('person_id', accessiblePersonIds)
     .order('updated_at', { ascending: false })
     .range(offset, offset + pageSize - 1)
 
@@ -328,7 +330,7 @@ export async function getVisasPaginated(
     throw error
   }
   
-  const visas: (Visa & { person: any })[] = data.map(item => ({
+  const visas: (Visa & { person: any })[] = data.map((item: any) => ({
     id: item.id,
     personId: item.person_id,
     status: item.status,

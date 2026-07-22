@@ -1,12 +1,19 @@
 import { createClient } from './client'
 import type { SupportAction } from '@/lib/models'
+import { getAccessiblePersonIdsForCurrentUser } from './people-access'
 
 export async function getSupportActions(): Promise<SupportAction[]> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'support_actions')
+
+  if (accessiblePersonIds.length === 0) {
+    return []
+  }
   
   const { data, error } = await supabase
     .from('support_actions')
     .select()
+    .in('person_id', accessiblePersonIds)
     .order('created_at', { ascending: false })
   
   if (error) {
@@ -15,7 +22,7 @@ export async function getSupportActions(): Promise<SupportAction[]> {
   }
   
   // SupabaseのデータをSupportAction型に変換
-  return data.map(action => ({
+  return data.map((action: any) => ({
     id: action.id,
     personId: action.person_id,
     category: action.category,
@@ -31,11 +38,17 @@ export async function getSupportActions(): Promise<SupportAction[]> {
 
 export async function getSupportActionById(id: string): Promise<SupportAction | null> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'support_actions')
+
+  if (accessiblePersonIds.length === 0) {
+    return null
+  }
   
   const { data, error } = await supabase
     .from('support_actions')
     .select()
     .eq('id', id)
+    .in('person_id', accessiblePersonIds)
     .single()
   
   if (error) {
@@ -59,6 +72,11 @@ export async function getSupportActionById(id: string): Promise<SupportAction | 
 
 export async function getSupportActionsByPersonId(personId: string): Promise<SupportAction[]> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'support_actions')
+
+  if (!accessiblePersonIds.includes(personId)) {
+    return []
+  }
   
   const { data, error } = await supabase
     .from('support_actions')
@@ -71,7 +89,7 @@ export async function getSupportActionsByPersonId(personId: string): Promise<Sup
     throw error
   }
   
-  return data.map(action => ({
+  return data.map((action: any) => ({
     id: action.id,
     personId: action.person_id,
     category: action.category,
@@ -87,11 +105,17 @@ export async function getSupportActionsByPersonId(personId: string): Promise<Sup
 
 export async function getSupportActionsByCategory(category: string): Promise<SupportAction[]> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'support_actions')
+
+  if (accessiblePersonIds.length === 0) {
+    return []
+  }
   
   const { data, error } = await supabase
     .from('support_actions')
     .select()
     .eq('category', category)
+    .in('person_id', accessiblePersonIds)
     .order('created_at', { ascending: false })
   
   if (error) {
@@ -99,7 +123,7 @@ export async function getSupportActionsByCategory(category: string): Promise<Sup
     throw error
   }
   
-  return data.map(action => ({
+  return data.map((action: any) => ({
     id: action.id,
     personId: action.person_id,
     category: action.category,
@@ -115,11 +139,17 @@ export async function getSupportActionsByCategory(category: string): Promise<Sup
 
 export async function getSupportActionsByStatus(status: 'open' | 'in_progress' | 'done'): Promise<SupportAction[]> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'support_actions')
+
+  if (accessiblePersonIds.length === 0) {
+    return []
+  }
   
   const { data, error } = await supabase
     .from('support_actions')
     .select()
     .eq('status', status)
+    .in('person_id', accessiblePersonIds)
     .order('created_at', { ascending: false })
   
   if (error) {
@@ -127,7 +157,7 @@ export async function getSupportActionsByStatus(status: 'open' | 'in_progress' |
     throw error
   }
   
-  return data.map(action => ({
+  return data.map((action: any) => ({
     id: action.id,
     personId: action.person_id,
     category: action.category,
@@ -143,6 +173,11 @@ export async function getSupportActionsByStatus(status: 'open' | 'in_progress' |
 
 export async function createSupportAction(action: Omit<SupportAction, 'createdAt' | 'updatedAt'>): Promise<SupportAction> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'support_actions')
+
+  if (!accessiblePersonIds.includes(action.personId)) {
+    throw new Error('Person not found')
+  }
   
   const { data, error } = await supabase
     .from('support_actions')
@@ -180,6 +215,11 @@ export async function createSupportAction(action: Omit<SupportAction, 'createdAt
 
 export async function updateSupportAction(id: string, updates: Partial<Omit<SupportAction, 'id' | 'createdAt' | 'updatedAt'>>): Promise<SupportAction> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'support_actions')
+
+  if (accessiblePersonIds.length === 0 || (updates.personId && !accessiblePersonIds.includes(updates.personId))) {
+    throw new Error('Support action not found')
+  }
   
   const { data, error } = await supabase
     .from('support_actions')
@@ -193,6 +233,7 @@ export async function updateSupportAction(id: string, updates: Partial<Omit<Supp
       due_date: updates.due
     })
     .eq('id', id)
+    .in('person_id', accessiblePersonIds)
     .select()
     .single()
   
@@ -217,16 +258,20 @@ export async function updateSupportAction(id: string, updates: Partial<Omit<Supp
 
 export async function deleteSupportAction(id: string): Promise<void> {
   const supabase = createClient()
+  const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'support_actions')
+
+  if (accessiblePersonIds.length === 0) {
+    return
+  }
   
   const { error } = await supabase
     .from('support_actions')
     .delete()
     .eq('id', id)
+    .in('person_id', accessiblePersonIds)
   
   if (error) {
     console.error('Error deleting support action:', error)
     throw error
   }
 }
-
-

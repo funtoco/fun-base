@@ -5,9 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createSyncService } from '@/lib/sync/kintone-sync'
+import { createSyncService, parseKintoneSyncOptions } from '@/lib/sync/kintone-sync'
+import type { KintoneSyncOptions } from '@/lib/sync/kintone-sync'
 import { getConnector, setConnectorStatus } from '@/lib/db/connectors'
 import { buildConnectorBatchMetadata, parseConnectorBatchParams } from '@/lib/sync/connector-batch'
+import type { ConnectorBatchParams } from '@/lib/sync/connector-batch'
 import { createClient } from '@supabase/supabase-js'
 
 // Use Node.js runtime for crypto operations
@@ -51,10 +53,12 @@ async function handleSyncByType(request: NextRequest) {
     // Get target app type from query parameters
     const { searchParams } = new URL(request.url)
     const targetAppType = searchParams.get('type')
-    let batchParams
+    let batchParams: ConnectorBatchParams
+    let syncOptions: KintoneSyncOptions
 
     try {
       batchParams = parseConnectorBatchParams(searchParams)
+      syncOptions = parseKintoneSyncOptions(searchParams)
     } catch (error) {
       return NextResponse.json(
         { error: error instanceof Error ? error.message : 'Invalid batch parameters' },
@@ -69,7 +73,12 @@ async function handleSyncByType(request: NextRequest) {
       )
     }
 
-    console.log(`🕐 Starting scheduled sync process for ${targetAppType}`)
+    console.log(`🕐 Starting scheduled sync process for ${targetAppType}`, {
+      recordId: syncOptions.recordId || null,
+      recordIdFrom: syncOptions.recordIdFrom || null,
+      recordIdTo: syncOptions.recordIdTo || null,
+      recordIdTailSize: syncOptions.recordIdTailSize || null,
+    })
     
     const supabase = getServerClient()
     
@@ -141,7 +150,7 @@ async function handleSyncByType(request: NextRequest) {
         )
         
         // Perform sync for specific target app type
-        const result = await syncService.syncAll(undefined, targetAppType)
+        const result = await syncService.syncAll(undefined, targetAppType, syncOptions)
         
         console.log(`✅ Scheduled sync completed for ${connector.name} (${targetAppType}):`, result)
         
@@ -198,6 +207,10 @@ async function handleSyncByType(request: NextRequest) {
       targetAppType,
       totalSynced,
       requestedConnectorId: batchParams.connectorId,
+      recordId: syncOptions.recordId,
+      recordIdFrom: syncOptions.recordIdFrom,
+      recordIdTo: syncOptions.recordIdTo,
+      recordIdTailSize: syncOptions.recordIdTailSize,
       ...batchMetadata,
       successCount,
       failedCount,

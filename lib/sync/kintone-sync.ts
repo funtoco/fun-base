@@ -14,6 +14,15 @@ import { getUpdateKeysByConnector, buildConflictColumns, buildUpdateCondition, g
 import { uploadFileToStorage } from '@/lib/storage/file-uploader'
 import { getDataMappings, mapFieldValues, type DataMapping } from '@/lib/mappings/value-mapper'
 import {
+  notifyInterviewRecordsCreatedBatch,
+  prepareInterviewRecordNotificationEvent,
+  type InterviewRecordNotificationBatchItem,
+} from '@/lib/notifications/interview-record-notification-service'
+import {
+  INTERVIEW_RECORD_EMAIL_NOTIFICATION_TYPE,
+  shouldNotifyInterviewRecordCreation,
+} from '@/lib/notifications/interview-record-notifications'
+import {
   buildInterviewRecordsQuery,
   getInterviewRecordSourceHumanResourceId,
   getInterviewRecordSourceRecordId,
@@ -155,7 +164,10 @@ export interface KintoneSyncOptions {
   recordId?: string
   recordIdFrom?: string
   recordIdTo?: string
+  recordIdTailSize?: number
 }
+
+const MAX_RECORD_ID_TAIL_SIZE = 5000
 
 function assertKintoneRecordId(value: string, label: string): string {
   const trimmed = value.trim()
@@ -166,6 +178,14 @@ function assertKintoneRecordId(value: string, label: string): string {
 }
 
 export function buildRecordIdQuery(options: KintoneSyncOptions = {}): string {
+  if (options.recordId && (options.recordIdFrom || options.recordIdTo)) {
+    throw new Error('recordId cannot be combined with recordIdFrom or recordIdTo')
+  }
+
+  if (options.recordIdTailSize && (options.recordId || options.recordIdFrom || options.recordIdTo)) {
+    throw new Error('recordIdTailSize cannot be combined with explicit record id filters')
+  }
+
   if (options.recordId) {
     return `$id = ${assertKintoneRecordId(options.recordId, 'recordId')}`
   }
@@ -178,7 +198,79 @@ export function buildRecordIdQuery(options: KintoneSyncOptions = {}): string {
     conditions.push(`$id <= ${assertKintoneRecordId(options.recordIdTo, 'recordIdTo')}`)
   }
 
+  if (options.recordIdFrom && options.recordIdTo) {
+    const from = BigInt(options.recordIdFrom.trim())
+    const to = BigInt(options.recordIdTo.trim())
+    if (from > to) {
+      throw new Error('recordIdFrom must be less than or equal to recordIdTo')
+    }
+  }
+
   return conditions.join(' and ')
+}
+
+function parseOptionalRecordId(searchParams: URLSearchParams, name: string): string | undefined {
+  const value = searchParams.get(name)
+  if (!value || value.trim() === '') {
+    return undefined
+  }
+
+  return assertKintoneRecordId(value, name)
+}
+
+function parseOptionalRecordIdTailSize(searchParams: URLSearchParams): number | undefined {
+  const value = searchParams.get('recordIdTailSize')
+  if (!value || value.trim() === '') {
+    return undefined
+  }
+
+  if (!/^\d+$/.test(value.trim())) {
+    throw new Error('recordIdTailSize must be an integer')
+  }
+
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error('recordIdTailSize must be a safe integer')
+  }
+  if (parsed < 1 || parsed > MAX_RECORD_ID_TAIL_SIZE) {
+    throw new Error(`recordIdTailSize must be between 1 and ${MAX_RECORD_ID_TAIL_SIZE}`)
+  }
+
+  return parsed
+}
+
+export function parseKintoneSyncOptions(searchParams: URLSearchParams): KintoneSyncOptions {
+  const options: KintoneSyncOptions = {
+    recordId: parseOptionalRecordId(searchParams, 'recordId'),
+    recordIdFrom: parseOptionalRecordId(searchParams, 'recordIdFrom'),
+    recordIdTo: parseOptionalRecordId(searchParams, 'recordIdTo'),
+    recordIdTailSize: parseOptionalRecordIdTailSize(searchParams),
+  }
+
+  buildRecordIdQuery(options)
+
+  return Object.fromEntries(
+    Object.entries(options).filter(([, value]) => value !== undefined)
+  ) as KintoneSyncOptions
+}
+
+export function buildRecordIdTailQuery(maxRecordId: number, recordIdTailSize: number): string {
+  if (!Number.isSafeInteger(maxRecordId) || maxRecordId < 0) {
+    throw new Error('maxRecordId must be a safe integer greater than or equal to 0')
+  }
+  if (!Number.isSafeInteger(recordIdTailSize) || recordIdTailSize < 1 || recordIdTailSize > MAX_RECORD_ID_TAIL_SIZE) {
+    throw new Error(`recordIdTailSize must be between 1 and ${MAX_RECORD_ID_TAIL_SIZE}`)
+  }
+  if (maxRecordId === 0) {
+    return '$id <= 0'
+  }
+
+  const recordIdFrom = Math.max(1, maxRecordId - recordIdTailSize + 1)
+
+  return buildRecordIdQuery({
+    recordIdFrom: String(recordIdFrom),
+    recordIdTo: String(maxRecordId),
+  })
 }
 
 export function combineKintoneQueries(...queries: Array<string | null | undefined>): string {
@@ -502,6 +594,15 @@ export class KintoneDataSync {
     return maxRecordId
   }
 
+  private async buildRecordIdQueryForApp(sourceAppId: string, options: KintoneSyncOptions = {}): Promise<string> {
+    if (!options.recordIdTailSize) {
+      return buildRecordIdQuery(options)
+    }
+
+    const maxRecordId = await this.getMaxRecordId(sourceAppId)
+    return buildRecordIdTailQuery(maxRecordId, options.recordIdTailSize)
+  }
+
   /**
    * Build Kintone query from filter conditions
    */
@@ -602,7 +703,8 @@ export class KintoneDataSync {
         appMappingId,
         recordId: options.recordId,
         recordIdFrom: options.recordIdFrom,
-        recordIdTo: options.recordIdTo
+        recordIdTo: options.recordIdTo,
+        recordIdTailSize: options.recordIdTailSize,
       })
       // Start sync session
       sessionId = await this.syncLogger.startSession(
@@ -753,12 +855,13 @@ export class KintoneDataSync {
       for (const appMapping of appMappings) {
         // Build query using only database filter conditions
         const filterQuery = await this.buildFilterQuery(targetAppType, appMapping.id)
-        const recordIdQuery = buildRecordIdQuery(options)
+        const recordIdQuery = await this.buildRecordIdQueryForApp(appMapping.source_app_id, options)
         const query = combineKintoneQueries(filterQuery, recordIdQuery)
         console.log('[sync] kintone-query', {
           targetAppType,
           sourceAppId,
           appMappingId: appMapping.id,
+          recordIdTailSize: options.recordIdTailSize,
           query
         })
         
@@ -926,6 +1029,25 @@ export class KintoneDataSync {
     }
   }
 
+  private async getPersonNameForInterviewNotification(personId: string): Promise<string | null> {
+    const { data, error } = await this.supabase
+      .from('people')
+      .select('name')
+      .eq('tenant_id', this.tenantId)
+      .eq('id', personId)
+      .maybeSingle()
+
+    if (error) {
+      console.warn('[sync] interview-records:notification-person-name-lookup-error', {
+        personId,
+        error: error.message,
+      })
+      return null
+    }
+
+    return typeof data?.name === 'string' ? data.name : null
+  }
+
   private async syncInterviewRecords(
     appMappings: AppMapping[],
     options: KintoneSyncOptions = {}
@@ -936,12 +1058,13 @@ export class KintoneDataSync {
       const filterQuery = buildInterviewRecordsQuery(
         await this.buildFilterQuery('interview_records', appMapping.id)
       )
-      const recordIdQuery = buildRecordIdQuery(options)
+      const recordIdQuery = await this.buildRecordIdQueryForApp(appMapping.source_app_id, options)
       const query = combineKintoneQueries(filterQuery, recordIdQuery)
 
       console.log('[sync] interview-records:kintone-query', {
         sourceAppId: appMapping.source_app_id,
         appMappingId: appMapping.id,
+        recordIdTailSize: options.recordIdTailSize,
         query,
       })
 
@@ -952,6 +1075,7 @@ export class KintoneDataSync {
       let skippedUnlinked = 0
       let skippedAmbiguousPerson = 0
       let failedRecords = 0
+      const notificationEvents: InterviewRecordNotificationBatchItem[] = []
 
       await runWithConcurrency(records, CONCURRENCY_LIMIT, async (record) => {
         let sourceRecordId = 'unknown'
@@ -1056,7 +1180,24 @@ export class KintoneDataSync {
             sourceAppId: appMapping.source_app_id,
           })
 
-          const { error: upsertError } = await this.supabase
+          const { data: existingRecord, error: existingRecordError } = await this.supabase
+            .from('interview_records')
+            .select('id, activity_entries')
+            .eq('tenant_id', this.tenantId)
+            .eq('source_system', payload.source_system)
+            .eq('source_app_id', payload.source_app_id)
+            .eq('source_record_id', payload.source_record_id)
+            .maybeSingle()
+
+          if (existingRecordError) {
+            console.error('[sync] interview-records:existing-lookup-error', {
+              sourceRecordId,
+              error: existingRecordError.message,
+            })
+            throw existingRecordError
+          }
+
+          const { data: upsertedRecord, error: upsertError } = await this.supabase
             .from('interview_records')
             .upsert(
               {
@@ -1066,6 +1207,8 @@ export class KintoneDataSync {
               },
               { onConflict: 'tenant_id,source_system,source_app_id,source_record_id' }
             )
+            .select('id')
+            .single()
 
           if (upsertError) {
             console.error('[sync] interview-records:db-error', {
@@ -1073,6 +1216,60 @@ export class KintoneDataSync {
               error: upsertError.message,
             })
             throw upsertError
+          }
+
+          let shouldAttemptInterviewNotification = shouldNotifyInterviewRecordCreation({
+            existingRecordId: existingRecord?.id ?? null,
+            recordType: payload.record_type,
+            activityEntries: payload.activity_entries,
+            previousActivityEntries: existingRecord?.activity_entries as unknown[] | null | undefined,
+          })
+
+          if (!shouldAttemptInterviewNotification && existingRecord?.id) {
+            const pendingRetryCutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
+            const { data: retryableNotificationEvent, error: retryableNotificationError } = await this.supabase
+              .from('notification_events')
+              .select('id')
+              .eq('tenant_id', this.tenantId)
+              .eq('notification_type', INTERVIEW_RECORD_EMAIL_NOTIFICATION_TYPE)
+              .eq('source_type', 'interview_record')
+              .eq('source_id', existingRecord.id)
+              .or(`status.eq.failed,and(status.eq.pending,created_at.lt.${pendingRetryCutoff})`)
+              .maybeSingle()
+
+            if (retryableNotificationError) {
+              console.error('[sync] interview-records:notification-retry-lookup-error', {
+                sourceRecordId,
+                error: retryableNotificationError.message,
+              })
+            }
+
+            shouldAttemptInterviewNotification = Boolean(retryableNotificationEvent)
+          }
+
+          if (shouldAttemptInterviewNotification) {
+            try {
+              const notificationEvent = await prepareInterviewRecordNotificationEvent({
+                supabase: this.supabase,
+                tenantId: this.tenantId,
+                interviewRecord: {
+                  id: upsertedRecord.id,
+                  person_id: personId,
+                  person_name: await this.getPersonNameForInterviewNotification(personId),
+                  company_name: payload.company_name,
+                  interview_date: payload.interview_date,
+                  record_type: payload.record_type,
+                  support_staff_name: payload.support_staff_name,
+                },
+              })
+              if (notificationEvent) notificationEvents.push(notificationEvent)
+            } catch (notificationError) {
+              console.error('[sync] interview-records:notification-prepare-error', {
+                sourceRecordId,
+                interviewRecordId: upsertedRecord.id,
+                error: notificationError instanceof Error ? notificationError.message : notificationError,
+              })
+            }
           }
 
           syncedCount++
@@ -1084,6 +1281,22 @@ export class KintoneDataSync {
           })
         }
       })
+
+      if (notificationEvents.length > 0) {
+        try {
+          await notifyInterviewRecordsCreatedBatch({
+            supabase: this.supabase,
+            tenantId: this.tenantId,
+            notificationEvents,
+          })
+        } catch (notificationError) {
+          console.error('[sync] interview-records:batch-notification-error', {
+            appMappingId: appMapping.id,
+            notificationRecordCount: notificationEvents.length,
+            error: notificationError instanceof Error ? notificationError.message : notificationError,
+          })
+        }
+      }
 
       console.log('[sync] interview-records:summary', {
         appMappingId: appMapping.id,

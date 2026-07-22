@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AuthGuard } from "@/components/auth-guard"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -8,19 +8,42 @@ import { DeadlineChip } from "@/components/ui/deadline-chip"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { people } from "@/data/people"
-import { supportActions } from "@/data/support-actions"
-import type { SupportAction } from "@/lib/models"
+import { ListPanelLoadingSkeleton } from "@/components/ui/funbase-loading"
+import { getPeople } from "@/lib/supabase/people"
+import { getSupportActions } from "@/lib/supabase/support-actions"
+import type { Person, SupportAction } from "@/lib/models"
 
 interface SupportActionWithPerson extends SupportAction {
   personName?: string
 }
 
 export default function ActionsPage() {
-  const [sortConfig, setSortConfig] = useState<{
-    key: string
-    direction: "asc" | "desc"
-  }>({ key: "due", direction: "asc" })
+  const [people, setPeople] = useState<Person[]>([])
+  const [supportActions, setSupportActions] = useState<SupportAction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true)
+        setError(null)
+        const [peopleData, supportActionsData] = await Promise.all([
+          getPeople(),
+          getSupportActions(),
+        ])
+        setPeople(peopleData)
+        setSupportActions(supportActionsData)
+      } catch (err) {
+        console.error("Error fetching support actions data:", err)
+        setError("データの取得に失敗しました")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
 
   // Combine support actions with person information
   const actionsWithPeople: SupportActionWithPerson[] = supportActions.map((action) => {
@@ -128,6 +151,36 @@ export default function ActionsPage() {
       const now = new Date()
       return dueDate < now && a.status !== "done"
     }).length,
+  }
+
+  if (loading) {
+    return (
+      <AuthGuard>
+        <div className="p-6 space-y-6">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">サポート記録</h1>
+            <p className="text-muted-foreground mt-2">サポートアクションの一覧と進捗管理</p>
+          </div>
+          <ListPanelLoadingSkeleton />
+        </div>
+      </AuthGuard>
+    )
+  }
+
+  if (error) {
+    return (
+      <AuthGuard>
+        <div className="p-6 space-y-6">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">サポート記録</h1>
+            <p className="text-muted-foreground mt-2">サポートアクションの一覧と進捗管理</p>
+          </div>
+          <div className="flex items-center justify-center py-8">
+            <div className="text-red-500">{error}</div>
+          </div>
+        </div>
+      </AuthGuard>
+    )
   }
 
   return (

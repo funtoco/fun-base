@@ -1,5 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
-import { createSyncService } from '@/lib/sync/kintone-sync'
+import {
+  createSyncService,
+  parseKintoneSyncOptions,
+} from '@/lib/sync/kintone-sync'
+import type { KintoneSyncOptions } from '@/lib/sync/kintone-sync'
 import {
   buildConnectorBatchMetadata,
   ConnectorBatchMetadata,
@@ -66,6 +70,21 @@ function parseBatchControls(): BatchControls {
     allBatches,
     batchParams: parseOptionalConnectorBatchParams(searchParams),
   }
+}
+
+function parseSyncOptions(): KintoneSyncOptions {
+  const searchParams = new URLSearchParams()
+  const recordId = getArgValue('--record-id') || process.env.SYNC_RECORD_ID
+  const recordIdFrom = getArgValue('--record-id-from') || process.env.SYNC_RECORD_ID_FROM
+  const recordIdTo = getArgValue('--record-id-to') || process.env.SYNC_RECORD_ID_TO
+  const recordIdTailSize = getArgValue('--record-id-tail-size') || process.env.SYNC_RECORD_ID_TAIL_SIZE
+
+  if (recordId) searchParams.set('recordId', recordId)
+  if (recordIdFrom) searchParams.set('recordIdFrom', recordIdFrom)
+  if (recordIdTo) searchParams.set('recordIdTo', recordIdTo)
+  if (recordIdTailSize) searchParams.set('recordIdTailSize', recordIdTailSize)
+
+  return parseKintoneSyncOptions(searchParams)
 }
 
 function getServerClient() {
@@ -166,12 +185,17 @@ async function fetchConnectors(
 
 async function runSyncByType(
   targetAppType: SyncTargetType,
-  batchParams: ConnectorBatchParams | null = null
+  batchParams: ConnectorBatchParams | null = null,
+  syncOptions: KintoneSyncOptions = {}
 ) {
   console.log(`🕐 Starting direct GitHub Actions sync for ${targetAppType}`, {
     connectorId: batchParams?.connectorId || null,
     limit: batchParams?.limit || null,
     offset: batchParams?.connectorId ? null : batchParams?.offset || null,
+    recordId: syncOptions.recordId || null,
+    recordIdFrom: syncOptions.recordIdFrom || null,
+    recordIdTo: syncOptions.recordIdTo || null,
+    recordIdTailSize: syncOptions.recordIdTailSize || null,
   })
 
   const {
@@ -225,7 +249,7 @@ async function runSyncByType(
         'scheduled'
       )
 
-      const result = await syncService.syncAll(undefined, targetAppType)
+      const result = await syncService.syncAll(undefined, targetAppType, syncOptions)
 
       results.push({
         connectorId: connector.id,
@@ -272,6 +296,10 @@ async function runSyncByType(
     success: failedCount === 0,
     targetAppType,
     requestedConnectorId,
+    recordId: syncOptions.recordId,
+    recordIdFrom: syncOptions.recordIdFrom,
+    recordIdTo: syncOptions.recordIdTo,
+    recordIdTailSize: syncOptions.recordIdTailSize,
     ...(batchMetadata || {}),
     connectorCount: connectors.length,
     successCount,
@@ -287,10 +315,11 @@ async function runSyncByType(
 
 async function runSyncByTypeInBatches(
   targetAppType: SyncTargetType,
-  initialBatchParams: ConnectorBatchParams
+  initialBatchParams: ConnectorBatchParams,
+  syncOptions: KintoneSyncOptions = {}
 ) {
   if (initialBatchParams.connectorId) {
-    return runSyncByType(targetAppType, initialBatchParams)
+    return runSyncByType(targetAppType, initialBatchParams, syncOptions)
   }
 
   let offset = initialBatchParams.offset
@@ -300,7 +329,7 @@ async function runSyncByTypeInBatches(
     const summary = await runSyncByType(targetAppType, {
       ...initialBatchParams,
       offset,
-    })
+    }, syncOptions)
 
     batchSummaries.push(summary)
 
@@ -329,6 +358,10 @@ async function runSyncByTypeInBatches(
     success: failedCount === 0,
     targetAppType,
     allBatches: true,
+    recordId: syncOptions.recordId,
+    recordIdFrom: syncOptions.recordIdFrom,
+    recordIdTo: syncOptions.recordIdTo,
+    recordIdTailSize: syncOptions.recordIdTailSize,
     batchLimit: initialBatchParams.limit,
     batchCount: batchSummaries.length,
     connectorCount: successCount + failedCount,
@@ -347,6 +380,7 @@ async function runSyncByTypeInBatches(
 async function main() {
   const syncType = parseSyncType()
   const { allBatches, batchParams } = parseBatchControls()
+  const syncOptions = parseSyncOptions()
   const targetTypes: SyncTargetType[] =
     syncType === 'both' ? ['people', 'visas'] : [syncType]
 
@@ -354,8 +388,8 @@ async function main() {
 
   for (const targetType of targetTypes) {
     const summary = allBatches && batchParams
-      ? await runSyncByTypeInBatches(targetType, batchParams)
-      : await runSyncByType(targetType, batchParams)
+      ? await runSyncByTypeInBatches(targetType, batchParams, syncOptions)
+      : await runSyncByType(targetType, batchParams, syncOptions)
 
     if (!summary.success) {
       hasFailure = true

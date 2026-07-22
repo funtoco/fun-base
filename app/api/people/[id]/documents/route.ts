@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { getAccessiblePersonIdsForCurrentUser } from '@/lib/supabase/people-access'
 import { uploadFileToStorage, generateFilePath, deleteFileFromStorage } from '@/lib/storage/file-uploader'
+import { normalizeDocumentNote, resolveReplacementDocumentNote } from '@/lib/document-notes'
 
 const VALID_DOCUMENT_TYPES = [
   'passport_front',
@@ -14,6 +16,7 @@ const VALID_DOCUMENT_TYPES = [
   'resume',
   'designation_document',
   'employment_insurance_notice',
+  'other',
 ]
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const VALID_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']
@@ -34,6 +37,14 @@ export async function GET(
     }
 
     const supabase = await createClient()
+    const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'documents')
+
+    if (!accessiblePersonIds.includes(personId)) {
+      return NextResponse.json(
+        { error: 'Person not found' },
+        { status: 404 }
+      )
+    }
 
     const { data, error } = await supabase
       .from('person_documents')
@@ -56,10 +67,12 @@ export async function GET(
       tenantId: row.tenant_id,
       documentType: row.document_type,
       storagePath: row.storage_path,
+      title: row.title,
       fileName: row.file_name,
       contentType: row.content_type,
       fileSizeBytes: row.file_size_bytes,
       uploadedBy: row.uploaded_by,
+      note: row.note,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }))
@@ -91,6 +104,9 @@ export async function POST(
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const documentType = formData.get('documentType') as string | null
+    const replaceDocumentId = formData.get('replaceDocumentId') as string | null
+    const title = formData.get('title') as string | null
+    const note = formData.has('note') ? normalizeDocumentNote(formData.get('note')) : undefined
 
     // Validate file
     if (!file) {
@@ -125,6 +141,14 @@ export async function POST(
     }
 
     const supabase = await createClient()
+    const accessiblePersonIds = await getAccessiblePersonIdsForCurrentUser(supabase, 'documents')
+
+    if (!accessiblePersonIds.includes(personId)) {
+      return NextResponse.json(
+        { error: 'Person not found' },
+        { status: 404 }
+      )
+    }
 
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -150,14 +174,44 @@ export async function POST(
     }
 
     const tenantId = person.tenant_id
+    const allowMultiple = documentType === 'other'
+    let documentToReplace: { id: string; storage_path: string; title?: string | null; note?: string | null } | null = null
 
-    // Check if existing document exists for this person+documentType
-    const { data: existingDoc } = await supabase
-      .from('person_documents')
-      .select('*')
-      .eq('person_id', personId)
-      .eq('document_type', documentType)
-      .single()
+    if (allowMultiple && !replaceDocumentId && !title?.trim()) {
+      return NextResponse.json(
+        { error: 'Title is required for other documents' },
+        { status: 400 }
+      )
+    }
+
+    if (replaceDocumentId) {
+      const { data: replaceDoc, error: replaceDocError } = await supabase
+        .from('person_documents')
+        .select('id, storage_path, title, note')
+        .eq('id', replaceDocumentId)
+        .eq('person_id', personId)
+        .eq('document_type', documentType)
+        .single()
+
+      if (replaceDocError || !replaceDoc) {
+        return NextResponse.json(
+          { error: 'Document to replace was not found' },
+          { status: 404 }
+        )
+      }
+
+      documentToReplace = replaceDoc
+    } else if (!allowMultiple) {
+      // Preserve the existing one-document-per-type behavior for fixed document types.
+      const { data: existingDoc } = await supabase
+        .from('person_documents')
+        .select('id, storage_path, title, note')
+        .eq('person_id', personId)
+        .eq('document_type', documentType)
+        .maybeSingle()
+
+      documentToReplace = existingDoc
+    }
 
     // Upload new file first (before deleting old data to avoid data loss on failure)
     const filePath = generateFilePath(tenantId, personId, documentType, file.name)
@@ -173,6 +227,27 @@ export async function POST(
       )
     }
 
+    if (documentToReplace && !allowMultiple) {
+      const storageResult = await deleteFileFromStorage(BUCKET_NAME, documentToReplace.storage_path)
+      if (!storageResult.success) {
+        console.error('Failed to delete old file from storage:', storageResult.error)
+      }
+
+      const { error: deleteError } = await supabase
+        .from('person_documents')
+        .delete()
+        .eq('id', documentToReplace.id)
+
+      if (deleteError) {
+        await deleteFileFromStorage(BUCKET_NAME, filePath)
+        console.error('Failed to delete old document record:', deleteError)
+        return NextResponse.json(
+          { error: 'Failed to replace existing document' },
+          { status: 500 }
+        )
+      }
+    }
+
     // Insert new record
     const { data: newDocument, error: insertError } = await supabase
       .from('person_documents')
@@ -181,10 +256,12 @@ export async function POST(
         tenant_id: tenantId,
         document_type: documentType,
         storage_path: filePath,
+        title: title?.trim() || documentToReplace?.title || null,
         file_name: file.name,
         content_type: contentType,
         file_size_bytes: file.size,
         uploaded_by: user.id,
+        note: resolveReplacementDocumentNote(note, documentToReplace?.note),
       })
       .select()
       .single()
@@ -199,9 +276,8 @@ export async function POST(
       )
     }
 
-    // Delete old document after new one is successfully saved
-    if (existingDoc) {
-      const storageResult = await deleteFileFromStorage(BUCKET_NAME, existingDoc.storage_path)
+    if (documentToReplace && allowMultiple) {
+      const storageResult = await deleteFileFromStorage(BUCKET_NAME, documentToReplace.storage_path)
       if (!storageResult.success) {
         console.error('Failed to delete old file from storage:', storageResult.error)
       }
@@ -209,7 +285,7 @@ export async function POST(
       const { error: deleteError } = await supabase
         .from('person_documents')
         .delete()
-        .eq('id', existingDoc.id)
+        .eq('id', documentToReplace.id)
 
       if (deleteError) {
         console.error('Failed to delete old document record:', deleteError)

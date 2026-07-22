@@ -3,12 +3,11 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
 import { getInviteRedirectUrl } from "@/lib/supabase/invite-redirect"
 import {
-  canManageCompanyContacts,
   canManageTenant,
-  isCompanyContactEmail,
+  TENANT_INVITABLE_ROLES,
 } from "@/lib/tenant-access"
 
-const INVITABLE_ROLES = new Set(["admin", "member", "guest"])
+const INVITABLE_ROLES = new Set(TENANT_INVITABLE_ROLES)
 
 function normalizeOfficeIds(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -81,32 +80,12 @@ export async function POST(
 
     const actorMemberships = currentUserMemberships || []
     const canManageAllMembers = canManageTenant(actorMemberships)
-    const canManageCompanyContactInvite = canManageCompanyContacts(
-      actorMemberships,
-      user.email
-    )
 
-    if (!canManageAllMembers && !canManageCompanyContactInvite) {
+    if (!canManageAllMembers) {
       return NextResponse.json(
         { error: "You don't have permission to invite members" },
         { status: 403 }
       )
-    }
-
-    if (!canManageAllMembers) {
-      if (role !== "member") {
-        return NextResponse.json(
-          { error: "You can only invite company contacts as members" },
-          { status: 403 }
-        )
-      }
-
-      if (!isCompanyContactEmail(normalizedEmail)) {
-        return NextResponse.json(
-          { error: "You can only invite external company contact emails" },
-          { status: 403 }
-        )
-      }
     }
 
     if (officeIds.length > 0) {

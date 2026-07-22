@@ -24,6 +24,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname === '/admin/tenants') return 'テナント管理'
   if (pathname.startsWith('/admin/connectors')) return 'コネクタ管理'
   if (pathname === '/admin/access-logs') return 'アクセスログ'
+  if (pathname === '/people/new') return '人材新規登録'
   if (pathname.match(/^\/people\/[^/]+\/edit$/)) return '人材編集'
   if (pathname.match(/^\/people\/[^/]+$/)) return '人材詳細'
   return pathname

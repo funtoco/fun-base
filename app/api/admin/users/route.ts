@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
+import { TENANT_INVITABLE_ROLES } from "@/lib/tenant-access"
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,6 +21,13 @@ export async function POST(request: NextRequest) {
     if (!email || !password || !tenantId || !role) {
       return NextResponse.json(
         { error: "Email, password, tenantId, and role are required" },
+        { status: 400 }
+      )
+    }
+
+    if (typeof role !== "string" || !TENANT_INVITABLE_ROLES.includes(role as any)) {
+      return NextResponse.json(
+        { error: "Invalid role" },
         { status: 400 }
       )
     }
@@ -95,7 +103,7 @@ export async function POST(request: NextRequest) {
         user_id: newUser.user.id,
         tenant_id: tenantId,
         email: email.toLowerCase().trim(),
-        role: role, // 'owner', 'admin', 'member', 'guest'
+        role: role, // 'admin', 'member', 'guest'
         status: 'active',
         joined_at: new Date().toISOString()
       })
@@ -128,4 +136,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

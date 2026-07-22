@@ -1,8 +1,15 @@
+import {
+  hasTenantFeatureAccess,
+  type TenantFeaturePermission,
+} from "@/lib/tenant-access"
+import { fetchAllSupabaseRows } from "./paginated-query"
+
 type TenantMembership = {
   id?: string | null
   tenant_id?: string | null
   role?: string | null
   status?: string | null
+  feature_permissions?: unknown
   offices?: Array<{ name?: string | null }> | null
   [key: string]: unknown
 }
@@ -127,7 +134,10 @@ function membershipHasAllCompanyAccess(membership: TenantMembership): boolean {
   })
 }
 
-export function buildCompanyAccess(memberships: TenantMembership[]): CompanyAccess {
+export function buildCompanyAccess(
+  memberships: TenantMembership[],
+  feature: TenantFeaturePermission = "people"
+): CompanyAccess {
   const access: CompanyAccess = {
     fullTenantIds: new Set(),
     restrictedTenantCompanies: new Map(),
@@ -139,6 +149,19 @@ export function buildCompanyAccess(memberships: TenantMembership[]): CompanyAcce
     .forEach((membership) => {
       access.hasActiveMembership = true
       const tenantId = membership.tenant_id as string
+
+      if (
+        !hasTenantFeatureAccess(
+          {
+            role: membership.role as any,
+            status: membership.status,
+            feature_permissions: membership.feature_permissions as any,
+          },
+          feature
+        )
+      ) {
+        return
+      }
 
       if (FULL_ACCESS_ROLES.has(membership.role ?? "") || membershipHasAllCompanyAccess(membership)) {
         access.fullTenantIds.add(tenantId)
@@ -168,7 +191,8 @@ export function buildCompanyAccess(memberships: TenantMembership[]): CompanyAcce
 
 export async function getCompanyAccessForUser(
   supabase: any,
-  userId: string
+  userId: string,
+  feature: TenantFeaturePermission = "people"
 ): Promise<CompanyAccess> {
   const { data: memberships, error: membershipsError } = await supabase
     .from("user_tenants")
@@ -186,7 +210,7 @@ export async function getCompanyAccessForUser(
     .filter((id): id is string => Boolean(id))
 
   if (membershipIds.length === 0) {
-    return buildCompanyAccess(membershipRecords)
+    return buildCompanyAccess(membershipRecords, feature)
   }
 
   const { data: assignments, error: assignmentsError } = await supabase
@@ -239,7 +263,8 @@ export async function getCompanyAccessForUser(
       offices: membership.id
         ? officeNamesByMembershipId.get(membership.id) || []
         : [],
-    }))
+    })),
+    feature
   )
 }
 
@@ -280,6 +305,16 @@ function buildPeopleAccessOrFilter(access: CompanyAccess): string | null {
   return clauses.length > 0 ? clauses.join(",") : null
 }
 
+function hasVisibleCompanyAccess(access: CompanyAccess): boolean {
+  if (access.fullTenantIds.size > 0) return true
+
+  for (const companies of access.restrictedTenantCompanies.values()) {
+    if (companies.size > 0) return true
+  }
+
+  return false
+}
+
 export function applyPeopleAccessFilter<TQuery extends { or: (filters: string) => TQuery }>(
   query: TQuery,
   access: CompanyAccess
@@ -287,4 +322,46 @@ export function applyPeopleAccessFilter<TQuery extends { or: (filters: string) =
   const filter = buildPeopleAccessOrFilter(access)
   if (!filter) return null
   return query.or(filter)
+}
+
+export async function getAccessiblePersonIdsForUser(
+  supabase: any,
+  userId: string,
+  feature: TenantFeaturePermission = "people"
+): Promise<string[]> {
+  const access = await getCompanyAccessForUser(supabase, userId, feature)
+  if (!access.hasActiveMembership || !hasVisibleCompanyAccess(access)) return []
+
+  const data = await fetchAllSupabaseRows(() => {
+    const query = applyPeopleAccessFilter(
+      supabase
+        .from("people")
+        .select("id, tenant_id, company")
+        .order("id"),
+      access
+    )
+
+    if (!query) {
+      throw new Error("No accessible people query could be built")
+    }
+
+    return query
+  })
+
+  return data
+    .filter((person: any) => canAccessPersonByCompany(person, access))
+    .map((person: any) => person.id)
+    .filter((id: unknown): id is string => typeof id === "string")
+}
+
+export async function getAccessiblePersonIdsForCurrentUser(
+  supabase: any,
+  feature: TenantFeaturePermission = "people"
+): Promise<string[]> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return []
+  }
+
+  return getAccessiblePersonIdsForUser(supabase, user.id, feature)
 }

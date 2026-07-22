@@ -18,6 +18,7 @@ import {
   getTenantMembers, 
   getTenantOffices,
   resendTenantInvitation,
+  updateUserTenantFeaturePermissions,
   updateUserTenantRole,
   updateUserTenantOffices,
   removeUserFromTenant,
@@ -27,6 +28,8 @@ import {
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/lib/hooks/use-toast"
 import { canManageCompanyContacts as canManageCompanyContactsForActor } from "@/lib/tenant-access"
+import type { TenantFeaturePermissions } from "@/lib/tenant-access"
+import { TenantMembersLoadingSkeleton } from "@/components/ui/funbase-loading"
 
 interface TenantMembersPageProps {
   tenantId: string
@@ -151,6 +154,27 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
     }
   }
 
+  const handleChangeFeaturePermissions = async (
+    memberId: string,
+    permissions: TenantFeaturePermissions
+  ) => {
+    try {
+      await updateUserTenantFeaturePermissions(tenantId, memberId, permissions)
+      await fetchData()
+      toast({
+        title: "完了",
+        description: "機能権限を更新しました",
+      })
+    } catch (error) {
+      console.error('Error updating feature permissions:', error)
+      toast({
+        title: "エラー",
+        description: error instanceof Error ? error.message : "機能権限の更新に失敗しました",
+        variant: "destructive",
+      })
+    }
+  }
+
   const handleUpdateMemberOffices = async (memberId: string, officeIds: string[]) => {
     await updateUserTenantOffices(tenantId, memberId, officeIds)
     await fetchData()
@@ -163,12 +187,16 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
   // Handle member removal
   const handleDeleteMember = async (memberId: string) => {
     try {
+      const member = members.find((m) => m.id === memberId)
       await removeUserFromTenant(tenantId, memberId)
       await fetchData()
       setSelectedMembers(prev => prev.filter(id => id !== memberId))
       toast({
         title: "完了",
-        description: "メンバーの更新が完了しました",
+        description:
+          member?.status === "pending"
+            ? "招待を削除しました"
+            : "メンバーの更新が完了しました",
       })
     } catch (error) {
       console.error('Error removing member:', error)
@@ -228,12 +256,12 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
 
     setConfirmDialog({
       open: true,
-      title: member.status === "pending" ? "招待をキャンセル" : "メンバーを削除",
+      title: member.status === "pending" ? "招待を削除" : "メンバーを削除",
       description:
         member.status === "pending"
-          ? `${member.email || 'このメンバー'}さんの招待をキャンセルしますか？`
+          ? `${member.email || 'このメンバー'}さんの招待を削除しますか？必要な場合は削除後にメールで招待し直せます。`
           : `${member.email || 'このメンバー'}さんをテナントから削除しますか？この操作は取り消せません。`,
-      confirmText: member.status === "pending" ? "キャンセルする" : "削除",
+      confirmText: member.status === "pending" ? "招待を削除" : "削除",
       onConfirm: () => handleDeleteMember(memberId),
       variant: "destructive",
     })
@@ -249,22 +277,10 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
     selectedMemberRecords.every((member) => member.status === "pending")
       ? "一括キャンセル"
       : "一括削除"
-  const inviteButtonLabel = canManageMembers
-    ? "メールで招待"
-    : "企業担当者を招待"
+  const inviteButtonLabel = "メールで招待"
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">メンバー</h1>
-          <p className="text-muted-foreground">テナントのメンバーを管理します</p>
-        </div>
-        <div className="text-center py-8 text-muted-foreground">
-          読み込み中...
-        </div>
-      </div>
-    )
+    return <TenantMembersLoadingSkeleton />
   }
 
   return (
@@ -365,11 +381,11 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectMember={handleSelectMember}
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
+              onChangeFeaturePermissions={handleChangeFeaturePermissions}
               onDeleteMember={showDeleteConfirm}
               onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
               currentUserRole={currentUserRole}
-              canManageCompanyContacts={canManageCompanyContacts}
               currentUserId={user?.id}
             />
           )}
@@ -387,11 +403,11 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectMember={handleSelectMember}
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
+              onChangeFeaturePermissions={handleChangeFeaturePermissions}
               onDeleteMember={showDeleteConfirm}
               onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
               currentUserRole={currentUserRole}
-              canManageCompanyContacts={canManageCompanyContacts}
               currentUserId={user?.id}
             />
           )}
@@ -409,11 +425,11 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               onSelectMember={handleSelectMember}
               onSelectAll={handleSelectAll}
               onChangeRole={handleChangeRole}
+              onChangeFeaturePermissions={handleChangeFeaturePermissions}
               onDeleteMember={showDeleteConfirm}
               onEditOffices={setOfficeEditingMember}
               onResendInvite={handleResendInvite}
               currentUserRole={currentUserRole}
-              canManageCompanyContacts={canManageCompanyContacts}
               currentUserId={user?.id}
             />
           )}
@@ -511,8 +527,8 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
               <h3 className="font-semibold">Member（メンバー）</h3>
               <ul className="text-sm space-y-1">
                 <li>✓ データの閲覧・編集</li>
-                <li>△ 社内担当者の場合、企業担当者の招待・再送・削除のみ対応可</li>
-                <li>✗ internal member のロール変更・追加は不可</li>
+                <li>✗ メンバーの招待・再送・削除は不可</li>
+                <li>✗ ロール変更・追加は不可</li>
                 <li>✗ 設定変更不可</li>
               </ul>
             </div>
@@ -524,6 +540,16 @@ export function TenantMembersPage({ tenantId }: TenantMembersPageProps) {
                 <li>✓ データの閲覧のみ</li>
                 <li>✗ データの編集不可</li>
                 <li>✗ メンバー管理不可</li>
+              </ul>
+            </div>
+
+            {/* Feature permissions */}
+            <div className="space-y-2 border-t pt-3">
+              <h3 className="font-semibold">機能権限</h3>
+              <ul className="text-sm space-y-1">
+                <li>✓ メンバー・ゲストごとに人材一覧、ビザ、面談、サポート記録、書類、FunEduを個別にON/OFFできます</li>
+                <li>✓ 未設定の機能は既存ユーザー互換のためONとして扱います</li>
+                <li>✗ オーナー・管理者は管理維持のため全機能アクセスです</li>
               </ul>
             </div>
           </div>
