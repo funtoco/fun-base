@@ -84,29 +84,60 @@ describe('interview record notifications', () => {
     expect(announcement.body).toContain('https://funbase.example.com/interview-records/record-1')
   })
 
-  test('builds a single batch announcement for multiple interview records', () => {
+  test('builds a concise notification with the person for a single interview record', () => {
     const announcement = buildInterviewRecordBatchAnnouncement({
-      count: 12,
+      records: [{
+        personName: '山田 太郎',
+        companyName: '株式会社サンプル',
+        interviewDate: '2026-07-15',
+      }],
       appBaseUrl: 'https://funbase.example.com/',
     })
 
-    expect(announcement.title).toBe('新しい面談記録が12件追加されました')
-    expect(announcement.body).toContain('新しい面談記録が12件FunBaseに追加されました。')
-    expect(announcement.body).toContain('面談一覧: https://funbase.example.com/meetings')
+    expect(announcement.title).toBe('面談記録の追加（1件）')
+    expect(announcement.emailBody).toBe([
+      '対象者：山田 太郎',
+      '面談日：2026年7月15日',
+      '法人：株式会社サンプル',
+    ].join('\n'))
+    expect(announcement.body).toContain('面談一覧：https://funbase.example.com/meetings')
+    expect(announcement.emailBody).not.toContain('新しい面談記録')
+    expect(announcement.emailBody).not.toContain('https://')
     expect(announcement.body).not.toContain('interview-records/')
+  })
+
+  test('lists every person for a multi-record notification', () => {
+    const announcement = buildInterviewRecordBatchAnnouncement({
+      records: Array.from({ length: 7 }, (_, index) => ({
+        personName: `対象者 ${index + 1}`,
+        companyName: '株式会社サンプル',
+        interviewDate: `2026-07-${String(index + 1).padStart(2, '0')}`,
+      })),
+      appBaseUrl: 'https://funbase.example.com',
+    })
+
+    expect(announcement.title).toBe('面談記録の追加（7件）')
+    expect(announcement.emailBody).toContain('・対象者 1（2026年7月1日・株式会社サンプル）')
+    expect(announcement.emailBody).toContain('・対象者 5（2026年7月5日・株式会社サンプル）')
+    expect(announcement.emailBody).toContain('・対象者 6（2026年7月6日・株式会社サンプル）')
+    expect(announcement.emailBody).toContain('・対象者 7（2026年7月7日・株式会社サンプル）')
+    expect(announcement.emailBody).not.toContain('ほか')
   })
 
   test('builds email body with notification settings link', () => {
     const email = buildInterviewRecordEmail({
-      title: '新しい面談記録が追加されました',
-      body: '本文',
-      announcementUrl: 'https://funbase.example.com/announcements?id=announcement-1',
+      title: '面談記録の追加（1件）',
+      body: '対象者：山田 太郎\n面談日：2026年7月15日',
+      actionUrl: 'https://funbase.example.com/meetings',
       settingsUrl: 'https://funbase.example.com/settings/notifications',
     })
 
-    expect(email.subject).toBe('【FunBase】新しい面談記録が追加されました')
-    expect(email.text).toContain('https://funbase.example.com/announcements?id=announcement-1')
-    expect(email.text).toContain('通知設定: https://funbase.example.com/settings/notifications')
+    expect(email.subject).toBe('【FunBase】面談記録の追加（1件）')
+    expect(email.text).toContain('対象者：山田 太郎')
+    expect(email.text).toContain('面談記録を確認する：https://funbase.example.com/meetings')
+    expect(email.text).toContain('通知設定：https://funbase.example.com/settings/notifications')
+    expect(email.html).toContain('対象者：山田 太郎')
+    expect(email.html).toContain('background: #2563eb')
     expect(email.html).toContain('通知設定')
   })
 })
