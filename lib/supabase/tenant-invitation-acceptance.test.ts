@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { getTenantMembershipIdentityFilter, pickTenantMembershipForInviteAcceptance } from "./tenants"
+import {
+  getTenantMembershipIdentityFilter,
+  pickExistingMembershipForTargetedInvite,
+  pickTenantMembershipForInviteAcceptance,
+} from "./tenants"
 
 describe("getTenantMembershipIdentityFilter", () => {
   it("matches both authenticated user id and invited email so reusable invite links activate pending memberships", () => {
@@ -40,6 +44,38 @@ describe("pickTenantMembershipForInviteAcceptance", () => {
     const picked = pickTenantMembershipForInviteAcceptance(
       [{ id: "pending-supporter", status: "pending", role: "supporter", email: "invited@example.com" }],
       "invited@example.com"
+    )
+
+    expect(picked).toBeUndefined()
+  })
+})
+
+describe("pickExistingMembershipForTargetedInvite", () => {
+  it("prefers an active non-supporter membership over the targeted pending invite", () => {
+    const picked = pickExistingMembershipForTargetedInvite(
+      [
+        { id: "active-member", status: "active", role: "member" },
+        { id: "suspended-member", status: "suspended", role: "member" },
+      ],
+      "member"
+    )
+
+    expect(picked?.id).toBe("active-member")
+  })
+
+  it("picks a suspended membership with the targeted role to avoid duplicate user tenant roles", () => {
+    const picked = pickExistingMembershipForTargetedInvite(
+      [{ id: "suspended-member", status: "suspended", role: "member" }],
+      "member"
+    )
+
+    expect(picked?.id).toBe("suspended-member")
+  })
+
+  it("does not pick a suspended membership with a different role", () => {
+    const picked = pickExistingMembershipForTargetedInvite(
+      [{ id: "suspended-admin", status: "suspended", role: "admin" }],
+      "member"
     )
 
     expect(picked).toBeUndefined()

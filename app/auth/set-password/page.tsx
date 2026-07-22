@@ -357,8 +357,8 @@ export default function SetPasswordPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button 
-              onClick={() => router.push(successRedirectPath)} 
+            <Button
+              onClick={() => router.push(successRedirectPath)}
               className="w-full"
             >
               ホームへ
