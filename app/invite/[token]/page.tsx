@@ -4,7 +4,10 @@ import { useState, useEffect, type FormEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { isExistingAccountSignUpError } from "@/lib/supabase/auth-errors"
-import { validateInviteRegistrationPasswords } from "@/lib/invite-registration-form"
+import {
+  isLikelyExistingAccountSignUpResponse,
+  validateInviteRegistrationPasswords,
+} from "@/lib/invite-registration-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -150,6 +153,17 @@ export default function InviteAcceptancePage() {
       if (data.session) {
         await acceptInvite()
         return
+      }
+
+      if (isLikelyExistingAccountSignUpResponse(data.user)) {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: emailRedirectTo,
+        })
+
+        if (resetError) {
+          setAuthError("既にアカウントがあります。ログイン、またはパスワード再設定をお試しください。")
+          return
+        }
       }
 
       setStatus("signupSent")

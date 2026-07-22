@@ -1,3 +1,11 @@
+type SignUpUserLike = {
+  identities?: unknown[] | null
+}
+
+export function isLikelyExistingAccountSignUpResponse(user: SignUpUserLike | null | undefined): boolean {
+  return Array.isArray(user?.identities) && user.identities.length === 0
+}
+
 export function validateInviteRegistrationPasswords(
   password: string,
   passwordConfirmation: string
