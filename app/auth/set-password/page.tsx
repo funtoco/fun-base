@@ -32,7 +32,9 @@ export default function SetPasswordPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
-  const successRedirectPath = getSafeAuthNextPath(searchParams.get("next"), "/admin/tenants")
+  const [successRedirectPath] = useState(() =>
+    getSafeAuthNextPath(searchParams.get("next"), "/admin/tenants")
+  )
   const shouldActivateMembership = shouldActivateMembershipAfterPasswordSet(successRedirectPath)
 
   useEffect(() => {
