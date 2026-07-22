@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest"
 
-import { getSafeAuthNextPath } from "./auth-next-path"
+import {
+  getSafeAuthNextPath,
+  shouldActivateMembershipAfterPasswordSet,
+} from "./auth-next-path"
+
+describe("shouldActivateMembershipAfterPasswordSet", () => {
+  it("skips generic membership activation when returning to a token-scoped invite", () => {
+    expect(shouldActivateMembershipAfterPasswordSet("/invite/token")).toBe(false)
+  })
+
+  it("keeps generic membership activation for normal password setup", () => {
+    expect(shouldActivateMembershipAfterPasswordSet("/admin/tenants")).toBe(true)
+  })
+})
 
 describe("getSafeAuthNextPath", () => {
   it("allows an app-relative invite path", () => {
