@@ -121,9 +121,10 @@ export default function InviteAcceptancePage() {
     }
 
     const origin = window.location.origin
-    // After email confirmation, redirect back to this invite page
-    const emailRedirectTo = `${origin}/auth/callback?next=/invite/${token}`
-    const passwordResetRedirectTo = `${origin}/auth/set-password?next=${encodeURIComponent(`/invite/${token}`)}`
+    const invitePath = `/invite/${token}`
+    const emailRedirectTo = `${origin}/auth/callback?next=${invitePath}`
+    const setPasswordNext = `/auth/set-password?type=recovery&next=${encodeURIComponent(invitePath)}`
+    const passwordResetRedirectTo = `${origin}/auth/callback?type=recovery&next=${encodeURIComponent(setPasswordNext)}`
 
     try {
       const { data, error } = await supabase.auth.signUp({
