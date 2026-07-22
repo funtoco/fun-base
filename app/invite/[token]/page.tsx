@@ -28,6 +28,7 @@ type PageStatus =
 interface InviteInfo {
   tenantName: string
   defaultRole: string
+  invitedEmail?: string | null
 }
 
 const roleLabel: Record<string, string> = {
@@ -53,6 +54,8 @@ export default function InviteAcceptancePage() {
   const [passwordConfirmation, setPasswordConfirmation] = useState("")
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState("")
+  const invitedEmail = inviteInfo?.invitedEmail?.trim() || ""
+  const registrationEmail = invitedEmail || email.trim()
 
   // Step 1: fetch invite info and check login state
   useEffect(() => {
@@ -68,7 +71,11 @@ export default function InviteAcceptancePage() {
           return
         }
 
-        setInviteInfo({ tenantName: data.tenantName, defaultRole: data.defaultRole })
+        setInviteInfo({
+          tenantName: data.tenantName,
+          defaultRole: data.defaultRole,
+          invitedEmail: data.invitedEmail ?? null,
+        })
 
         // Check if user is logged in
         const { data: { user } } = await supabase.auth.getUser()
@@ -113,6 +120,12 @@ export default function InviteAcceptancePage() {
     setAuthLoading(true)
     setAuthError("")
 
+    if (!registrationEmail) {
+      setAuthError("メールアドレスを確認してください")
+      setAuthLoading(false)
+      return
+    }
+
     const passwordError = validateInviteRegistrationPasswords(password, passwordConfirmation)
     if (passwordError) {
       setAuthError(passwordError)
@@ -127,7 +140,10 @@ export default function InviteAcceptancePage() {
     const passwordResetRedirectTo = `${origin}/auth/callback?type=recovery&next=${encodeURIComponent(setPasswordNext)}`
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: registrationEmail,
+        password,
+      })
 
       if (!signInError) {
         await acceptInvite()
@@ -135,14 +151,14 @@ export default function InviteAcceptancePage() {
       }
 
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: registrationEmail,
         password,
         options: { emailRedirectTo },
       })
 
       if (error) {
         if (isExistingAccountSignUpError(error.message)) {
-          const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          const { error: resetError } = await supabase.auth.resetPasswordForEmail(registrationEmail, {
             redirectTo: passwordResetRedirectTo,
           })
 
@@ -165,7 +181,7 @@ export default function InviteAcceptancePage() {
       }
 
       if (isLikelyExistingAccountSignUpResponse(data.user)) {
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(registrationEmail, {
           redirectTo: passwordResetRedirectTo,
         })
 
@@ -267,7 +283,7 @@ export default function InviteAcceptancePage() {
             <CheckCircle className="h-12 w-12 text-blue-500 mx-auto mb-2" />
             <CardTitle>確認メールを送信しました</CardTitle>
             <CardDescription>
-              {email} に確認メールを送りました。<br />
+              {registrationEmail} に確認メールを送りました。<br />
               メール内のリンクをクリックすると、自動的に {inviteInfo?.tenantName} に参加します。
             </CardDescription>
           </CardHeader>
@@ -304,17 +320,26 @@ export default function InviteAcceptancePage() {
               </Alert>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="email">メールアドレス</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={authLoading}
-              />
-            </div>
+            {invitedEmail ? (
+              <div className="space-y-2">
+                <Label>メールアドレス</Label>
+                <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-foreground">
+                  {invitedEmail}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="email">メールアドレス</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={authLoading}
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="password">パスワード</Label>

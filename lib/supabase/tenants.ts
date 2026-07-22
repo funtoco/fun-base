@@ -558,6 +558,7 @@ export interface InviteLinkInfo {
   tenantId: string
   tenantName: string
   defaultRole: 'admin' | 'member' | 'guest'
+  invitedEmail?: string | null
   isActive: boolean
   isExpired: boolean
 }
@@ -618,12 +619,29 @@ export async function getInviteLinkInfo(token: string): Promise<{ success: boole
 
     const { data, error } = await adminSupabase
       .from('tenant_invite_links')
-      .select('tenant_id, default_role, expires_at, is_active, tenants(name)')
+      .select('tenant_id, default_role, expires_at, is_active, target_user_tenant_id, tenants(name)')
       .eq('token', token)
       .single()
 
     if (error || !data) {
       return { success: false, error: '招待リンクが見つかりません' }
+    }
+
+    let invitedEmail: string | null = null
+    if (data.target_user_tenant_id) {
+      const { data: targetMembership, error: targetMembershipError } = await adminSupabase
+        .from('user_tenants')
+        .select('email')
+        .eq('id', data.target_user_tenant_id)
+        .eq('tenant_id', data.tenant_id)
+        .maybeSingle()
+
+      if (targetMembershipError) {
+        console.error('Error fetching target invite email:', targetMembershipError)
+        return { success: false, error: '招待情報の確認に失敗しました' }
+      }
+
+      invitedEmail = targetMembership?.email ?? null
     }
 
     const isExpired = data.expires_at ? new Date(data.expires_at) < new Date() : false
@@ -637,6 +655,7 @@ export async function getInviteLinkInfo(token: string): Promise<{ success: boole
         tenantId: data.tenant_id,
         tenantName: tenant?.name ?? '不明なテナント',
         defaultRole: data.default_role as 'admin' | 'member' | 'guest',
+        invitedEmail,
         isActive: data.is_active,
         isExpired,
       },
