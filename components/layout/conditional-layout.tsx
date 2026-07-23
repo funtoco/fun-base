@@ -9,6 +9,7 @@ import { FunBaseLoading } from "@/components/ui/funbase-loading"
 import { isPublicRoute } from "@/lib/auth-route-guards"
 import { usePathname, useRouter } from "next/navigation"
 import { usePageViewLogger } from "@/hooks/use-page-view-logger"
+import { PortalShell } from "@/components/portal/portal-shell"
 
 interface ConditionalLayoutProps {
   children: React.ReactNode
@@ -18,7 +19,8 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   const { user, loading } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
-  const isPublicPage = isPublicRoute(pathname)
+  const isPortalPage = pathname.startsWith("/company") || pathname.startsWith("/ops")
+  const isPublicPage = isPublicRoute(pathname) || isPortalPage
 
   // auth が完了していてログイン済みの非公開ページのみ記録する
   usePageViewLogger({ enabled: !loading && !!user && !isPublicPage })
@@ -31,6 +33,10 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
     const search = typeof window !== "undefined" ? window.location.search : ""
     router.replace(`/login?next=${encodeURIComponent(`${pathname}${search}`)}`)
   }, [isPublicPage, loading, pathname, router, user])
+
+  if (isPortalPage) {
+    return <PortalShell>{children}</PortalShell>
+  }
 
   if (loading || (!isPublicPage && !user)) {
     return <FunBaseLoading variant="fullscreen" title="FunBaseを準備中" description="安全にセッションを確認しています" />

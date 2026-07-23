@@ -2,7 +2,7 @@ export const DEFAULT_AUTH_REDIRECT_PATH = "/dashboard"
 
 const AUTH_ROUTES = ["/login"]
 const REMOVED_PUBLIC_ROUTES = ["/signup"]
-const PUBLIC_ROUTE_PREFIXES = ["/auth", "/invite"]
+const PUBLIC_ROUTE_PREFIXES = ["/auth", "/invite", "/company", "/ops"]
 
 function matchesRoute(pathname: string, route: string) {
   return pathname === route || pathname.startsWith(`${route}/`)
