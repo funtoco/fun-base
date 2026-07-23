@@ -19,6 +19,7 @@ import { toggleQueryMultiValue } from "@/lib/interview-list-query"
 import { getLatestVisaActivityDate } from "@/lib/visa-display"
 import { buildVisaFilterQuery, parseVisaFilterQuery } from "@/lib/visa-filter-query"
 import type { VisaStatus, Person, Visa } from "@/lib/models"
+import { usePortal } from "@/components/portal/portal-provider"
 
 const visaStatuses: VisaStatus[] = [
   "書類準備中",
@@ -43,6 +44,7 @@ export default function VisasPage() {
   const router = useRouter()
   const { startNavigation } = useNavigationProgress()
   const searchParams = useSearchParams()
+  const { registerVisaCase } = usePortal()
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState<string[]>([])
   const [expiryFilter, setExpiryFilter] = useState<string[]>([])
@@ -201,6 +203,7 @@ export default function VisasPage() {
           badgeVariant: isUrgent ? ("destructive" as const) : ("secondary" as const),
           metadata: {
             personId: person.id,
+            company: person.tenantName || person.company || "所属企業未設定",
             expiryDate: visa.expiryDate,
             type: visa.type,
             manager: visa.manager,
@@ -286,8 +289,15 @@ export default function VisasPage() {
   }
 
   const handleItemClick = (item: any) => {
+    registerVisaCase({
+      id: item.id,
+      person: item.title,
+      company: item.metadata.company,
+      type: item.metadata.type,
+      deadline: item.metadata.expiryDate,
+    })
     startNavigation()
-    router.push(`/people/${item.metadata.personId}`)
+    router.push(`/visas/${item.id}`)
   }
 
   const clearAllFilters = () => {

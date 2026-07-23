@@ -10,6 +10,7 @@ type PortalContextValue = {
   uploadDocument: (caseId: string, documentId: string, fileName: string) => void
   addComment: (caseId: string, message: string) => void
   sendReminder: (caseId: string) => void
+  registerVisaCase: (visa: { id: string; person: string; company: string; type: string; deadline?: string }) => void
 }
 
 const PortalContext = createContext<PortalContextValue | null>(null)
@@ -68,7 +69,38 @@ export function PortalProvider({ children }: { children: React.ReactNode }) {
     toast({ title: "メールを送信しました", description: "送信履歴を活動に記録しました。" })
   }
 
-  const value = useMemo(() => ({ cases, updateDocument, uploadDocument, addComment, sendReminder }), [cases])
+  const registerVisaCase = (visa: { id: string; person: string; company: string; type: string; deadline?: string }) => {
+    setCases((current) => {
+      if (current.some((item) => item.id === visa.id)) return current
+
+      return [...current, {
+        id: visa.id,
+        person: visa.person,
+        romanName: visa.person,
+        company: visa.company || "所属企業未設定",
+        visa: visa.type,
+        status: "書類準備中",
+        responsibility: "企業",
+        progress: 25,
+        deadline: visa.deadline || "未設定",
+        priority: "中",
+        reason: "必要書類の準備を進めてください",
+        country: "未設定",
+        tasks: [
+          { id: `${visa.id}-task-1`, title: "必要書類の提出", assignee: "企業", due: visa.deadline || "未設定", done: false },
+          { id: `${visa.id}-task-2`, title: "申請内容の確認", assignee: "運営", due: visa.deadline || "未設定", done: false },
+        ],
+        documents: [
+          { id: `${visa.id}-doc-1`, name: "パスポート写し", category: "本人書類", status: "未提出", updatedAt: "—", version: 0 },
+          { id: `${visa.id}-doc-2`, name: "在留カード写し", category: "本人書類", status: "未提出", updatedAt: "—", version: 0 },
+          { id: `${visa.id}-doc-3`, name: "雇用契約書", category: "企業書類", status: "未提出", updatedAt: "—", version: 0 },
+        ],
+        activities: [{ id: `${visa.id}-activity-1`, title: "申請案件を連携", detail: "ビザ進捗管理から申請書類の管理を開始しました", time: "たった今" }],
+      }]
+    })
+  }
+
+  const value = useMemo(() => ({ cases, updateDocument, uploadDocument, addComment, sendReminder, registerVisaCase }), [cases])
   return <PortalContext.Provider value={value}>{children}</PortalContext.Provider>
 }
 

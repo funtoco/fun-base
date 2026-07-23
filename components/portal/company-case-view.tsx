@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { useParams } from "next/navigation"
 import { ArrowLeft, CheckCircle2, Circle, FileText, MessageSquare, Upload } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -11,22 +10,19 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Chip, ProgressBar } from "@/components/portal/portal-widgets"
 import { usePortal } from "@/components/portal/portal-provider"
+import type { PortalCase } from "@/lib/portal-data"
 
-export default function CompanyCaseDetail() {
-  const { caseId } = useParams<{ caseId: string }>()
-  const { cases, uploadDocument, addComment } = usePortal()
-  const item = cases.find((entry) => entry.id === caseId)
+export function CompanyCaseView({ item }: { item: PortalCase }) {
+  const { uploadDocument, addComment } = usePortal()
   const [comment, setComment] = useState("")
   const [uploadFor, setUploadFor] = useState<{ id: string; name: string } | null>(null)
   const [fileName, setFileName] = useState("")
-
-  if (!item) return <div className="mx-auto max-w-3xl rounded-xl border border-dashed p-16 text-center"><p className="text-lg font-medium">案件が見つかりませんでした</p><p className="mt-2 text-sm text-muted-foreground">案件番号をご確認ください。</p><Button asChild className="mt-6" variant="outline"><Link href="/company/cases"><ArrowLeft data-icon="inline-start" />案件一覧へ戻る</Link></Button></div>
 
   const steps = ["書類準備中", "審査中", "修正対応中", "申請準備完了"]
   const currentStep = steps.indexOf(item.status)
 
   return <div className="mx-auto flex max-w-5xl flex-col gap-6">
-    <Link href="/company/cases" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />案件一覧へ戻る</Link>
+    <Link href="/visas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />ビザ進捗管理へ戻る</Link>
     <div className="flex flex-col gap-4 rounded-xl border bg-card p-6">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-semibold tracking-tight">{item.person}</h1><Chip label={item.status} /><Chip label={item.responsibility} /></div><p className="mt-1 text-sm text-muted-foreground">{item.romanName} ・ {item.company} ・ {item.visa}</p></div><div className="text-right"><p className="text-xs text-muted-foreground">申請期限</p><p className="text-lg font-semibold">{item.deadline}</p></div></div>
       <div className="flex flex-col gap-2"><div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">進捗</span><span className="font-medium">{item.progress}%</span></div><ProgressBar value={item.progress} /></div>

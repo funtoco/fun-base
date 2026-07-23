@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/auth-context"
 import { ConditionalLayout } from "@/components/layout/conditional-layout"
 import { NavigationProgressProvider } from "@/components/navigation-progress"
 import { Toaster } from "@/components/ui/toaster"
+import { PortalProvider } from "@/components/portal/portal-provider"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -29,11 +30,13 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <AuthProvider>
-          <NavigationProgressProvider>
-            <ConditionalLayout>
-              <Suspense fallback={null}>{children}</Suspense>
-            </ConditionalLayout>
-          </NavigationProgressProvider>
+          <PortalProvider>
+            <NavigationProgressProvider>
+              <ConditionalLayout>
+                <Suspense fallback={null}>{children}</Suspense>
+              </ConditionalLayout>
+            </NavigationProgressProvider>
+          </PortalProvider>
           <Toaster />
         </AuthProvider>
         <Analytics />
