@@ -129,6 +129,21 @@ export function isCompanyContactEmail(email?: string | null): boolean {
   return normalizedEmail !== null && !isInternalStaffEmail(normalizedEmail)
 }
 
+export function isVisibleCompanyTenantMember(input: {
+  email?: string | null
+  user?: { email?: string | null } | null
+}): boolean {
+  const email =
+    normalizeEmailForClassification(input.email)
+    ?? normalizeEmailForClassification(input.user?.email)
+
+  if (!email) {
+    return false
+  }
+
+  return !isInternalStaffEmail(email)
+}
+
 export function isCompanyContactRole(role: TenantAccessRole | null): boolean {
   return role === "member" || role === "guest"
 }

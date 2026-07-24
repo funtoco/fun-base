@@ -25,6 +25,7 @@ export async function GET(
     tenantId: result.info.tenantId,
     tenantName: result.info.tenantName,
     defaultRole: result.info.defaultRole,
+    invitedEmail: result.info.invitedEmail,
   })
 }
 

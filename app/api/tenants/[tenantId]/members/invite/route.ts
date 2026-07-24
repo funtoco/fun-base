@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
+import { sendEmail } from "@/lib/notifications/email"
 import { getInviteRedirectUrl } from "@/lib/supabase/invite-redirect"
+import { buildTenantInvitationEmail, buildTenantInviteUrl } from "@/lib/tenant-invitation-email"
 import {
   canManageTenant,
   TENANT_INVITABLE_ROLES,
@@ -145,45 +147,25 @@ export async function POST(
         )
     }
 
-    let redirectTo: string
-    try {
-      redirectTo = getInviteRedirectUrl({ requestOrigin: request.nextUrl.origin })
-    } catch (error) {
-      console.error("Error resolving invitation redirect URL:", error)
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "Failed to resolve redirect URL" },
-        { status: 500 }
-      )
-    }
-
-    // Use admin client to send invitation
     const adminSupabase = createAdminClient()
-    
+    let createdUserTenantId: string | null = null
+
     try {
-      // Use Supabase auth admin to send invitation email
-      const { data, error } = await adminSupabase.auth.admin.inviteUserByEmail(normalizedEmail, {
-        data: {
-          tenant_id: params.tenantId,
-          role: role,
-          invited_by: user.id,
-          office_ids: officeIds,
-        },
-        redirectTo
-      })
-      
-      if (error) {
-        console.error('Error sending invitation:', error)
-        return NextResponse.json(
-          { error: error.message || "Failed to send invitation" },
-          { status: 500 }
-        )
+      const { data: tenant, error: tenantError } = await adminSupabase
+        .from("tenants")
+        .select("name")
+        .eq("id", params.tenantId)
+        .single()
+
+      if (tenantError || !tenant) {
+        console.error("Error fetching tenant for invitation email:", tenantError)
+        return NextResponse.json({ error: "Failed to fetch tenant" }, { status: 500 })
       }
-      
-      // Store the invitation metadata in user_tenants with pending status
+
+      // Store the invitation metadata before sending the reusable app invite link.
       const { data: userTenant, error: userTenantError } = await adminSupabase
         .from('user_tenants')
         .insert({
-          user_id: data.user.id,
           tenant_id: params.tenantId,
           email: normalizedEmail,
           role: role,
@@ -193,10 +175,9 @@ export async function POST(
         })
         .select("id")
         .single()
-      
+
       if (userTenantError) {
         console.error('Error creating user tenant record:', userTenantError)
-        // Check if it's a duplicate key error
         if (userTenantError.code === '23505') {
           return NextResponse.json(
             { error: "This user is already a member or has a pending invitation" },
@@ -209,6 +190,8 @@ export async function POST(
         )
       }
 
+      createdUserTenantId = userTenant.id
+
       if (officeIds.length > 0) {
         const { error: officeAssignmentError } = await adminSupabase
           .from("user_tenant_offices")
@@ -220,19 +203,76 @@ export async function POST(
 
         if (officeAssignmentError) {
           console.error("Error creating user tenant office assignments:", officeAssignmentError)
-          return NextResponse.json(
-            { error: "Failed to assign affiliations" },
-            { status: 500 }
-          )
+          throw new Error("Failed to assign affiliations")
         }
       }
-      
-      return NextResponse.json({ 
-        success: true, 
-        message: "Invitation sent successfully" 
+
+      const { data: link, error: inviteLinkError } = await adminSupabase
+        .from("tenant_invite_links")
+        .insert({
+          tenant_id: params.tenantId,
+          default_role: role,
+          is_active: true,
+          created_by: user.id,
+          target_user_tenant_id: userTenant.id,
+        })
+        .select("token")
+        .single()
+
+      if (inviteLinkError || !link) {
+        console.error("Error creating reusable invite link:", inviteLinkError)
+        throw new Error("Failed to create invite link")
+      }
+
+      const baseUrl = getInviteRedirectUrl({ requestOrigin: request.nextUrl.origin })
+      const inviteUrl = buildTenantInviteUrl(baseUrl, link.token)
+      const emailMessage = buildTenantInvitationEmail({
+        tenantName: tenant.name ?? "FunBase",
+        inviteUrl,
+      })
+
+      await sendEmail({
+        to: normalizedEmail,
+        ...emailMessage,
+      })
+
+      return NextResponse.json({
+        success: true,
+        message: "Invitation sent successfully"
       })
     } catch (error) {
       console.error('Error in invitation process:', error)
+
+      if (createdUserTenantId) {
+        const { error: cleanupLinkError } = await adminSupabase
+          .from("tenant_invite_links")
+          .delete()
+          .eq("target_user_tenant_id", createdUserTenantId)
+
+        if (cleanupLinkError) {
+          console.error("Error cleaning up failed invite link:", cleanupLinkError)
+        }
+
+        const { error: cleanupOfficesError } = await adminSupabase
+          .from("user_tenant_offices")
+          .delete()
+          .eq("user_tenant_id", createdUserTenantId)
+
+        if (cleanupOfficesError) {
+          console.error("Error cleaning up failed invite office assignments:", cleanupOfficesError)
+        }
+
+        const { error: cleanupMemberError } = await adminSupabase
+          .from("user_tenants")
+          .delete()
+          .eq("id", createdUserTenantId)
+          .eq("status", "pending")
+
+        if (cleanupMemberError) {
+          console.error("Error cleaning up failed pending invitation:", cleanupMemberError)
+        }
+      }
+
       return NextResponse.json(
         { error: "Failed to send invitation" },
         { status: 500 }

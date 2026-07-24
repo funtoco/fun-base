@@ -6,6 +6,7 @@ import {
   isCompanyContactEmail,
   isCompanyContactRole,
   isInternalStaffEmail,
+  isVisibleCompanyTenantMember,
   normalizeTenantFeaturePermissions,
 } from "./tenant-access"
 
@@ -46,6 +47,14 @@ describe("tenant access", () => {
     expect(isCompanyContactRole("guest")).toBe(true)
     expect(isCompanyContactRole("admin")).toBe(false)
     expect(isCompanyContactRole("supporter")).toBe(false)
+  })
+
+  test("company tenant member visibility hides internal and email-less rows", () => {
+    expect(isVisibleCompanyTenantMember({ email: "contact@example.com" })).toBe(true)
+    expect(isVisibleCompanyTenantMember({ email: " ", user: { email: "contact@example.com" } })).toBe(true)
+    expect(isVisibleCompanyTenantMember({ email: "staff@funtoco.jp" })).toBe(false)
+    expect(isVisibleCompanyTenantMember({ user: { email: "staff@funtoco.jp" } })).toBe(false)
+    expect(isVisibleCompanyTenantMember({ email: null })).toBe(false)
   })
 
   test("feature permissions default to allowed for backward compatibility", () => {
