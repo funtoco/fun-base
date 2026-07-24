@@ -8,6 +8,7 @@ import {
   canManageTenant,
   TENANT_INVITABLE_ROLES,
 } from "@/lib/tenant-access"
+import { validateInviteOffices } from "@/lib/portal/invite-validation"
 
 const INVITABLE_ROLES = new Set(TENANT_INVITABLE_ROLES)
 
@@ -88,6 +89,11 @@ export async function POST(
         { error: "You don't have permission to invite members" },
         { status: 403 }
       )
+    }
+
+    const officeCheck = validateInviteOffices(role, officeIds)
+    if (!officeCheck.ok) {
+      return NextResponse.json({ error: officeCheck.error }, { status: 400 })
     }
 
     if (officeIds.length > 0) {
