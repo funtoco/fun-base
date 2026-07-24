@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '0 2 * * *'
     - cron: '0 3 * * *'
-    - cron: '0 19 * * *'
+    - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       sync_type:
@@ -119,7 +119,7 @@ jobs:
           pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type visas
 
   sync-interview-records:
-    if: github.event_name == 'schedule' && github.event.schedule == '0 19 * * *' || github.event_name == 'workflow_dispatch' && github.event.inputs.sync_type == 'interview_records'
+    if: github.event_name == 'schedule' && github.event.schedule == '0 0 * * *' || github.event_name == 'workflow_dispatch' && github.event.inputs.sync_type == 'interview_records'
     runs-on: ubuntu-latest
     timeout-minutes: 360
     environment: Production
@@ -184,7 +184,7 @@ jobs:
           }
 
           if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
-            # 04:00 JST daily: small newest-record window, one connector at a time.
+            # 09:00 JST daily: small newest-record window, one connector at a time.
             cmd+=(--all-batches --limit 1 --record-id-tail-size 2000)
           else
             cmd+=(--all-batches)
