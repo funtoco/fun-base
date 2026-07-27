@@ -20,15 +20,21 @@ describe("isLikelyExistingAccountSignUpResponse", () => {
 })
 
 describe("validateInviteRegistrationPasswords", () => {
-  it("requires the password to be at least 6 characters", () => {
-    expect(validateInviteRegistrationPasswords("abcde", "abcde")).toBe("パスワードは6文字以上で入力してください")
+  it("requires the password to be at least 8 characters", () => {
+    expect(validateInviteRegistrationPasswords("abcdefg", "abcdefg")).toBe("パスワードは8文字以上で入力してください")
   })
 
   it("requires the confirmation password to match", () => {
-    expect(validateInviteRegistrationPasswords("abcdef", "abcdeg")).toBe("パスワードが一致しません")
+    expect(validateInviteRegistrationPasswords("abcdefgh", "abcdefgi")).toBe("パスワードが一致しません")
   })
 
-  it("accepts matching passwords with at least 6 characters", () => {
-    expect(validateInviteRegistrationPasswords("abcdef", "abcdef")).toBeNull()
+  it("can skip the minimum length check for existing-account sign in", () => {
+    expect(
+      validateInviteRegistrationPasswords("abcdef", "abcdef", { enforceMinimumLength: false })
+    ).toBeNull()
+  })
+
+  it("accepts matching passwords with at least 8 characters", () => {
+    expect(validateInviteRegistrationPasswords("abcdefgh", "abcdefgh")).toBeNull()
   })
 })

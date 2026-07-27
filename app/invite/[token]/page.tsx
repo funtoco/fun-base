@@ -138,7 +138,9 @@ export default function InviteAcceptancePage() {
       return
     }
 
-    const passwordError = validateInviteRegistrationPasswords(password, passwordConfirmation)
+    const passwordError = validateInviteRegistrationPasswords(password, passwordConfirmation, {
+      enforceMinimumLength: false,
+    })
     if (passwordError) {
       setAuthError(passwordError)
       setAuthLoading(false)
@@ -200,6 +202,12 @@ export default function InviteAcceptancePage() {
         }
 
         await acceptInvite()
+        return
+      }
+
+      const newPasswordError = validateInviteRegistrationPasswords(password, passwordConfirmation)
+      if (newPasswordError) {
+        setAuthError(newPasswordError)
         return
       }
 
@@ -403,9 +411,8 @@ export default function InviteAcceptancePage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={authLoading}
-                minLength={6}
               />
-              <p className="text-xs text-muted-foreground">6文字以上で入力してください</p>
+              <p className="text-xs text-muted-foreground">8文字以上で入力してください</p>
             </div>
 
             <div className="space-y-2">
@@ -417,7 +424,6 @@ export default function InviteAcceptancePage() {
                 onChange={(e) => setPasswordConfirmation(e.target.value)}
                 required
                 disabled={authLoading}
-                minLength={6}
               />
             </div>
 

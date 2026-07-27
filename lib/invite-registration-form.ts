@@ -9,10 +9,13 @@ export function isLikelyExistingAccountSignUpResponse(user: SignUpUserLike | nul
 
 export function validateInviteRegistrationPasswords(
   password: string,
-  passwordConfirmation: string
+  passwordConfirmation: string,
+  options: { enforceMinimumLength?: boolean } = {}
 ): string | null {
-  if (password.length < 6) {
-    return "パスワードは6文字以上で入力してください"
+  const enforceMinimumLength = options.enforceMinimumLength ?? true
+
+  if (enforceMinimumLength && password.length < 8) {
+    return "パスワードは8文字以上で入力してください"
   }
 
   if (password !== passwordConfirmation) {

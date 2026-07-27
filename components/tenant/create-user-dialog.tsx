@@ -52,8 +52,8 @@ export function CreateUserDialog({
 
     if (!password) {
       newErrors.password = "パスワードを入力してください"
-    } else if (password.length < 6) {
-      newErrors.password = "パスワードは6文字以上で入力してください"
+    } else if (password.length < 8) {
+      newErrors.password = "パスワードは8文字以上で入力してください"
     }
 
     if (!confirmPassword) {
@@ -159,7 +159,7 @@ export function CreateUserDialog({
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="6文字以上"
+                  placeholder="8文字以上"
                 />
                 <Button
                   type="button"
