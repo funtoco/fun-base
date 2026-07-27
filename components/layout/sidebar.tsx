@@ -8,6 +8,7 @@ import {
   Calendar,
   CheckSquare,
   CircleHelp,
+  ClipboardList,
   Clock,
   ExternalLink,
   FileText,
@@ -48,6 +49,11 @@ const navigation: NavigationItem[] = [
     href: "/visas",
     icon: FileText,
     feature: "visas",
+  },
+  {
+    name: "申請ポータル",
+    href: "/applications",
+    icon: ClipboardList,
   },
   {
     name: "面談一覧",
