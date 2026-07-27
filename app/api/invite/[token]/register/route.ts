@@ -3,6 +3,33 @@ import { createAdminClient } from "@/lib/supabase/client"
 import { isExistingAccountSignUpError } from "@/lib/supabase/auth-errors"
 import { getInviteLinkInfo } from "@/lib/supabase/tenants"
 
+async function authUserExistsByEmail(
+  adminSupabase: ReturnType<typeof createAdminClient>,
+  email: string
+): Promise<boolean> {
+  const targetEmail = email.trim().toLowerCase()
+  let page = 1
+  const perPage = 1000
+
+  while (true) {
+    const { data, error } = await adminSupabase.auth.admin.listUsers({ page, perPage })
+
+    if (error) {
+      throw error
+    }
+
+    if (data.users.some((user) => user.email?.trim().toLowerCase() === targetEmail)) {
+      return true
+    }
+
+    if (!data.nextPage) {
+      return false
+    }
+
+    page = data.nextPage
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { token: string } }
@@ -35,11 +62,17 @@ export async function POST(
       return NextResponse.json({ error: "招待されたメールアドレスで登録してください" }, { status: 400 })
     }
 
-    if (password.length < 6) {
-      return NextResponse.json({ error: "パスワードは6文字以上で入力してください" }, { status: 400 })
+    const adminSupabase = createAdminClient()
+    const userExists = await authUserExistsByEmail(adminSupabase, email)
+
+    if (userExists) {
+      return NextResponse.json({ error: "Account already exists" }, { status: 409 })
     }
 
-    const adminSupabase = createAdminClient()
+    if (password.length < 8) {
+      return NextResponse.json({ error: "パスワードは8文字以上で入力してください" }, { status: 400 })
+    }
+
     const { error: createUserError } = await adminSupabase.auth.admin.createUser({
       email,
       password,

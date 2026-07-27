@@ -9,7 +9,7 @@ describe("isExistingAccountSignUpError", () => {
   })
 
   it("does not treat unrelated sign-up errors as existing accounts", () => {
-    expect(isExistingAccountSignUpError("Password should be at least 6 characters"))
+    expect(isExistingAccountSignUpError("Password should be at least 8 characters"))
       .toBe(false)
   })
 })
