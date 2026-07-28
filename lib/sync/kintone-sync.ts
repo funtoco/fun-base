@@ -23,6 +23,11 @@ import {
   shouldNotifyInterviewRecordCreation,
 } from '@/lib/notifications/interview-record-notifications'
 import {
+  hasRetryableRetirementNoticeNotificationEvent,
+  notifyRetirementNoticeRequired,
+} from '@/lib/notifications/retirement-notice-notification-service'
+import { shouldNotifyRetirementStatusChange } from '@/lib/notifications/retirement-notice-notifications'
+import {
   buildInterviewRecordsQuery,
   getInterviewRecordSourceHumanResourceId,
   getInterviewRecordSourceRecordId,
@@ -962,6 +967,49 @@ export class KintoneDataSync {
               }
             }
 
+            let retirementNoticePerson: { id: string; name?: string | null; company?: string | null } | null = null
+            if (targetAppType === 'people' && targetTable === 'people') {
+              const { data: existingPeople, error: existingPersonError } = await this.supabase
+                .from('people')
+                .select('id, name, company, working_status')
+                .match(whereCondition)
+                .limit(1)
+
+              if (existingPersonError) {
+                console.error('[sync] retirement-notice:person-lookup-error', {
+                  recordId: record.$id?.value,
+                  error: existingPersonError.message,
+                })
+                throw existingPersonError
+              }
+
+              const existingPerson = existingPeople?.[0] as
+                | { id: string; name?: string | null; company?: string | null; working_status?: string | null }
+                | undefined
+              const nextWorkingStatus = typeof data.working_status === 'string' ? data.working_status : null
+              const shouldNotifyRetirement = shouldNotifyRetirementStatusChange({
+                existingPerson: existingPerson ?? null,
+                nextWorkingStatus,
+              })
+              const shouldRetryRetirementNotification =
+                Boolean(existingPerson) &&
+                nextWorkingStatus === '退職' &&
+                existingPerson?.working_status === '退職' &&
+                await hasRetryableRetirementNoticeNotificationEvent(
+                  this.supabase,
+                  this.tenantId,
+                  existingPerson!.id
+                )
+
+              if (shouldNotifyRetirement || shouldRetryRetirementNotification) {
+                retirementNoticePerson = {
+                  id: existingPerson!.id,
+                  name: typeof data.name === 'string' ? data.name : existingPerson!.name,
+                  company: typeof data.company === 'string' ? data.company : existingPerson!.company,
+                }
+              }
+            }
+
             // Prepare insert payload separately to avoid updating primary key on update
             const insertData: any = { ...data }
             if (targetTable === 'people') {
@@ -1007,6 +1055,22 @@ export class KintoneDataSync {
             if (error) {
               console.error(`[sync] db-error table=%s rec=%s err=%o`, targetTable, record.$id?.value, error)
               throw error
+            }
+
+            if (retirementNoticePerson) {
+              try {
+                await notifyRetirementNoticeRequired({
+                  supabase: this.supabase,
+                  tenantId: this.tenantId,
+                  person: retirementNoticePerson,
+                })
+              } catch (notificationError) {
+                console.error('[sync] retirement-notice:notification-error', {
+                  recordId: record.$id?.value,
+                  personId: retirementNoticePerson.id,
+                  error: notificationError instanceof Error ? notificationError.message : notificationError,
+                })
+              }
             }
 
             syncedCount++

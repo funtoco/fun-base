@@ -127,6 +127,26 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Retirement Notice */}
+          {person.workingStatus === "退職" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>退職届出</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  app92 の公開PDFテンプレートを選択し、帳票メタデータを確認できます。
+                </p>
+                <Button asChild className="w-full gap-2">
+                  <Link href={`/people/${params.id}/retirement-notice`}>
+                    <FileText className="h-4 w-4" />
+                    テンプレートを選択
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Contact Information */}
           <Card>
             <CardHeader>
