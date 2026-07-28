@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, Download, FileText } from 'lucide-react'
+import { ArrowLeft, Download, ExternalLink, FileText } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -40,16 +40,16 @@ export default async function RetirementNoticePage({ params, searchParams }: Ret
       </div>
 
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold">退職届出テンプレート</h1>
+        <h1 className="text-2xl font-bold">退職届出PDFの作成</h1>
         <p className="text-sm text-muted-foreground">
-          {person.name} の app92 公開テンプレートメタデータを確認できます。
+          {person.name} さんの情報を反映した退職届出PDFを作成できます。必要な届出の種類を選んで出力してください。
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">テンプレート選択</CardTitle>
+            <CardTitle className="text-base">届出の種類</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {templates.map((template) => (
@@ -78,56 +78,47 @@ export default async function RetirementNoticePage({ params, searchParams }: Ret
                   {selectedTemplate.label}
                 </CardTitle>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  app{selectedTemplate.sourceAppId} / {selectedTemplate.template.format} / PDF template metadata
+                  既存の退職届様式に、FunBaseの人材情報を差し込んでPDFを作成します。
                 </p>
               </div>
-              <Button asChild className="gap-2">
-                <a href={downloadHref}>
-                  <Download className="h-4 w-4" />
-                  メタデータをダウンロード
-                </a>
-              </Button>
-              <Button asChild variant="outline" className="gap-2">
-                <a href={selectedTemplate.template.pdfPath} target="_blank" rel="noreferrer">
-                  <Download className="h-4 w-4" />
-                  PDFテンプレートを開く
-                </a>
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button asChild className="gap-2">
+                  <a href={downloadHref}>
+                    <Download className="h-4 w-4" />
+                    PDFを作成してダウンロード
+                  </a>
+                </Button>
+                <Button asChild variant="outline" className="gap-2">
+                  <a href={selectedTemplate.template.pdfPath} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-4 w-4" />
+                    空の様式を確認
+                  </a>
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <div className="text-sm text-muted-foreground">帳票コード</div>
-                <div className="break-all font-mono text-sm">{selectedTemplate.reportCode}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">PDFアセットID</div>
-                <div className="break-all font-mono text-sm">{selectedTemplate.template.assetId}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">ファイル名テンプレート</div>
-                <div className="text-sm">{selectedTemplate.template.filenameTemplate}</div>
-              </div>
-              <div>
                 <div className="text-sm text-muted-foreground">対象者</div>
-                <div className="text-sm">{person.name}</div>
+                <div className="text-sm font-medium">{person.name}</div>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-sm font-medium">差し込みフィールド</div>
-              <div className="flex flex-wrap gap-2">
-                {selectedTemplate.fields.map((field) => (
-                  <Badge key={field} variant="secondary">
-                    {field}
-                  </Badge>
-                ))}
+              <div>
+                <div className="text-sm text-muted-foreground">所属先</div>
+                <div className="text-sm font-medium">{person.company || person.tenantName || '未設定'}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">就労ステータス</div>
+                <div className="text-sm font-medium">{person.workingStatus || '未設定'}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">出力する様式</div>
+                <div className="text-sm font-medium">{selectedTemplate.label}</div>
               </div>
             </div>
 
             <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
-              添付された既存PDFテンプレートをそのまま同梱しています。この初期スライスではテンプレートPDFと差し込みメタデータを公開します。PDFへの実差し込みと保存は、PDFレンダラーと保存先の設計が入った後続スライスで実装します。
+              人材名・生年月日・国籍・在留カード番号・分野・所属先など、FunBaseにある情報をPDFへ反映します。FunBaseに未登録の項目は空欄で出力されます。
             </div>
           </CardContent>
         </Card>

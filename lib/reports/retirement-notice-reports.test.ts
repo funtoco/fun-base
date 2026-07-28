@@ -2,10 +2,10 @@ import { describe, expect, test } from 'vitest'
 
 import {
   APP92_RETIREMENT_NOTICE_SOURCE_APP_ID,
-  buildRetirementNoticeMetadataFilename,
   getRetirementNoticeReportTemplate,
   getRetirementNoticeReportTemplates,
 } from './retirement-notice-reports'
+import { buildRetirementNoticePdfFilename, buildRetirementNoticeValueMap, generateRetirementNoticePdf } from './retirement-notice-pdf'
 
 describe('retirement notice report templates', () => {
   test('exposes the published app92 retirement notice templates in display order', () => {
@@ -24,7 +24,7 @@ describe('retirement notice report templates', () => {
     expect(templates.every((template) => template.template.extension === 'pdf')).toBe(true)
   })
 
-  test('looks up a template and keeps the PDF asset metadata needed by a later renderer', () => {
+  test('looks up a template and keeps the PDF asset metadata needed by the renderer', () => {
     const template = getRetirementNoticeReportTemplate('tkyy4pd6kel6ndjb4ei9mstc2gsq372e')
 
     expect(template).toMatchObject({
@@ -41,12 +41,68 @@ describe('retirement notice report templates', () => {
     expect(template?.fields).toContain('在留カード番号')
   })
 
-  test('builds a safe metadata download filename from person and template labels', () => {
+  test('builds a safe PDF filename from person and template labels', () => {
     const template = getRetirementNoticeReportTemplate('vy0fa9sokdkdu9xnrp9kvqs2nwgaqoz7')
 
-    expect(buildRetirementNoticeMetadataFilename(template!, { name: '山田/太郎' })).toBe(
-      '退職届出_自己都合退職_山田-太郎.json'
+    expect(buildRetirementNoticePdfFilename(template!, { name: '山田/太郎' })).toBe(
+      '退職届出_自己都合退職_山田-太郎.pdf'
     )
+  })
+
+  test('maps FunBase person values to retirement notice field values', () => {
+    const values = buildRetirementNoticeValueMap({
+      id: 'person-1',
+      name: 'NGU WAR KYAW',
+      kana: 'ング ワー チョー',
+      nationality: 'ミャンマー',
+      dob: '1995-01-02',
+      specificSkillField: '介護',
+      residenceCardNo: 'AB12345678CD',
+      phone: '090-1234-5678',
+      workingStatus: '退職',
+      company: '株式会社Funtoco',
+      employmentChangeNotificationDate: '2026-07-28',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-07-01',
+    })
+
+    expect(values).toMatchObject({
+      人材名: 'NGU WAR KYAW',
+      呼び名: 'ング ワー チョー',
+      国籍: 'ミャンマー',
+      在留カード番号: 'AB12345678CD',
+      分野: '介護',
+      退職日___支援終了日: undefined,
+      人材_電話番号: '090-1234-5678',
+      法人名: '株式会社Funtoco',
+    })
+  })
+
+  test('generates a filled PDF from a bundled source template', async () => {
+    const template = getRetirementNoticeReportTemplate('vy0fa9sokdkdu9xnrp9kvqs2nwgaqoz7')!
+
+    const pdf = await generateRetirementNoticePdf({
+      template,
+      person: {
+        id: 'person-1',
+        name: 'NGU WAR KYAW',
+        kana: 'ング ワー チョー',
+        nationality: 'ミャンマー',
+        dob: '1995-01-02',
+        specificSkillField: '介護',
+        residenceCardNo: 'AB12345678CD',
+        workingStatus: '退職',
+        company: '株式会社Funtoco',
+        employmentChangeNotificationDate: '2026-07-28',
+        createdAt: '2026-01-01',
+        updatedAt: '2026-07-01',
+      },
+    })
+
+    expect(pdf.contentType).toBe('application/pdf')
+    expect(pdf.fileName).toBe('退職届出_自己都合退職_NGU WAR KYAW.pdf')
+    expect(pdf.renderedFieldCount).toBeGreaterThan(5)
+    expect(Buffer.from(pdf.data.subarray(0, 5)).toString('utf8')).toBe('%PDF-')
   })
 
   test('exposes an actual bundled PDF path for each published template', () => {

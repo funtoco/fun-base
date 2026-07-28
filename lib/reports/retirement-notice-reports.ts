@@ -41,9 +41,9 @@ const COMMON_FIELDS = [
   '担当者の事業所名',
 ]
 
-const METADATA_LIMITATIONS = [
-  'This slice exposes existing app92 PDF template metadata only.',
-  'Filled PDF rendering requires a later renderer/storage integration.',
+const RETIREMENT_NOTICE_RENDERING_NOTES = [
+  'PDF output uses the bundled app92 source templates and field placements.',
+  'Fields that do not exist in FunBase yet are rendered as blank values.',
 ]
 
 const RETIREMENT_NOTICE_REPORT_TEMPLATES: RetirementNoticeReportTemplate[] = [
@@ -63,7 +63,7 @@ const RETIREMENT_NOTICE_REPORT_TEMPLATES: RetirementNoticeReportTemplate[] = [
       pdfPath: '/retirement-notice-templates/1号期間満了.pdf',
     },
     fields: COMMON_FIELDS,
-    limitations: METADATA_LIMITATIONS,
+    limitations: RETIREMENT_NOTICE_RENDERING_NOTES,
   },
   {
     reportCode: 'tkyy4pd6kel6ndjb4ei9mstc2gsq372e',
@@ -119,7 +119,7 @@ const RETIREMENT_NOTICE_REPORT_TEMPLATES: RetirementNoticeReportTemplate[] = [
       '退職後に特定技能外国人が転居する予定がある場合は転居先',
       '人材_電話番号',
     ],
-    limitations: METADATA_LIMITATIONS,
+    limitations: RETIREMENT_NOTICE_RENDERING_NOTES,
   },
   {
     reportCode: 'vy0fa9sokdkdu9xnrp9kvqs2nwgaqoz7',
@@ -137,7 +137,7 @@ const RETIREMENT_NOTICE_REPORT_TEMPLATES: RetirementNoticeReportTemplate[] = [
       pdfPath: '/retirement-notice-templates/自己都合退職.pdf',
     },
     fields: COMMON_FIELDS,
-    limitations: METADATA_LIMITATIONS,
+    limitations: RETIREMENT_NOTICE_RENDERING_NOTES,
   },
   {
     reportCode: 'k4bvypb19xho5ystj8a2rstrupmnk5kh',
@@ -155,7 +155,7 @@ const RETIREMENT_NOTICE_REPORT_TEMPLATES: RetirementNoticeReportTemplate[] = [
       pdfPath: '/retirement-notice-templates/年金脱退一時金（帰国時）.pdf',
     },
     fields: COMMON_FIELDS,
-    limitations: METADATA_LIMITATIONS,
+    limitations: RETIREMENT_NOTICE_RENDERING_NOTES,
   },
   {
     reportCode: 'e0y1yblxe7pp8oamvwk0e7mw5n8feo0k',
@@ -176,7 +176,7 @@ const RETIREMENT_NOTICE_REPORT_TEMPLATES: RetirementNoticeReportTemplate[] = [
       ...COMMON_FIELDS.filter((field) => field !== '退職日___支援終了日'),
       '再雇用_支援開始日',
     ],
-    limitations: METADATA_LIMITATIONS,
+    limitations: RETIREMENT_NOTICE_RENDERING_NOTES,
   },
   {
     reportCode: 'dsggkmicvux18aaq4damigubfx05gdq4',
@@ -198,7 +198,7 @@ const RETIREMENT_NOTICE_REPORT_TEMPLATES: RetirementNoticeReportTemplate[] = [
       '退職_支援終了の内容',
       '担当者の事業所名_0',
     ],
-    limitations: METADATA_LIMITATIONS,
+    limitations: RETIREMENT_NOTICE_RENDERING_NOTES,
   },
 ]
 

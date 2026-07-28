@@ -991,15 +991,22 @@ export class KintoneDataSync {
                 existingPerson: existingPerson ?? null,
                 nextWorkingStatus,
               })
-              const shouldRetryRetirementNotification =
-                Boolean(existingPerson) &&
-                nextWorkingStatus === '退職' &&
-                existingPerson?.working_status === '退職' &&
-                await hasRetryableRetirementNoticeNotificationEvent(
-                  this.supabase,
-                  this.tenantId,
-                  existingPerson!.id
-                )
+              let shouldRetryRetirementNotification = false
+              if (existingPerson && nextWorkingStatus === '退職' && existingPerson.working_status === '退職') {
+                try {
+                  shouldRetryRetirementNotification = await hasRetryableRetirementNoticeNotificationEvent(
+                    this.supabase,
+                    this.tenantId,
+                    existingPerson.id
+                  )
+                } catch (retryLookupError) {
+                  console.error('[sync] retirement-notice:retry-lookup-error', {
+                    recordId: record.$id?.value,
+                    personId: existingPerson.id,
+                    error: retryLookupError instanceof Error ? retryLookupError.message : String(retryLookupError),
+                  })
+                }
+              }
 
               if (shouldNotifyRetirement || shouldRetryRetirementNotification) {
                 retirementNoticePerson = {

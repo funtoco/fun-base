@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 
 import { getPersonById } from '@/lib/supabase/people-server'
-import {
-  buildRetirementNoticeMetadataFilename,
-  getRetirementNoticeReportTemplate,
-} from '@/lib/reports/retirement-notice-reports'
+import { getRetirementNoticeReportTemplate } from '@/lib/reports/retirement-notice-reports'
+import { generateRetirementNoticePdf } from '@/lib/reports/retirement-notice-pdf'
+
+export const runtime = 'nodejs'
 
 export async function GET(
   request: Request,
@@ -17,33 +17,23 @@ export async function GET(
 
   const { searchParams } = new URL(request.url)
   const personId = searchParams.get('personId')
-  const person = personId ? await getPersonById(personId) : null
-  if (personId && !person) {
+  if (!personId) {
+    return NextResponse.json({ error: 'personId is required' }, { status: 400 })
+  }
+
+  const person = await getPersonById(personId)
+  if (!person) {
     return NextResponse.json({ error: 'Person not found' }, { status: 404 })
   }
 
-  const payload = {
-    kind: 'retirement_notice_template_metadata',
-    template,
-    person: person
-      ? {
-          id: person.id,
-          name: person.name,
-          kana: person.kana,
-          nationality: person.nationality,
-          dob: person.dob,
-          residenceCardNo: person.residenceCardNo,
-          workingStatus: person.workingStatus,
-          company: person.company,
-          specificSkillField: person.specificSkillField,
-        }
-      : null,
-  }
-  const filename = buildRetirementNoticeMetadataFilename(template, { name: person?.name })
+  const pdf = await generateRetirementNoticePdf({ template, person })
 
-  return NextResponse.json(payload, {
+  return new NextResponse(Buffer.from(pdf.data), {
     headers: {
-      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      'Content-Type': pdf.contentType,
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(pdf.fileName)}`,
+      'Cache-Control': 'no-store',
+      'X-Rendered-Field-Count': String(pdf.renderedFieldCount),
     },
   })
 }
