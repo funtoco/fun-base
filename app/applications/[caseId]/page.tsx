@@ -6,10 +6,13 @@ import { Badge } from '@/components/ui/badge'
 import { CaseProgressHeader } from '@/components/portal/case-progress-header'
 import { ChecklistTable } from '@/components/portal/checklist-table'
 import { AddMembersDialog } from '@/components/portal/add-members-dialog'
+import { CommentThread } from '@/components/portal/comment-thread'
+import { RemindButton } from '@/components/portal/remind-button'
 import {
   getCaseWithRequirements,
   getOfficePeopleForCase,
 } from '@/lib/portal/applications'
+import { listComments } from '@/lib/portal/comments'
 import {
   APPLICATION_CATEGORY_LABELS,
   ENTITY_TYPE_LABELS,
@@ -28,12 +31,13 @@ export default async function ApplicationDetailPage({
     notFound()
   }
 
-  const { case: detail, requirements } = data
+  const { case: detail, requirements, isWriter } = data
   const memberPersonIds = detail.members.map((m) => m.personId)
   const availablePeople = await getOfficePeopleForCase(
     detail.tenantOfficeId,
     memberPersonIds
   )
+  const comments = await listComments(detail.id)
 
   return (
     <div className="space-y-6 p-6">
@@ -67,13 +71,22 @@ export default async function ApplicationDetailPage({
               )}
             </div>
           </div>
-          <AddMembersDialog caseId={detail.id} people={availablePeople} />
+          <div className="flex flex-wrap items-center gap-2">
+            {isWriter && <RemindButton caseId={detail.id} />}
+            <AddMembersDialog caseId={detail.id} people={availablePeople} />
+          </div>
         </div>
       </div>
 
       <CaseProgressHeader status={detail.status} />
 
-      <ChecklistTable requirements={requirements} />
+      <ChecklistTable
+        caseId={detail.id}
+        requirements={requirements}
+        canReview={isWriter}
+      />
+
+      <CommentThread caseId={detail.id} comments={comments} />
     </div>
   )
 }
