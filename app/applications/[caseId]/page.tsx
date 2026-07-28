@@ -76,6 +76,21 @@ export default async function ApplicationDetailPage({
             <AddMembersDialog caseId={detail.id} people={availablePeople} />
           </div>
         </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground">
+            対象人材：
+          </span>
+          {detail.members.length === 0 ? (
+            <span className="text-sm text-muted-foreground">未設定</span>
+          ) : (
+            detail.members.map((member) => (
+              <Badge key={member.id} variant="secondary">
+                {member.personName ?? '（氏名未取得）'}
+              </Badge>
+            ))
+          )}
+        </div>
       </div>
 
       <CaseProgressHeader status={detail.status} />

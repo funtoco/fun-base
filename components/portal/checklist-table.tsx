@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, CheckCircle2, Eye, Undo2, Upload, User, XCircle } from 'lucide-react'
+import { Building2, CheckCircle2, Eye, Undo2, Upload, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -408,29 +408,6 @@ export function ChecklistTable({
         actions={actions}
         setActions={setActions}
       />
-
-      <div className="space-y-4">
-        <h4 className="text-sm font-semibold text-foreground">人材ごとの書類</h4>
-        {requirements.persons.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-            まだ人材が追加されていません。「人材を追加」から人材を選ぶと、その人の必要書類が表示されます。
-          </p>
-        ) : (
-          requirements.persons.map((group) => (
-            <ChecklistSection
-              key={group.personId}
-              caseId={caseId}
-              title={group.personName ?? '（氏名未取得）'}
-              icon={<User className="h-4 w-4 text-muted-foreground" />}
-              items={group.items}
-              emptyLabel="この人材の必要書類はまだ生成されていません。"
-              canReview={canReview}
-              actions={actions}
-              setActions={setActions}
-            />
-          ))
-        )}
-      </div>
 
       <RejectReasonDialog
         open={actions.reject !== null}

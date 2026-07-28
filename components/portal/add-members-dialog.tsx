@@ -84,7 +84,7 @@ export function AddMembersDialog({
         <DialogHeader>
           <DialogTitle>人材を追加</DialogTitle>
           <DialogDescription>
-            この事業所の人材を選んで追加します。追加すると、その人の必要書類がチェックリストに増えます。
+            この事業所の人材を選んで、この案件の対象人材として記録します。
           </DialogDescription>
         </DialogHeader>
 
