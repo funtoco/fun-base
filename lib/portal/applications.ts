@@ -40,8 +40,14 @@ type RequirementRow = {
   issuer: string | null
   validity_months: number | null
   status: string
+  rejection_reason: string | null
+  office_document_id: string | null
+  person_document_id: string | null
   sort_order: number
 }
+
+const REQUIREMENT_COLUMNS =
+  'id, case_id, document_code, name, scope, person_id, is_required, copy_type, issuer, validity_months, status, rejection_reason, office_document_id, person_document_id, sort_order'
 
 type MemberRow = {
   id: string
@@ -84,6 +90,9 @@ function mapRequirement(row: RequirementRow): CaseDocumentRequirement {
     issuer: row.issuer,
     validityMonths: row.validity_months,
     status: row.status as CaseDocumentRequirement['status'],
+    rejectionReason: row.rejection_reason,
+    officeDocumentId: row.office_document_id,
+    personDocumentId: row.person_document_id,
     sortOrder: row.sort_order,
   }
 }
@@ -447,9 +456,7 @@ export async function getRequirements(caseId: string): Promise<GroupedRequiremen
 
   const { data, error } = await supabase
     .from('case_document_requirements')
-    .select(
-      'id, case_id, document_code, name, scope, person_id, is_required, copy_type, issuer, validity_months, status, sort_order'
-    )
+    .select(REQUIREMENT_COLUMNS)
     .eq('case_id', caseId)
 
   if (error) {
@@ -468,18 +475,36 @@ export async function getRequirements(caseId: string): Promise<GroupedRequiremen
 }
 
 /**
- * 案件詳細 + グループ化済み要件をまとめて取得（詳細画面用）。
+ * 案件のテナントでレビュー権限（承認/差戻し=writer）があるかを判定する。
+ * portal_is_writer と同じ境界（owner/admin/supporter/member）。
+ */
+export async function isPortalWriter(tenantId: string): Promise<boolean> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('portal_is_writer', {
+    p_tenant_id: tenantId,
+  })
+  if (error) {
+    console.error('Error checking portal writer:', error)
+    return false
+  }
+  return data === true
+}
+
+/**
+ * 案件詳細 + グループ化済み要件 + 閲覧者のレビュー権限をまとめて取得（詳細画面用）。
  */
 export async function getCaseWithRequirements(caseId: string): Promise<{
   case: CaseDetail
   requirements: GroupedRequirements
+  isWriter: boolean
 } | null> {
   const detail = await getCase(caseId)
   if (!detail) {
     return null
   }
   const requirements = await getRequirements(caseId)
-  return { case: detail, requirements }
+  const isWriter = await isPortalWriter(detail.tenantId)
+  return { case: detail, requirements, isWriter }
 }
 
 /**

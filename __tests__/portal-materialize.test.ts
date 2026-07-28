@@ -14,6 +14,9 @@ function req(
     issuer: null,
     validityMonths: null,
     status: 'not_submitted',
+    rejectionReason: null,
+    officeDocumentId: null,
+    personDocumentId: null,
     ...overrides,
   }
 }

@@ -78,7 +78,24 @@ export interface CaseDocumentRequirement {
   issuer: string | null
   validityMonths: number | null
   status: RequirementStatus
+  rejectionReason: string | null
+  officeDocumentId: string | null
+  personDocumentId: string | null
   sortOrder: number
+}
+
+// アップロード済み書類（署名URL取得の対象）の種別
+export type DocumentKind = 'office' | 'person'
+
+// 案件コメント（メール置換）の1件
+export interface CaseComment {
+  id: string
+  caseId: string
+  requirementId: string | null
+  authorId: string | null
+  authorLabel: string | null
+  body: string
+  createdAt: string
 }
 
 // 人材ごとにまとめた person 書類グループ
