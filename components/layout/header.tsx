@@ -13,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
 import { useNavigationProgress } from "@/components/navigation-progress"
@@ -52,6 +51,7 @@ type SearchHistoryItem = {
 
 const SEARCH_HISTORY_STORAGE_KEY = "funbase:global-search-history"
 const MAX_SEARCH_HISTORY_ITEMS = 8
+const ANNOUNCEMENT_PREVIEW_LIMIT = 5
 
 export function Header() {
   const { user, role, signOut, refreshUser } = useAuth()
@@ -67,6 +67,8 @@ export function Header() {
   const [announcementsOpen, setAnnouncementsOpen] = useState(false)
 
   const unreadCount = announcements.filter(a => !readIds.includes(a.id)).length
+  const previewAnnouncements = announcements.slice(0, ANNOUNCEMENT_PREVIEW_LIMIT)
+  const hiddenAnnouncementCount = Math.max(announcements.length - previewAnnouncements.length, 0)
 
   const navigate = useCallback((href: string) => {
     startNavigation()
@@ -505,8 +507,8 @@ export function Header() {
               )}
             </button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-96 p-0 z-[100]">
-            <div className="flex items-center justify-between border-b px-4 py-3">
+          <PopoverContent align="end" className="z-[100] w-[min(24rem,calc(100vw-1rem))] overflow-hidden p-0">
+            <div className="flex items-center justify-between border-b bg-popover px-4 py-3">
               <h3 className="text-sm font-semibold">お知らせ</h3>
               {unreadCount > 0 && (
                 <Button
@@ -519,7 +521,7 @@ export function Header() {
                 </Button>
               )}
             </div>
-            <ScrollArea className="max-h-80">
+            <div className="max-h-[28rem] overflow-y-auto bg-popover">
               {announcements.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                   <Megaphone className="h-8 w-8 mb-2 opacity-50" />
@@ -527,7 +529,7 @@ export function Header() {
                 </div>
               ) : (
                 <div className="divide-y">
-                  {announcements.map(a => {
+                  {previewAnnouncements.map(a => {
                     const isRead = readIds.includes(a.id)
                     return (
                       <button
@@ -562,9 +564,14 @@ export function Header() {
                   })}
                 </div>
               )}
-            </ScrollArea>
+            </div>
             {announcements.length > 0 && (
-              <div className="border-t px-4 py-2">
+              <div className="border-t bg-popover px-4 py-2">
+                {hiddenAnnouncementCount > 0 && (
+                  <p className="mb-1 text-center text-xs text-muted-foreground">
+                    他{hiddenAnnouncementCount}件は一覧で確認できます
+                  </p>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
