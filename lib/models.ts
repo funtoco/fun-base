@@ -5,6 +5,8 @@ export type Person = {
   nationality?: string
   dob?: string
   specificSkillField?: string
+  businessCategory?: string
+  sex?: string
   phone?: string
   employeeNumber?: string
   workingStatus?: string
@@ -21,6 +23,14 @@ export type Person = {
   imagePath?: string
   employmentNotificationDate?: string
   employmentChangeNotificationDate?: string
+  employmentContractEndDate?: string
+  retirementDate?: string
+  supportEndDate?: string
+  companyPostalCode?: string
+  companyAddress?: string
+  companyCorporateNumber?: string
+  companyPhone?: string
+  employmentContractDate?: string
   // 入社前
   interviewDate?: string
   jobOfferDate?: string

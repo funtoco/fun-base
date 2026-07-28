@@ -32,7 +32,7 @@ export async function generateRetirementNoticePdf({
 
   const pdf = await PDFDocument.create()
   pdf.registerFontkit(fontkit)
-  const font = await pdf.embedFont(fontBytes, { subset: true })
+  const font = await pdf.embedFont(fontBytes, { subset: false })
   const sourcePdf = await PDFDocument.load(sourcePdfBytes)
   const sourcePageIndices = sourcePdf.getPageIndices()
   const embeddedPages = await pdf.embedPdf(sourcePdfBytes, sourcePageIndices)
@@ -83,17 +83,19 @@ export function buildRetirementNoticeValueMap(person: Person): Record<string, st
     人材名: person.name,
     呼び名: person.kana,
     生年月日: person.dob,
+    性別: person.sex,
     国籍: person.nationality,
     在留カード番号: person.residenceCardNo,
     分野: person.specificSkillField,
-    退職日___支援終了日: undefined,
+    業務区分: person.businessCategory,
+    退職日___支援終了日: person.retirementDate || person.supportEndDate || person.employmentContractEndDate,
     再雇用_支援開始日: person.joiningDate,
     人材_電話番号: person.phone,
     法人名: person.company || person.tenantName,
-    所属機関_住所: undefined,
-    所属機関_郵便番号: undefined,
-    所属機関_法人番号: undefined,
-    担当者_所属先電話番号: undefined,
+    所属機関_住所: person.companyAddress,
+    所属機関_郵便番号: person.companyPostalCode,
+    所属機関_法人番号: person.companyCorporateNumber,
+    担当者_所属先電話番号: person.companyPhone,
     担当者の事業所名: person.company || person.tenantName,
     担当者の事業所名_0: person.company || person.tenantName,
     作成日: createdDate,

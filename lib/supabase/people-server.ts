@@ -75,6 +75,8 @@ export async function getPersonById(id: string): Promise<Person | null> {
     nationality: data.nationality,
     dob: data.dob,
     specificSkillField: data.specific_skill_field,
+    businessCategory: pickString(data, ['business_category', 'work_category', 'specific_skill_business_category']),
+    sex: pickString(data, ['sex', 'gender']),
     phone: data.phone,
     employeeNumber: data.employee_number,
     workingStatus: data.working_status,
@@ -91,6 +93,14 @@ export async function getPersonById(id: string): Promise<Person | null> {
     imagePath: data.image_path,
     employmentNotificationDate: data.employment_notification_date,
     employmentChangeNotificationDate: data.employment_change_notification_date,
+    employmentContractEndDate: pickString(data, ['employment_contract_end_date', 'contract_end_date', 'retirement_support_end_date']),
+    retirementDate: pickString(data, ['retirement_date', 'employment_end_date']),
+    supportEndDate: pickString(data, ['support_end_date']),
+    companyPostalCode: pickString(data, ['company_postal_code', 'corporate_postal_code']),
+    companyAddress: pickString(data, ['company_address', 'corporate_address']),
+    companyCorporateNumber: pickString(data, ['company_corporate_number', 'corporate_number']),
+    companyPhone: pickString(data, ['company_phone', 'corporate_phone', 'company_tel']),
+    employmentContractDate: pickString(data, ['employment_contract_date', 'contract_date']),
     interviewDate: data.interview_date,
     jobOfferDate: data.job_offer_date,
     applicationNumber: data.application_number,
@@ -104,4 +114,12 @@ export async function getPersonById(id: string): Promise<Person | null> {
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   }
+}
+
+function pickString(row: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return undefined
 }

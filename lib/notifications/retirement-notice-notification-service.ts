@@ -167,19 +167,12 @@ async function acquireRetirementNoticeNotificationEvent(
   personId: string,
   claimToken: string
 ): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('notification_events')
-    .insert({
-      tenant_id: tenantId,
-      notification_type: RETIREMENT_NOTICE_NOTIFICATION_TYPE,
-      source_type: RETIREMENT_NOTICE_NOTIFICATION_SOURCE_TYPE,
-      source_id: personId,
-      status: 'pending',
-      error_message: claimToken,
-      sent_at: null,
-    })
-    .select('id')
-    .single()
+  const { data, error } = await insertRetirementNoticeNotificationEvent(
+    supabase,
+    tenantId,
+    personId,
+    claimToken
+  )
 
   if (!error) return (data as { id: string }).id
 
@@ -219,6 +212,19 @@ async function acquireRetirementNoticeNotificationEvent(
     if (claimPendingError) throw claimPendingError
     return claimedPending ? (claimedPending as { id: string }).id : null
   }
+  if (existing.status === 'sent') {
+    const { data: repeatedTransition, error: repeatedTransitionError } = await supabase
+      .from('notification_events')
+      .update({ status: 'pending', error_message: claimToken, sent_at: null })
+      .eq('id', existing.id)
+      .eq('status', 'sent')
+      .select('id')
+      .maybeSingle()
+
+    if (repeatedTransitionError) throw repeatedTransitionError
+    return repeatedTransition ? (repeatedTransition as { id: string }).id : null
+  }
+
   if (existing.status !== 'failed') return null
 
   const { data: retryEvent, error: retryError } = await supabase
@@ -231,6 +237,27 @@ async function acquireRetirementNoticeNotificationEvent(
 
   if (retryError) throw retryError
   return retryEvent ? (retryEvent as { id: string }).id : null
+}
+
+function insertRetirementNoticeNotificationEvent(
+  supabase: SupabaseClient<any, any, any>,
+  tenantId: string,
+  sourceId: string,
+  claimToken: string
+) {
+  return supabase
+    .from('notification_events')
+    .insert({
+      tenant_id: tenantId,
+      notification_type: RETIREMENT_NOTICE_NOTIFICATION_TYPE,
+      source_type: RETIREMENT_NOTICE_NOTIFICATION_SOURCE_TYPE,
+      source_id: sourceId,
+      status: 'pending',
+      error_message: claimToken,
+      sent_at: null,
+    })
+    .select('id')
+    .single()
 }
 
 function isClaimablePendingRetirementNoticeEvent({
