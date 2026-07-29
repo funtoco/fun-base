@@ -5,13 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CaseProgressHeader } from '@/components/portal/case-progress-header'
 import { ChecklistTable } from '@/components/portal/checklist-table'
-import { AddMembersDialog } from '@/components/portal/add-members-dialog'
 import { CommentThread } from '@/components/portal/comment-thread'
-import { RemindButton } from '@/components/portal/remind-button'
-import {
-  getCaseWithRequirements,
-  getOfficePeopleForCase,
-} from '@/lib/portal/applications'
+import { getCaseWithRequirements } from '@/lib/portal/applications'
 import { listComments } from '@/lib/portal/comments'
 import {
   APPLICATION_CATEGORY_LABELS,
@@ -31,12 +26,7 @@ export default async function ApplicationDetailPage({
     notFound()
   }
 
-  const { case: detail, requirements, isWriter } = data
-  const memberPersonIds = detail.members.map((m) => m.personId)
-  const availablePeople = await getOfficePeopleForCase(
-    detail.tenantOfficeId,
-    memberPersonIds
-  )
+  const { case: detail, requirements } = data
   const comments = await listComments(detail.id)
 
   return (
@@ -71,10 +61,6 @@ export default async function ApplicationDetailPage({
               )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {isWriter && <RemindButton caseId={detail.id} />}
-            <AddMembersDialog caseId={detail.id} people={availablePeople} />
-          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -95,11 +81,7 @@ export default async function ApplicationDetailPage({
 
       <CaseProgressHeader status={detail.status} />
 
-      <ChecklistTable
-        caseId={detail.id}
-        requirements={requirements}
-        canReview={isWriter}
-      />
+      <ChecklistTable caseId={detail.id} requirements={requirements} />
 
       <CommentThread caseId={detail.id} comments={comments} />
     </div>

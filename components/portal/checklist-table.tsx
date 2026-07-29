@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, CheckCircle2, Eye, Undo2, Upload, XCircle } from 'lucide-react'
+import { Building2, Eye, Upload } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,7 +23,6 @@ import {
   type GroupedRequirements,
   type RequirementStatus,
 } from '@/lib/portal/types'
-import { RejectReasonDialog } from './reject-reason-dialog'
 
 // ステータスbadge色分け：未提出=グレー / 確認中=青 / 承認済み=緑 / 要修正=赤
 const STATUS_STYLES: Record<RequirementStatus, string> = {
@@ -63,19 +62,16 @@ function requirementDoc(
 
 interface RowActionsState {
   busyId: string | null
-  reject: { requirementId: string; name: string } | null
 }
 
 function RequirementRow({
   caseId,
   item,
-  canReview,
   actions,
   setActions,
 }: {
   caseId: string
   item: CaseDocumentRequirement
-  canReview: boolean
   actions: RowActionsState
   setActions: React.Dispatch<React.SetStateAction<RowActionsState>>
 }) {
@@ -139,38 +135,6 @@ function RequirementRow({
       window.open(result.url, '_blank', 'noopener,noreferrer')
     } catch {
       toast({ variant: 'destructive', title: '表示できませんでした' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleReview(action: 'approve' | 'reset') {
-    setBusy(true)
-    try {
-      const res = await fetch(
-        `/api/applications/${caseId}/requirements/${item.id}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action }),
-        }
-      )
-      const result = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast({
-          variant: 'destructive',
-          title: '操作に失敗しました',
-          description: result.error || '時間をおいて再度お試しください。',
-        })
-        return
-      }
-      toast({
-        title: action === 'approve' ? '承認しました' : '未提出に戻しました',
-        description: `「${item.name}」`,
-      })
-      router.refresh()
-    } catch {
-      toast({ variant: 'destructive', title: '操作に失敗しました' })
     } finally {
       setBusy(false)
     }
@@ -244,47 +208,6 @@ function RequirementRow({
               表示
             </Button>
           )}
-          {canReview && item.status === 'reviewing' && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() => handleReview('approve')}
-                className="gap-1 border-green-300 text-green-700 hover:bg-green-50 dark:border-green-900 dark:text-green-300 dark:hover:bg-green-950"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                承認
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() =>
-                  setActions((prev) => ({
-                    ...prev,
-                    reject: { requirementId: item.id, name: item.name },
-                  }))
-                }
-                className="gap-1 border-red-300 text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
-              >
-                <XCircle className="h-3.5 w-3.5" />
-                差戻し
-              </Button>
-            </>
-          )}
-          {canReview && item.status === 'approved' && (
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => handleReview('reset')}
-              className="gap-1 text-muted-foreground"
-            >
-              <Undo2 className="h-3.5 w-3.5" />
-              取消
-            </Button>
-          )}
         </div>
       </TableCell>
     </TableRow>
@@ -297,7 +220,6 @@ function ChecklistSection({
   icon,
   items,
   emptyLabel,
-  canReview,
   actions,
   setActions,
 }: {
@@ -306,7 +228,6 @@ function ChecklistSection({
   icon: React.ReactNode
   items: CaseDocumentRequirement[]
   emptyLabel: string
-  canReview: boolean
   actions: RowActionsState
   setActions: React.Dispatch<React.SetStateAction<RowActionsState>>
 }) {
@@ -337,7 +258,6 @@ function ChecklistSection({
                   key={item.id}
                   caseId={caseId}
                   item={item}
-                  canReview={canReview}
                   actions={actions}
                   setActions={setActions}
                 />
@@ -353,48 +273,11 @@ function ChecklistSection({
 export function ChecklistTable({
   caseId,
   requirements,
-  canReview,
 }: {
   caseId: string
   requirements: GroupedRequirements
-  canReview: boolean
 }) {
-  const router = useRouter()
-  const { toast } = useToast()
-  const [actions, setActions] = useState<RowActionsState>({ busyId: null, reject: null })
-  const [rejectSubmitting, setRejectSubmitting] = useState(false)
-
-  async function submitReject(reason: string) {
-    if (!actions.reject) return
-    const requirementId = actions.reject.requirementId
-    setRejectSubmitting(true)
-    try {
-      const res = await fetch(
-        `/api/applications/${caseId}/requirements/${requirementId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'reject', reason }),
-        }
-      )
-      const result = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast({
-          variant: 'destructive',
-          title: '差戻しに失敗しました',
-          description: result.error || '時間をおいて再度お試しください。',
-        })
-        return
-      }
-      toast({ title: '差し戻しました', description: '会社の担当者に修正を依頼できます。' })
-      setActions((prev) => ({ ...prev, reject: null }))
-      router.refresh()
-    } catch {
-      toast({ variant: 'destructive', title: '差戻しに失敗しました' })
-    } finally {
-      setRejectSubmitting(false)
-    }
-  }
+  const [actions, setActions] = useState<RowActionsState>({ busyId: null })
 
   return (
     <div className="space-y-6">
@@ -404,19 +287,8 @@ export function ChecklistTable({
         icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
         items={requirements.office}
         emptyLabel="会社の必要書類はまだありません。"
-        canReview={canReview}
         actions={actions}
         setActions={setActions}
-      />
-
-      <RejectReasonDialog
-        open={actions.reject !== null}
-        onOpenChange={(open) =>
-          setActions((prev) => ({ ...prev, reject: open ? prev.reject : null }))
-        }
-        documentName={actions.reject?.name}
-        submitting={rejectSubmitting}
-        onSubmit={submitReject}
       />
     </div>
   )

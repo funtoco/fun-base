@@ -1,6 +1,5 @@
 import Link from 'next/link'
-import { ClipboardList, Plus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { ClipboardList } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import {
@@ -30,15 +29,9 @@ export default async function ApplicationsPage() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">申請ポータル</h1>
           <p className="mt-2 text-muted-foreground">
-            ビザ申請の案件と、必要書類のチェックリストを管理します。
+            ビザ申請の案件と、必要書類のチェックリストを確認します。
           </p>
         </div>
-        <Button asChild className="gap-2">
-          <Link href="/applications/new">
-            <Plus className="h-4 w-4" />
-            新規案件
-          </Link>
-        </Button>
       </div>
 
       {cases.length === 0 ? (
@@ -46,15 +39,7 @@ export default async function ApplicationsPage() {
           <EmptyState
             icon={<ClipboardList className="h-10 w-10" />}
             title="案件がまだありません"
-            description="「新規案件」から最初の申請案件を作成すると、必要書類のチェックリストが自動で作られます。"
-            action={
-              <Button asChild className="gap-2">
-                <Link href="/applications/new">
-                  <Plus className="h-4 w-4" />
-                  新規案件
-                </Link>
-              </Button>
-            }
+            description="案件は担当者が用意します。準備ができると、ここに必要書類のチェックリストが表示されます。"
           />
         </div>
       ) : (
