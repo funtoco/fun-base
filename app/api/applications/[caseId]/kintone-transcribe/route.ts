@@ -2,16 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCase, isPortalWriter } from '@/lib/portal/applications'
 import { loadApplicationWorkbook } from '@/lib/portal/kintone-sync/source'
-import { transcribeHajimeni } from '@/lib/portal/kintone-sync/transcribe'
+import { transcribeWorkbook } from '@/lib/portal/kintone-sync/transcribe'
 import { createKintoneWriteClientFromEnv } from '@/lib/portal/kintone-sync/kintone-write-client'
 
 // POST /api/applications/[caseId]/kintone-transcribe
-// 提出Excelの「はじめに」シートを読み、kintone app34（マスタ_法人）へ upsert する転記。
+// 提出Excel（申請書類作成フォーム）を読み、kintone app34（マスタ_法人）と app55（雇用条件書）へ
+// 転記する（app36 は対象外）。app34 は法人番号で upsert、app55 は payload 生成（ドライラン）のみ。
 //
-// 既定は dryRun（本番kintoneに書かない）。実書き込みは以下がすべて揃うときのみ:
+// 既定は dryRun（本番kintoneに書かない）。app34 の実書き込みは以下がすべて揃うときのみ:
 //   - クエリ ?dryRun=false（明示）
 //   - kintone 書込の認証が env に設定済み（KINTONE_BASE_URL + トークン or ユーザー/パス）
 //   - 呼び出しユーザーが writer（OP など）
+// app55 は upsert キー未定のため常にドライラン（実書き込み未対応）。
 export async function POST(
   request: NextRequest,
   { params }: { params: { caseId: string } }
@@ -66,7 +68,7 @@ export async function POST(
       return NextResponse.json({ error: workbook.error }, { status: workbook.status })
     }
 
-    const result = await transcribeHajimeni({
+    const result = await transcribeWorkbook({
       buffer: workbook.data.buffer,
       dryRun: !requestedRealWrite,
       client,
@@ -74,10 +76,12 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
+      // app55 は常にドライランのため、実書き込みは app34 のみ（?dryRun=false かつ認証あり）。
       dryRun: !requestedRealWrite,
       sourceFileName: workbook.data.fileName,
-      sheet: result.sheet,
-      plan: result.plan,
+      plans: result.plans,
+      app34: result.app34,
+      app55: result.app55,
     })
   } catch (error) {
     console.error('Error transcribing application workbook to kintone:', error)
