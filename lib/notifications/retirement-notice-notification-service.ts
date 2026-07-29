@@ -16,6 +16,7 @@ import {
 type RetirementNoticeNotificationInput = {
   supabase: SupabaseClient<any, any, any>
   tenantId: string
+  reopenSentIfBefore?: string | null
   person: {
     id: string
     name?: string | null
@@ -58,13 +59,15 @@ export async function hasRetryableRetirementNoticeNotificationEvent(
 export async function notifyRetirementNoticeRequired({
   supabase,
   tenantId,
+  reopenSentIfBefore,
   person,
 }: RetirementNoticeNotificationInput): Promise<void> {
   const eventId = await acquireRetirementNoticeNotificationEvent(
     supabase,
     tenantId,
     person.id,
-    createRetirementNoticeClaimToken()
+    createRetirementNoticeClaimToken(),
+    reopenSentIfBefore
   )
   if (!eventId) {
     console.log('[notification] retirement-notice:duplicate', {
@@ -165,7 +168,8 @@ async function acquireRetirementNoticeNotificationEvent(
   supabase: SupabaseClient<any, any, any>,
   tenantId: string,
   personId: string,
-  claimToken: string
+  claimToken: string,
+  reopenSentIfBefore?: string | null
 ): Promise<string | null> {
   const { data, error } = await insertRetirementNoticeNotificationEvent(
     supabase,
@@ -182,7 +186,7 @@ async function acquireRetirementNoticeNotificationEvent(
 
   const { data: existing, error: existingError } = await supabase
     .from('notification_events')
-    .select('id, status, created_at, error_message')
+    .select('id, status, created_at, error_message, sent_at')
     .eq('tenant_id', tenantId)
     .eq('notification_type', RETIREMENT_NOTICE_NOTIFICATION_TYPE)
     .eq('source_type', RETIREMENT_NOTICE_NOTIFICATION_SOURCE_TYPE)
@@ -213,16 +217,19 @@ async function acquireRetirementNoticeNotificationEvent(
     return claimedPending ? (claimedPending as { id: string }).id : null
   }
   if (existing.status === 'sent') {
-    const { data: repeatedTransition, error: repeatedTransitionError } = await supabase
+    if (!reopenSentIfBefore || !existing.sent_at) return null
+
+    const { data: reopenedEvent, error: reopenError } = await supabase
       .from('notification_events')
       .update({ status: 'pending', error_message: claimToken, sent_at: null })
       .eq('id', existing.id)
       .eq('status', 'sent')
+      .lt('sent_at', reopenSentIfBefore)
       .select('id')
       .maybeSingle()
 
-    if (repeatedTransitionError) throw repeatedTransitionError
-    return repeatedTransition ? (repeatedTransition as { id: string }).id : null
+    if (reopenError) throw reopenError
+    return reopenedEvent ? (reopenedEvent as { id: string }).id : null
   }
 
   if (existing.status !== 'failed') return null

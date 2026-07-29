@@ -967,11 +967,16 @@ export class KintoneDataSync {
               }
             }
 
-            let retirementNoticePerson: { id: string; name?: string | null; company?: string | null } | null = null
+            let retirementNoticePerson: {
+              id: string
+              name?: string | null
+              company?: string | null
+              reopenSentIfBefore?: string | null
+            } | null = null
             if (targetAppType === 'people' && targetTable === 'people') {
               const { data: existingPeople, error: existingPersonError } = await this.supabase
                 .from('people')
-                .select('id, name, company, working_status')
+                .select('id, name, company, working_status, updated_at')
                 .match(whereCondition)
                 .limit(1)
 
@@ -984,7 +989,13 @@ export class KintoneDataSync {
               }
 
               const existingPerson = existingPeople?.[0] as
-                | { id: string; name?: string | null; company?: string | null; working_status?: string | null }
+                | {
+                    id: string
+                    name?: string | null
+                    company?: string | null
+                    working_status?: string | null
+                    updated_at?: string | null
+                  }
                 | undefined
               const nextWorkingStatus = typeof data.working_status === 'string' ? data.working_status : null
               const shouldNotifyRetirement = shouldNotifyRetirementStatusChange({
@@ -1013,6 +1024,7 @@ export class KintoneDataSync {
                   id: existingPerson!.id,
                   name: typeof data.name === 'string' ? data.name : existingPerson!.name,
                   company: typeof data.company === 'string' ? data.company : existingPerson!.company,
+                  reopenSentIfBefore: shouldNotifyRetirement ? existingPerson!.updated_at : null,
                 }
               }
             }
@@ -1069,6 +1081,7 @@ export class KintoneDataSync {
                 await notifyRetirementNoticeRequired({
                   supabase: this.supabase,
                   tenantId: this.tenantId,
+                  reopenSentIfBefore: retirementNoticePerson.reopenSentIfBefore,
                   person: retirementNoticePerson,
                 })
               } catch (notificationError) {
