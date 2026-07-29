@@ -16,6 +16,9 @@ export const ALLOWED_CONTENT_TYPES = [
   'image/heic',
   'image/heif',
   'application/pdf',
+  // 提出Excel（申請書類作成フォーム）を受け付ける
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel', // .xls
 ]
 
 export const SIGNED_URL_TTL_SECONDS = 60 * 60 // 60分
@@ -40,7 +43,7 @@ export function validateUploadFile(file: {
     return 'ファイルサイズは10MB以下にしてください'
   }
   if (!ALLOWED_CONTENT_TYPES.includes(file.type)) {
-    return '対応していないファイル形式です（PDF・画像のみ）'
+    return '対応していないファイル形式です（PDF・画像・Excelのみ）'
   }
   return null
 }
