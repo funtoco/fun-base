@@ -8,7 +8,6 @@ import type {
   GroupedRequirements,
   VisaApplicationCase,
 } from './types'
-import type { ValidatedNewCase } from './case-validation'
 
 const TENANT_WIDE_ROLES = new Set(['owner', 'admin', 'supporter'])
 
@@ -326,119 +325,6 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
   return {
     ...mapCase(row, officeNames.get(row.tenant_office_id) ?? null),
     members,
-  }
-}
-
-/**
- * 案件を作成し、必要書類チェックリストを materialize する。
- * insert は RLS（portal_can_access_office + portal_is_writer）で境界検査。
- * created_by は auth.uid()。materialize RPC 内でも office 権限を再検査する。
- */
-export async function createCase(input: ValidatedNewCase): Promise<string> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    throw new Error('unauthorized')
-  }
-
-  // office から tenant_id を解決（複合FK vac_office_fk 用に整合させる）
-  const { data: office, error: officeError } = await supabase
-    .from('tenant_offices')
-    .select('id, tenant_id')
-    .eq('id', input.tenant_office_id)
-    .maybeSingle()
-
-  if (officeError || !office) {
-    throw new Error('office not found or not accessible')
-  }
-
-  const officeRow = office as { id: string; tenant_id: string }
-
-  const { data: created, error: insertError } = await supabase
-    .from('visa_application_cases')
-    .insert({
-      tenant_id: officeRow.tenant_id,
-      tenant_office_id: officeRow.id,
-      entity_type: input.entity_type,
-      application_category: input.application_category,
-      field: input.field,
-      management_number: input.management_number,
-      title: input.title,
-      created_by: user.id,
-    })
-    .select('id')
-    .single()
-
-  if (insertError || !created) {
-    console.error('Error inserting case:', insertError)
-    throw insertError ?? new Error('failed to create case')
-  }
-
-  const caseId = (created as { id: string }).id
-
-  const { error: rpcError } = await supabase.rpc('materialize_case_requirements', {
-    p_case_id: caseId,
-  })
-  if (rpcError) {
-    console.error('Error materializing case requirements:', rpcError)
-    throw rpcError
-  }
-
-  return caseId
-}
-
-/**
- * 案件に人材を追加し、materialize を再実行して person 書類を追補する。
- */
-export async function addMember(
-  caseId: string,
-  personId: string,
-  visaId?: string | null
-): Promise<void> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    throw new Error('unauthorized')
-  }
-
-  // 親 case の tenant/office を取得（members は複合FKで一致必須）
-  const { data: caseRow, error: caseError } = await supabase
-    .from('visa_application_cases')
-    .select('id, tenant_id, tenant_office_id')
-    .eq('id', caseId)
-    .maybeSingle()
-
-  if (caseError || !caseRow) {
-    throw new Error('case not found or not accessible')
-  }
-  const c = caseRow as { id: string; tenant_id: string; tenant_office_id: string }
-
-  const { error: insertError } = await supabase
-    .from('visa_application_case_members')
-    .insert({
-      case_id: c.id,
-      tenant_id: c.tenant_id,
-      tenant_office_id: c.tenant_office_id,
-      person_id: personId,
-      visa_id: visaId ?? null,
-    })
-
-  // 既に追加済み（uq_case_person）の場合は成功扱いにして materialize へ進む
-  if (insertError && insertError.code !== '23505') {
-    console.error('Error adding case member:', insertError)
-    throw insertError
-  }
-
-  const { error: rpcError } = await supabase.rpc('materialize_case_requirements', {
-    p_case_id: caseId,
-  })
-  if (rpcError) {
-    console.error('Error re-materializing case requirements:', rpcError)
-    throw rpcError
   }
 }
 
