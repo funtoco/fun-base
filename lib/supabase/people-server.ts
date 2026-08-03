@@ -86,6 +86,7 @@ export async function getPersonById(id: string): Promise<Person | null> {
     email: data.email,
     address: data.address,
     tenantName: tenantName,
+    tenantId: data.tenant_id,
     company: data.company,
     note: data.note,
     visaId: data.visa_id,

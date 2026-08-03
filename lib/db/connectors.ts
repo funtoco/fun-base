@@ -4,6 +4,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { encryptJson, decryptJson } from '@/lib/crypto/secretStore'
+import { decryptJson as decryptLegacyJson } from '@/lib/security/crypto'
 
 // Server-side Supabase client
 function getServerClient() {
@@ -194,12 +195,18 @@ export async function getCredential(connectorId: string, type: string): Promise<
       // Try to decrypt first
       return decryptJson(data.payload_encrypted)
     } catch (error) {
-      // If decryption fails, try to parse as plain text (base64 encoded JSON)
       try {
-        const plainText = Buffer.from(data.payload_encrypted, 'base64').toString('utf8')
-        return JSON.parse(plainText)
-      } catch (parseError) {
-        throw new Error(`Failed to decrypt or parse credential: ${error.message}`)
+        return decryptLegacyJson(data.payload_encrypted)
+      } catch {
+        // If decryption fails, try to parse as plain text (base64 encoded JSON)
+        try {
+          const plainText = Buffer.from(data.payload_encrypted, 'base64').toString('utf8')
+          return JSON.parse(plainText)
+        } catch (parseError) {
+          throw new Error(
+            `Failed to decrypt or parse credential: ${error instanceof Error ? error.message : String(error)}`
+          )
+        }
       }
     }
   }
@@ -209,15 +216,35 @@ export async function getCredential(connectorId: string, type: string): Promise<
 
 export async function updateCredential(connectorId: string, type: string, data: any): Promise<void> {
   const supabase = getServerClient()
-  
-  const encrypted = encryptJson(data)
-  
-  const { error } = await supabase
+
+  const { data: existing, error: existingError } = await supabase
     .from('credentials')
-    .update({ payload_encrypted: encrypted })
+    .select('id, payload')
     .eq('connector_id', connectorId)
     .eq('type', type)
-  
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (existingError && existingError.code !== 'PGRST116') {
+    throw new Error(`Failed to get existing credential: ${existingError.message}`)
+  }
+
+  const updates = {
+    payload: JSON.stringify(data),
+    updated_at: new Date().toISOString(),
+  }
+
+  const query = supabase
+    .from('credentials')
+    .update(updates)
+    .eq('connector_id', connectorId)
+    .eq('type', type)
+
+  const { error } = existing?.id
+    ? await query.eq('id', existing.id)
+    : await query
+
   if (error) {
     throw new Error(`Failed to update credential: ${error.message}`)
   }
@@ -226,7 +253,11 @@ export async function updateCredential(connectorId: string, type: string, data: 
 // Update connector
 export async function updateConnector(
   connectorId: string, 
-  updates: Partial<Pick<Connector, 'name' | 'provider_config' | 'scopes'>>
+  updates: Partial<{
+    name: string
+    provider_config: Record<string, any>
+    scopes: string[]
+  }>
 ): Promise<Connector> {
   const supabase = getServerClient()
   

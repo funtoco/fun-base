@@ -5,8 +5,10 @@ import { ArrowLeft, Download, ExternalLink, FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import {
+  applyRetirementNoticeKintoneValues,
+  getRetirementNoticeKintoneValues,
+} from '@/lib/reports/retirement-notice-kintone-values'
 import {
   getRetirementNoticeReportTemplate,
   getRetirementNoticeReportTemplates,
@@ -25,7 +27,9 @@ export default async function RetirementNoticePage({ params, searchParams }: Ret
   const templates = getRetirementNoticeReportTemplates()
   const selectedTemplate =
     (searchParams?.template ? getRetirementNoticeReportTemplate(searchParams.template) : null) ?? templates[0]
-  const formAction = `/api/retirement-notice/templates/${encodeURIComponent(selectedTemplate.reportCode)}`
+  const kintoneValues = await getRetirementNoticeKintoneValues(person)
+  const pdfPerson = applyRetirementNoticeKintoneValues(person, kintoneValues)
+  const downloadHref = `/api/retirement-notice/templates/${encodeURIComponent(selectedTemplate.reportCode)}?personId=${encodeURIComponent(person.id)}`
 
   return (
     <div className="p-6 space-y-6">
@@ -113,104 +117,46 @@ export default async function RetirementNoticePage({ params, searchParams }: Ret
               </div>
             </div>
 
-            <form action={formAction} method="post" className="space-y-4">
-              <input type="hidden" name="personId" value={person.id} />
+            <div className="space-y-4">
               <div className="space-y-2">
-                <h2 className="text-base font-semibold">PDFに反映する追加項目</h2>
+                <h2 className="text-base font-semibold">PDFに反映される情報</h2>
                 <p className="text-sm text-muted-foreground">
-                  FunBaseに未登録の項目は、ここで入力してからPDFを作成できます。
+                  kintoneの退職届・就労管理・法人/事業所マスタを参照してPDFへ反映します。
                 </p>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="sex">性別</Label>
-                  <Input id="sex" name="sex" defaultValue={person.sex || ''} placeholder="例: 男" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="specificSkillField">特定産業分野</Label>
-                  <Input
-                    id="specificSkillField"
-                    name="specificSkillField"
-                    defaultValue={person.specificSkillField || ''}
-                    placeholder="例: 介護"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="businessCategory">業務区分</Label>
-                  <Input
-                    id="businessCategory"
-                    name="businessCategory"
-                    defaultValue={person.businessCategory || ''}
-                    placeholder="例: 介護業務全般"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="employmentContractEndDate">雇用契約終了年月日</Label>
-                  <Input
-                    id="employmentContractEndDate"
-                    name="employmentContractEndDate"
-                    type="date"
-                    defaultValue={person.employmentContractEndDate || person.retirementDate || person.supportEndDate || ''}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="employmentContractDate">再雇用・支援開始日</Label>
-                  <Input
-                    id="employmentContractDate"
-                    name="employmentContractDate"
-                    type="date"
-                    defaultValue={person.employmentContractDate || person.joiningDate || ''}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="companyCorporateNumber">法人番号</Label>
-                  <Input
-                    id="companyCorporateNumber"
-                    name="companyCorporateNumber"
-                    defaultValue={person.companyCorporateNumber || ''}
-                    placeholder="13桁の法人番号"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="companyPostalCode">機関の郵便番号</Label>
-                  <Input
-                    id="companyPostalCode"
-                    name="companyPostalCode"
-                    defaultValue={person.companyPostalCode || ''}
-                    placeholder="例: 556-0004"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="companyPhone">機関の電話番号</Label>
-                  <Input
-                    id="companyPhone"
-                    name="companyPhone"
-                    defaultValue={person.companyPhone || ''}
-                    placeholder="例: 06-0000-0000"
-                  />
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="companyAddress">機関の住所</Label>
-                  <Input
-                    id="companyAddress"
-                    name="companyAddress"
-                    defaultValue={person.companyAddress || ''}
-                    placeholder="所在地を入力"
-                  />
-                </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <ReadOnlyField label="性別" value={pdfPerson.sex} />
+                <ReadOnlyField label="特定産業分野" value={pdfPerson.specificSkillField} />
+                <ReadOnlyField label="業務区分" value={pdfPerson.businessCategory} />
+                <ReadOnlyField label="雇用契約終了年月日" value={pdfPerson.employmentContractEndDate || pdfPerson.retirementDate || pdfPerson.supportEndDate} />
+                <ReadOnlyField label="法人番号" value={pdfPerson.companyCorporateNumber} />
+                <ReadOnlyField label="機関の郵便番号" value={pdfPerson.companyPostalCode} />
+                <ReadOnlyField label="機関の電話番号" value={pdfPerson.companyPhone} />
+                <ReadOnlyField label="機関の住所" value={pdfPerson.companyAddress} />
               </div>
-              <Button type="submit" className="gap-2">
-                <Download className="h-4 w-4" />
-                入力内容を反映してPDFを作成
+              <Button asChild className="gap-2">
+                <a href={downloadHref}>
+                  <Download className="h-4 w-4" />
+                  PDFを作成してダウンロード
+                </a>
               </Button>
-            </form>
+            </div>
 
             <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
-              人材名・生年月日・国籍・在留カード番号・分野・所属先など、FunBaseにある情報とこの画面で入力した内容をPDFへ反映します。
+              PDFにはFunBaseの人材情報に加えて、kintone側で参照できる退職届・法人/事業所情報を反映します。
             </div>
           </CardContent>
         </Card>
       </div>
+    </div>
+  )
+}
+
+function ReadOnlyField({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 text-sm font-medium">{value || '未設定'}</div>
     </div>
   )
 }

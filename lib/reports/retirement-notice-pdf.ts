@@ -16,9 +16,11 @@ const FONT_PATH = path.join(process.cwd(), 'public', 'fonts', 'NotoSansJP-Regula
 export async function generateRetirementNoticePdf({
   template,
   person,
+  extraValues = {},
 }: {
   template: RetirementNoticeReportTemplate
   person: Person
+  extraValues?: Record<string, string | undefined>
 }): Promise<{ fileName: string; data: Uint8Array; contentType: string; renderedFieldCount: number }> {
   const placements = (RETIREMENT_NOTICE_PLACEMENTS as Record<string, readonly RetirementNoticePlacement[]>)[template.reportCode] ?? []
   if (placements.length === 0) {
@@ -47,7 +49,7 @@ export async function generateRetirementNoticePdf({
     return page
   })
 
-  const values = buildRetirementNoticeValueMap(person)
+  const values = { ...buildRetirementNoticeValueMap(person), ...extraValues }
   let renderedFieldCount = 0
 
   for (const placement of placements) {
@@ -178,10 +180,17 @@ function resolveAlignedX(
 
 function formatPlacementValue(value: string | undefined, placement: RetirementNoticePlacement): string {
   if (!value) return ''
+  if (isCheckboxPlacement(placement)) {
+    return value === '✓' || value === placement.fieldCode ? '✓' : ''
+  }
   if (placement.dateFormat) {
     return formatDateValue(value)
   }
   return value
+}
+
+function isCheckboxPlacement(placement: RetirementNoticePlacement): boolean {
+  return placement.width <= 25 && placement.height <= 25 && placement.style?.textAlign === 'center'
 }
 
 function formatDateValue(value: string): string {
