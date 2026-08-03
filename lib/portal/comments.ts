@@ -2,6 +2,11 @@ import { createClient } from '@/lib/supabase/server'
 import type { CaseComment } from './types'
 import type { ActionResult } from './documents'
 import { getServiceClient } from './storage'
+import { createKintoneWriteClientFromEnv } from './kintone-sync/kintone-write-client'
+import {
+  pushCommentToKintone,
+  resolveKintoneRecordId,
+} from './kintone-sync/comment-sync'
 
 type CommentRow = {
   id: string
@@ -9,8 +14,13 @@ type CommentRow = {
   requirement_id: string | null
   author: string | null
   body: string
+  source: 'funbase' | 'kintone'
+  kintone_author: string | null
   created_at: string
 }
+
+const COMMENT_COLUMNS =
+  'id, case_id, requirement_id, author, body, source, kintone_author, created_at'
 
 /**
  * 投稿者 id → 表示ラベル（email）を解決する。auth.users には RLS 経由で触れないため、
@@ -47,8 +57,10 @@ function mapComment(row: CommentRow, label: string | null): CaseComment {
     caseId: row.case_id,
     requirementId: row.requirement_id,
     authorId: row.author,
-    authorLabel: label,
+    // kintone 由来は kintone_author を表示ラベルに使う。
+    authorLabel: row.source === 'kintone' ? row.kintone_author : label,
     body: row.body,
+    source: row.source,
     createdAt: row.created_at,
   }
 }
@@ -67,7 +79,7 @@ export async function listComments(caseId: string): Promise<CaseComment[]> {
 
   const { data, error } = await supabase
     .from('case_comments')
-    .select('id, case_id, requirement_id, author, body, created_at')
+    .select(COMMENT_COLUMNS)
     .eq('case_id', caseId)
     .order('created_at', { ascending: true })
 
@@ -125,7 +137,7 @@ export async function addComment(params: {
       author: user.id,
       body,
     })
-    .select('id, case_id, requirement_id, author, body, created_at')
+    .select(COMMENT_COLUMNS)
     .single()
 
   if (insertError || !inserted) {
@@ -134,8 +146,38 @@ export async function addComment(params: {
   }
 
   const labels = await resolveAuthorLabels([user.id])
+  const authorLabel = labels.get(user.id) ?? null
+
+  // kintone（app296）へ push（紐付け＋認証があれば・ベストエフォート）。
+  // 接頭辞 [FunBase] を付けて出すため、戻ってくる Webhook は取り込み側でループ除外される。
+  const insertedRow = inserted as CommentRow
+  try {
+    const client = createKintoneWriteClientFromEnv()
+    if (client) {
+      const service = getServiceClient()
+      const kintoneRecordId = await resolveKintoneRecordId(service, c.id)
+      if (kintoneRecordId) {
+        const { kintoneCommentId } = await pushCommentToKintone({
+          client,
+          kintoneRecordId,
+          authorLabel,
+          body,
+        })
+        await service
+          .from('case_comments')
+          .update({
+            kintone_comment_id: kintoneCommentId,
+            synced_to_kintone_at: new Date().toISOString(),
+          })
+          .eq('id', insertedRow.id)
+      }
+    }
+  } catch (pushError) {
+    console.error('Error pushing comment to kintone:', pushError)
+  }
+
   return {
     ok: true,
-    data: mapComment(inserted as CommentRow, labels.get(user.id) ?? null),
+    data: mapComment(insertedRow, authorLabel),
   }
 }

@@ -56,6 +56,10 @@ export interface VisaApplicationCase {
   status: CaseStatus
   title: string | null
   note: string | null
+  /** kintone「就労_ビザ案件管理」(app296) のレコード番号（案件ハブとの対応キー）。未連携は null。 */
+  kintoneRecordId: string | null
+  kintoneSyncStatus: string | null
+  kintoneLastSyncedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -95,6 +99,8 @@ export interface CaseComment {
   authorId: string | null
   authorLabel: string | null
   body: string
+  /** 'funbase'（アプリ内投稿）/ 'kintone'（app296 由来の取り込み）。 */
+  source: 'funbase' | 'kintone'
   createdAt: string
 }
 

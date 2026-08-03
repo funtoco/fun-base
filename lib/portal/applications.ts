@@ -1,10 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { groupRequirements, type MemberNameRef } from './requirements'
+import { getServiceClient } from './storage'
+import { createKintoneWriteClientFromEnv } from './kintone-sync/kintone-write-client'
+import { advanceKintoneCaseStatus } from './kintone-sync/status-sync'
 import type {
   AccessibleOffice,
   CaseDetail,
   CaseDocumentRequirement,
   CaseMember,
+  CaseStatus,
   GroupedRequirements,
   VisaApplicationCase,
 } from './types'
@@ -23,6 +27,9 @@ type CaseRow = {
   status: string
   title: string | null
   note: string | null
+  kintone_record_id: string | null
+  kintone_sync_status: string | null
+  kintone_last_synced_at: string | null
   created_at: string
   updated_at: string
 }
@@ -71,6 +78,9 @@ function mapCase(row: CaseRow, officeName: string | null): VisaApplicationCase {
     status: row.status as VisaApplicationCase['status'],
     title: row.title,
     note: row.note,
+    kintoneRecordId: row.kintone_record_id,
+    kintoneSyncStatus: row.kintone_sync_status,
+    kintoneLastSyncedAt: row.kintone_last_synced_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -231,7 +241,7 @@ export async function listCases(): Promise<VisaApplicationCase[]> {
   const { data, error } = await supabase
     .from('visa_application_cases')
     .select(
-      'id, tenant_id, tenant_office_id, entity_type, application_category, field, application_type, management_number, status, title, note, created_at, updated_at'
+      'id, tenant_id, tenant_office_id, entity_type, application_category, field, application_type, management_number, status, title, note, kintone_record_id, kintone_sync_status, kintone_last_synced_at, created_at, updated_at'
     )
     .order('created_at', { ascending: false })
 
@@ -305,7 +315,7 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
   const { data, error } = await supabase
     .from('visa_application_cases')
     .select(
-      'id, tenant_id, tenant_office_id, entity_type, application_category, field, application_type, management_number, status, title, note, created_at, updated_at'
+      'id, tenant_id, tenant_office_id, entity_type, application_category, field, application_type, management_number, status, title, note, kintone_record_id, kintone_sync_status, kintone_last_synced_at, created_at, updated_at'
     )
     .eq('id', caseId)
     .maybeSingle()
@@ -326,6 +336,53 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
     ...mapCase(row, officeNames.get(row.tenant_office_id) ?? null),
     members,
   }
+}
+
+export type UpdateCaseStatusResult =
+  | { ok: true; status: CaseStatus }
+  | { ok: false; httpStatus: number; error: string }
+
+/**
+ * 案件ステータスを進める（writer=OP 限定）。Supabase を更新し、案件が app296 と紐付いていれば
+ * kintone のプロセス管理も同ステータスまで前進させる（FunBase→kintone）。
+ */
+export async function updateCaseStatus(
+  caseId: string,
+  status: CaseStatus
+): Promise<UpdateCaseStatusResult> {
+  const detail = await getCase(caseId)
+  if (!detail) {
+    return { ok: false, httpStatus: 404, error: 'Not found' }
+  }
+  const writer = await isPortalWriter(detail.tenantId)
+  if (!writer) {
+    return { ok: false, httpStatus: 403, error: 'この操作を行う権限がありません' }
+  }
+
+  // 認可済みのため service-role で更新（RLS の UPDATE 制約に依存しない）。
+  const service = getServiceClient()
+  const { error } = await service
+    .from('visa_application_cases')
+    .update({ status })
+    .eq('id', caseId)
+  if (error) {
+    console.error('Error updating case status:', error)
+    return { ok: false, httpStatus: 500, error: 'ステータス更新に失敗しました' }
+  }
+
+  // kintone へ反映（紐付け＋認証があれば・失敗しても Supabase 更新は成功扱い）。
+  if (detail.kintoneRecordId) {
+    const client = createKintoneWriteClientFromEnv()
+    if (client) {
+      try {
+        await advanceKintoneCaseStatus(client, detail.kintoneRecordId, status)
+      } catch (kintoneError) {
+        console.error('Error advancing kintone status:', kintoneError)
+      }
+    }
+  }
+
+  return { ok: true, status }
 }
 
 /**

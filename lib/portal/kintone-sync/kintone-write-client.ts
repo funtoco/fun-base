@@ -16,6 +16,20 @@ export interface KintoneReadRecord {
   [fieldCode: string]: { value: unknown }
 }
 
+/** kintone レコードコメント1件（GET /k/v1/record/comments.json）。 */
+export interface KintoneRecordComment {
+  id: string
+  text: string
+  createdAt: string
+  creator: { code: string; name: string }
+}
+
+/** コメント本文中のメンション指定。 */
+export interface KintoneCommentMention {
+  code: string
+  type: 'USER' | 'GROUP' | 'ORGANIZATION'
+}
+
 /** upsert に必要な最小の書込インターフェース（テストではモックを注入する）。 */
 export interface KintoneWriteClient {
   getRecords(appId: string, query: string): Promise<KintoneReadRecord[]>
@@ -28,6 +42,26 @@ export interface KintoneWriteClient {
     id: string,
     record: KintoneRecordPayload
   ): Promise<{ revision: string }>
+  /** プロセス管理のステータスを「アクション名」で進める（PUT /k/v1/record/status.json）。 */
+  updateRecordStatus(
+    appId: string,
+    id: string,
+    action: string,
+    opts?: { assignee?: string; revision?: string }
+  ): Promise<{ revision: string }>
+  /** レコードコメントを取得する（GET /k/v1/record/comments.json）。 */
+  getRecordComments(
+    appId: string,
+    recordId: string,
+    opts?: { order?: 'asc' | 'desc'; offset?: number; limit?: number }
+  ): Promise<KintoneRecordComment[]>
+  /** レコードコメントを投稿する（POST /k/v1/record/comment.json）。 */
+  postRecordComment(
+    appId: string,
+    recordId: string,
+    text: string,
+    mentions?: KintoneCommentMention[]
+  ): Promise<{ id: string }>
 }
 
 export interface KintoneWriteAuth {
@@ -132,6 +166,64 @@ export class RestKintoneWriteClient implements KintoneWriteClient {
     return this.request<{ revision: string }>('/k/v1/record.json', {
       method: 'PUT',
       body: { app: appId, id, record },
+    })
+  }
+
+  async updateRecordStatus(
+    appId: string,
+    id: string,
+    action: string,
+    opts?: { assignee?: string; revision?: string }
+  ): Promise<{ revision: string }> {
+    const body: Record<string, unknown> = { app: appId, id, action }
+    if (opts?.assignee) {
+      body.assignee = opts.assignee
+    }
+    if (opts?.revision) {
+      body.revision = opts.revision
+    }
+    return this.request<{ revision: string }>('/k/v1/record/status.json', {
+      method: 'PUT',
+      body,
+    })
+  }
+
+  async getRecordComments(
+    appId: string,
+    recordId: string,
+    opts?: { order?: 'asc' | 'desc'; offset?: number; limit?: number }
+  ): Promise<KintoneRecordComment[]> {
+    const params = new URLSearchParams({
+      app: appId,
+      record: recordId,
+      order: opts?.order ?? 'asc',
+    })
+    if (opts?.offset != null) {
+      params.set('offset', String(opts.offset))
+    }
+    if (opts?.limit != null) {
+      params.set('limit', String(opts.limit))
+    }
+    const response = await this.request<{ comments: KintoneRecordComment[] }>(
+      `/k/v1/record/comments.json?${params.toString()}`,
+      { method: 'GET' }
+    )
+    return response.comments
+  }
+
+  async postRecordComment(
+    appId: string,
+    recordId: string,
+    text: string,
+    mentions?: KintoneCommentMention[]
+  ): Promise<{ id: string }> {
+    const comment: { text: string; mentions?: KintoneCommentMention[] } = { text }
+    if (mentions && mentions.length > 0) {
+      comment.mentions = mentions
+    }
+    return this.request<{ id: string }>('/k/v1/record/comment.json', {
+      method: 'POST',
+      body: { app: appId, record: recordId, comment },
     })
   }
 }

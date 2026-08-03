@@ -36,12 +36,30 @@ export interface TranscribeWorkbookResult {
   plans: TranscribePlan[]
 }
 
+/**
+ * 反映先レコードID（app296「ビザ案件管理」の事前紐付けから解決した値）。
+ * Aモデル: 「どのレコードに書くか」は事前紐付けで確定済みなので、照合せず直接 update する。
+ */
+export interface TranscribeTargets {
+  /** app296 の company_ref（= app34 マスタ_法人 のレコード番号 COID）。 */
+  app34RecordId?: string | null
+  /** app296 の koyou_ref（= app55 雇用条件書 のレコード番号）。 */
+  app55RecordId?: string | null
+}
+
 export interface TranscribeOptions {
   buffer: ArrayBuffer | Buffer | Uint8Array
-  /** 既定 true。false かつ client 指定時のみ app34 を実書き込みする（app55 は常に dry-run）。 */
+  /** 既定 true。false かつ client 指定時のみ実書き込みする。 */
   dryRun?: boolean
   /** kintone 書込クライアント（未指定/null なら dryRun 扱い）。 */
   client?: KintoneWriteClient | null
+  /**
+   * 反映先レコードID（app296 の事前紐付け）。
+   * - app34RecordId 指定時: 法人番号照合をスキップし、その ID へ直接 update（Aモデル）。
+   * - app55RecordId 指定時: app55 を実書き込み（従来はキー未定でドライラン固定だった制約を解除）。
+   * 未指定のフィールドは従来動作（app34=法人番号upsert / app55=ドライラン）にフォールバック。
+   */
+  targets?: TranscribeTargets
 }
 
 /** kintone クエリの文字列リテラル用エスケープ（ダブルクォートを退避）。 */
@@ -70,14 +88,16 @@ async function findExistingRecordId(
 }
 
 /**
- * app34（マスタ_法人）を法人番号で upsert する。
- * - dryRun（既定）: 書き込みなし。client があれば getRecords で既存有無をプレビューし recordId を埋める。
- * - dryRun=false かつ client あり: 既存1件→update / 0件→create。複数ヒットはエラー。
+ * app34（マスタ_法人）を転記する。
+ * - targetRecordId 指定（Aモデル/app296 の company_ref）: 法人番号照合をスキップし、その ID へ直接 update。
+ * - targetRecordId 無し（後方互換）: 法人番号で upsert（既存1件→update / 0件→create / 複数→エラー）。
+ * - dryRun / client 無し: 書き込みなし。可能なら recordId をプレビューで埋める。
  */
 async function transcribeApp34(
   getCell: CellReader,
   dryRun: boolean,
-  client: KintoneWriteClient | null
+  client: KintoneWriteClient | null,
+  targetRecordId: string | null
 ): Promise<TranscribeResult> {
   const mapping = APP34_MAPPING
   const keyCode = mapping.keyCode as string
@@ -85,59 +105,90 @@ async function transcribeApp34(
   const keyField = record[keyCode]
   const keyValue =
     keyField && typeof keyField.value !== 'object' ? String(keyField.value) : null
+  const sheet = mapping.requiredSheet ?? 'はじめに'
 
-  // dryRun または client 無し → 書き込みしない。可能ならプレビューで既存IDを埋める。
+  // dryRun または client 無し → 書き込みしない。可能ならプレビューで recordId を埋める。
   if (dryRun || !client) {
     let recordId: string | undefined
-    if (client && keyValue) {
+    if (targetRecordId) {
+      // Aモデル: 紐付け先IDをそのままプレビュー表示。
+      recordId = targetRecordId
+    } else if (client && keyValue) {
       const existingId = await findExistingRecordId(client, mapping.appId, keyCode, keyValue)
       recordId = existingId ?? undefined
     }
     return {
-      sheet: mapping.requiredSheet ?? 'はじめに',
+      sheet,
       plan: { appId: mapping.appId, action: 'dry-run', recordId, keyValue, record },
     }
   }
 
-  // 実書き込み: キーが無いと安全に upsert できない（重複作成を防ぐ）。
+  // 実書き込み（Aモデル）: 事前紐付けで確定済みのレコードへ直接 update（照合不要・重複ゼロ）。
+  if (targetRecordId) {
+    await client.updateRecord(mapping.appId, targetRecordId, record)
+    return {
+      sheet,
+      plan: { appId: mapping.appId, action: 'update', recordId: targetRecordId, keyValue, record },
+    }
+  }
+
+  // 後方互換: 紐付けが無ければ法人番号で upsert。キーが無いと安全に upsert できない。
   if (!keyValue) {
     throw new Error('法人番号（法人番号_13桁_）が空のため転記できません')
   }
-
   const existingId = await findExistingRecordId(client, mapping.appId, keyCode, keyValue)
   if (existingId) {
     await client.updateRecord(mapping.appId, existingId, record)
     return {
-      sheet: mapping.requiredSheet ?? 'はじめに',
+      sheet,
       plan: { appId: mapping.appId, action: 'update', recordId: existingId, keyValue, record },
     }
   }
-
   const created = await client.createRecord(mapping.appId, record)
   return {
-    sheet: mapping.requiredSheet ?? 'はじめに',
+    sheet,
     plan: { appId: mapping.appId, action: 'create', recordId: created.id, keyValue, record },
   }
 }
 
 /**
- * app55（雇用条件書）の payload を生成する（ドライラン専用）。
- *
- * TODO: app55 は upsert キーが未定のため、現状は実書き込み未対応（action は常に 'dry-run'）。
- * write メソッドは呼ばない。キー確定後に app34 同様の upsert を実装する。
+ * app55（雇用条件書）を転記する。
+ * - targetRecordId 指定（Aモデル/app296 の koyou_ref）＋実書き込み要求: その ID へ直接 update。
+ *   → 従来「upsert キー未定でドライラン固定」だった制約を、事前紐付けで解除する。
+ * - それ以外（紐付け無し or dryRun）: payload 生成のみ（ドライラン・書き込み無し）。
  */
-function transcribeApp55(getCell: CellReader): TranscribeResult {
+async function transcribeApp55(
+  getCell: CellReader,
+  dryRun: boolean,
+  client: KintoneWriteClient | null,
+  targetRecordId: string | null
+): Promise<TranscribeResult> {
   const mapping = APP55_MAPPING
   const record = buildRecord(getCell, mapping)
+
+  // 実書き込み（Aモデル）: 事前紐付け済みの雇用条件書レコードへ直接 update。
+  if (!dryRun && client && targetRecordId) {
+    await client.updateRecord(mapping.appId, targetRecordId, record)
+    return {
+      sheet: '1-4',
+      plan: {
+        appId: mapping.appId,
+        action: 'update',
+        recordId: targetRecordId,
+        keyValue: null,
+        record,
+      },
+    }
+  }
+
+  // ドライラン: 紐付け未指定で実書き込みを要求された場合はその旨を note に残す。
+  const note =
+    !dryRun && client && !targetRecordId
+      ? 'app55 の紐付け先（koyou_ref）が未指定のためドライラン（実書き込みスキップ）。'
+      : 'app55 は payload 生成（ドライラン）。実書き込みは紐付け先レコードID指定時のみ。'
   return {
     sheet: '1-4',
-    plan: {
-      appId: mapping.appId,
-      action: 'dry-run',
-      keyValue: null,
-      record,
-      note: 'app55 は upsert キー未定のため payload 生成（ドライラン）のみ。実書き込みは未対応。',
-    },
+    plan: { appId: mapping.appId, action: 'dry-run', keyValue: null, record, note },
   }
 }
 
@@ -153,6 +204,7 @@ export async function transcribeWorkbook(
 ): Promise<TranscribeWorkbookResult> {
   const dryRun = options.dryRun ?? true
   const client = options.client ?? null
+  const targets = options.targets ?? {}
 
   const workbook = await openWorkbook(options.buffer)
 
@@ -164,8 +216,8 @@ export async function transcribeWorkbook(
 
   const getCell = workbookCellReader(workbook)
 
-  const app34 = await transcribeApp34(getCell, dryRun, client)
-  const app55 = transcribeApp55(getCell)
+  const app34 = await transcribeApp34(getCell, dryRun, client, targets.app34RecordId ?? null)
+  const app55 = await transcribeApp55(getCell, dryRun, client, targets.app55RecordId ?? null)
 
   return { app34, app55, plans: [app34.plan, app55.plan] }
 }

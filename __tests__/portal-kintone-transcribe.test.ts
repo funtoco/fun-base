@@ -15,6 +15,11 @@ import { buildRecord } from '@/lib/portal/kintone-sync/build-records'
 import { APP34_MAPPING } from '@/lib/portal/kintone-sync/mappings/app34'
 import { APP55_MAPPING } from '@/lib/portal/kintone-sync/mappings/app55'
 import { transcribeWorkbook } from '@/lib/portal/kintone-sync/transcribe'
+import {
+  CASE_HUB_APP_ID,
+  loadCaseHubLinks,
+  writeBackSyncStatus,
+} from '@/lib/portal/kintone-sync/case-hub'
 import type {
   KintoneReadRecord,
   KintoneWriteClient,
@@ -337,6 +342,9 @@ function makeMockClient(overrides: Partial<KintoneWriteClient> = {}): KintoneWri
     getRecords: vi.fn().mockResolvedValue([]),
     createRecord: vi.fn().mockResolvedValue({ id: '999', revision: '1' }),
     updateRecord: vi.fn().mockResolvedValue({ revision: '2' }),
+    updateRecordStatus: vi.fn().mockResolvedValue({ revision: '3' }),
+    getRecordComments: vi.fn().mockResolvedValue([]),
+    postRecordComment: vi.fn().mockResolvedValue({ id: '1' }),
     ...overrides,
   }
 }
@@ -411,5 +419,131 @@ describe('transcribeWorkbook', () => {
   it('はじめに シートが無い → エラー', async () => {
     const buffer = await makeWorkbookBuffer({ 'その他': { A1: 'x' } })
     await expect(transcribeWorkbook({ buffer })).rejects.toThrow(/はじめに/)
+  })
+})
+
+// ── Aモデル: 事前紐付け（targets）による直接update ──────────────────────
+describe('transcribeWorkbook: targets（app296 事前紐付け・Aモデル）', () => {
+  it('app34RecordId 指定（dryRun=false）→ 法人番号照合せず紐付けIDへ直接update', async () => {
+    const buffer = await makeWorkbookBuffer(APP34_SHEETS)
+    const getRecords = vi.fn().mockResolvedValue([]) // 照合が呼ばれないことの確認用
+    const client = makeMockClient({ getRecords })
+    const result = await transcribeWorkbook({
+      buffer,
+      dryRun: false,
+      client,
+      targets: { app34RecordId: '100' },
+    })
+    expect(result.app34.plan.action).toBe('update')
+    expect(result.app34.plan.recordId).toBe('100')
+    expect(client.updateRecord).toHaveBeenCalledWith('34', '100', expect.any(Object))
+    // 法人番号照合(getRecords)は呼ばれない（照合レス）
+    expect(getRecords).not.toHaveBeenCalled()
+  })
+
+  it('app55RecordId 指定（dryRun=false）→ app55 を実 update（実書き込み解禁）', async () => {
+    const buffer = await makeWorkbookBuffer(APP34_SHEETS)
+    const client = makeMockClient()
+    const result = await transcribeWorkbook({
+      buffer,
+      dryRun: false,
+      client,
+      targets: { app34RecordId: '100', app55RecordId: '55' },
+    })
+    expect(result.app55.plan.action).toBe('update')
+    expect(result.app55.plan.recordId).toBe('55')
+    expect(client.updateRecord).toHaveBeenCalledWith('55', '55', expect.any(Object))
+  })
+
+  it('targets 指定でも dryRun=true → 書込なし・recordId はプレビュー表示', async () => {
+    const buffer = await makeWorkbookBuffer(APP34_SHEETS)
+    const client = makeMockClient()
+    const result = await transcribeWorkbook({
+      buffer,
+      dryRun: true,
+      client,
+      targets: { app34RecordId: '100', app55RecordId: '55' },
+    })
+    expect(result.app34.plan.action).toBe('dry-run')
+    expect(result.app34.plan.recordId).toBe('100')
+    expect(result.app55.plan.action).toBe('dry-run')
+    expect(client.updateRecord).not.toHaveBeenCalled()
+    expect(client.createRecord).not.toHaveBeenCalled()
+  })
+
+  it('app55 target 無し（dryRun=false）→ app55 はドライラン（後方互換・app34のみ書込）', async () => {
+    const buffer = await makeWorkbookBuffer(APP34_SHEETS)
+    const client = makeMockClient()
+    const result = await transcribeWorkbook({
+      buffer,
+      dryRun: false,
+      client,
+      targets: { app34RecordId: '100' }, // app55 は指定しない
+    })
+    expect(result.app55.plan.action).toBe('dry-run')
+    expect(client.updateRecord).toHaveBeenCalledTimes(1)
+    expect(client.updateRecord).toHaveBeenCalledWith('34', '100', expect.any(Object))
+  })
+})
+
+// ── case-hub: app296 のリンク解決・ステータス書き戻し ──────────────────
+describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
+  function hubRecord(): KintoneReadRecord {
+    return {
+      $id: { value: '5' },
+      company_ref: { value: '100' },
+      koyou_ref: { value: '55' },
+      applicant_ref: { value: '7' },
+    }
+  }
+
+  it('loadCaseHubLinks: app296 レコードから紐付けIDを解決する', async () => {
+    const getRecords = vi.fn().mockResolvedValue([hubRecord()])
+    const client = makeMockClient({ getRecords })
+    const links = await loadCaseHubLinks(client, '5')
+    expect(getRecords).toHaveBeenCalledWith(CASE_HUB_APP_ID, '$id = "5"')
+    expect(links).toEqual({
+      kintoneCaseId: '5',
+      app34RecordId: '100',
+      app55RecordId: '55',
+      applicantRecordId: '7',
+      driveFolderUrl: null,
+    })
+  })
+
+  it('loadCaseHubLinks: 未設定フィールドは null に正規化', async () => {
+    const rec: KintoneReadRecord = {
+      $id: { value: '5' },
+      company_ref: { value: '100' },
+      koyou_ref: { value: '' },
+      applicant_ref: { value: '' },
+    }
+    const client = makeMockClient({ getRecords: vi.fn().mockResolvedValue([rec]) })
+    const links = await loadCaseHubLinks(client, '5')
+    expect(links?.app34RecordId).toBe('100')
+    expect(links?.app55RecordId).toBeNull()
+    expect(links?.applicantRecordId).toBeNull()
+  })
+
+  it('loadCaseHubLinks: 見つからなければ null', async () => {
+    const client = makeMockClient({ getRecords: vi.fn().mockResolvedValue([]) })
+    expect(await loadCaseHubLinks(client, '999')).toBeNull()
+  })
+
+  it('writeBackSyncStatus: app296 へ status/synced_at/log を update', async () => {
+    const updateRecord = vi.fn().mockResolvedValue({ revision: '2' })
+    const client = makeMockClient({ updateRecord })
+    await writeBackSyncStatus(client, '5', {
+      companyStatus: '反映済',
+      koyouStatus: '反映済',
+      syncedAt: '2026-08-03T02:35:00Z',
+      log: 'ok',
+    })
+    expect(updateRecord).toHaveBeenCalledWith(CASE_HUB_APP_ID, '5', {
+      sync_company_status: { value: '反映済' },
+      sync_koyou_status: { value: '反映済' },
+      synced_at: { value: '2026-08-03T02:35:00Z' },
+      sync_log: { value: 'ok' },
+    })
   })
 })

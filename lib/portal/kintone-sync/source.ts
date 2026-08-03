@@ -1,4 +1,3 @@
-import { createClient } from '@/lib/supabase/server'
 import { OFFICE_BUCKET, getServiceClient } from '../storage'
 import type { ActionResult } from '../documents'
 
@@ -24,11 +23,12 @@ export interface WorkbookSource {
 export async function loadApplicationWorkbook(
   caseId: string
 ): Promise<ActionResult<WorkbookSource>> {
-  const supabase = await createClient()
+  // service-role（RLSバイパス）で取得する。呼び出し側で案件アクセスを確認してから使う
+  // 前提のため（getCase / isPortalWriter 済、または Webhook/自動トリガーのシステム実行）。
+  const service = getServiceClient()
 
-  // ユーザーセッション（RLS=office境界）で application_workbook 要件を取得。
-  // 行が返ればアクセス権あり、office_document_id があれば提出済み。
-  const { data: reqRow, error: reqError } = await supabase
+  // application_workbook 要件（office 書類）を取得。office_document_id があれば提出済み。
+  const { data: reqRow, error: reqError } = await service
     .from('case_document_requirements')
     .select('office_document_id')
     .eq('case_id', caseId)
@@ -50,7 +50,6 @@ export async function loadApplicationWorkbook(
     }
   }
 
-  const service = getServiceClient()
   const { data: doc, error: docError } = await service
     .from('office_documents')
     .select('storage_path, file_name')
