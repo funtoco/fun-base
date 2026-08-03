@@ -17,11 +17,16 @@ const CHECKBOX_FIELD_CODES: Set<string> = new Set(
 export type RetirementNoticeKintoneValues = Partial<
   Pick<
     Person,
+    | 'name'
+    | 'nationality'
+    | 'dob'
     | 'sex'
+    | 'residenceCardNo'
     | 'specificSkillField'
     | 'businessCategory'
     | 'employmentContractEndDate'
     | 'retirementDate'
+    | 'company'
     | 'companyCorporateNumber'
     | 'companyPostalCode'
     | 'companyAddress'
@@ -62,17 +67,25 @@ export async function getRetirementNoticeKintoneValues(
 
   if (retirementRecord) {
     const values = compactValues({
-      sex: valueOf(retirementRecord, '性別'),
-      specificSkillField: normalizeField(valueOf(retirementRecord, '分野')),
-      businessCategory: valueOf(retirementRecord, '業務区分'),
-      employmentContractEndDate: valueOf(retirementRecord, '退職日___支援終了日'),
-      retirementDate: valueOf(retirementRecord, '退職日___支援終了日'),
+      name: valueOf(retirementRecord, '人材名') || valueOf(workRecord, 'name'),
+      nationality: valueOf(retirementRecord, '国籍') || valueOf(workRecord, 'country'),
+      dob: valueOf(retirementRecord, '生年月日') || valueOf(workRecord, 'dateOfBirth'),
+      sex: valueOf(retirementRecord, '性別') || valueOf(workRecord, 'sex'),
+      residenceCardNo: valueOf(retirementRecord, '在留カード番号') || valueOf(workRecord, 'latestResidenceCardNo'),
+      specificSkillField: normalizeField(valueOf(retirementRecord, '分野') || valueOf(workRecord, 'field')),
+      businessCategory: valueOf(retirementRecord, '業務区分') || valueOf(workRecord, 'kyogikaiText'),
+      employmentContractEndDate: valueOf(retirementRecord, '退職日___支援終了日') || valueOf(workRecord, 'retirementDate'),
+      retirementDate: valueOf(retirementRecord, '退職日___支援終了日') || valueOf(workRecord, 'retirementDate'),
+      company: valueOf(retirementRecord, '法人名'),
       companyCorporateNumber: normalizeCorporateNumber(valueOf(retirementRecord, '所属機関_法人番号')),
       companyPostalCode: valueOf(retirementRecord, '所属機関_郵便番号'),
       companyAddress: valueOf(retirementRecord, '所属機関_住所'),
       companyPhone: valueOf(retirementRecord, '担当者_所属先電話番号'),
     })
-    values.fieldValues = extractRecordValues(retirementRecord)
+    values.fieldValues = {
+      ...extractRecordValues(retirementRecord),
+      ...buildPdfFieldAliases(values),
+    }
     return values
   }
 
@@ -84,11 +97,16 @@ export async function getRetirementNoticeKintoneValues(
   ])
 
   return compactValues({
+    name: valueOf(workRecord, 'name'),
+    nationality: valueOf(workRecord, 'country'),
+    dob: valueOf(workRecord, 'dateOfBirth'),
     sex: valueOf(workRecord, 'sex'),
+    residenceCardNo: valueOf(workRecord, 'latestResidenceCardNo'),
     specificSkillField: normalizeField(valueOf(workRecord, 'field') || firstValue(workRecord?.categoryCheckBox?.value)),
     businessCategory: valueOf(workRecord, 'kyogikaiText'),
     employmentContractEndDate: valueOf(workRecord, 'retirementDate'),
     retirementDate: valueOf(workRecord, 'retirementDate'),
+    company: valueOf(companyRecord, 'companyName'),
     companyCorporateNumber: normalizeCorporateNumber(valueOf(companyRecord, '法人番号_13桁_')),
     companyPostalCode: valueOf(officeRecord, 'postCode') || valueOf(companyRecord, 'postCode'),
     companyAddress: valueOf(officeRecord, 'address') || valueOf(companyRecord, 'address'),
@@ -102,11 +120,16 @@ export function applyRetirementNoticeKintoneValues(
 ): Person {
   return {
     ...person,
+    name: values.name ?? person.name,
+    nationality: values.nationality ?? person.nationality,
+    dob: values.dob ?? person.dob,
     sex: values.sex ?? person.sex,
+    residenceCardNo: values.residenceCardNo ?? person.residenceCardNo,
     specificSkillField: values.specificSkillField ?? person.specificSkillField,
     businessCategory: values.businessCategory ?? person.businessCategory,
     employmentContractEndDate: values.employmentContractEndDate ?? person.employmentContractEndDate,
     retirementDate: values.retirementDate ?? person.retirementDate,
+    company: values.company ?? person.company,
     companyCorporateNumber: values.companyCorporateNumber ?? person.companyCorporateNumber,
     companyPostalCode: values.companyPostalCode ?? person.companyPostalCode,
     companyAddress: values.companyAddress ?? person.companyAddress,
@@ -235,6 +258,26 @@ function stringifyKintoneValue(fieldCode: string, value: unknown): string {
   }
   if (value === undefined || value === null) return ''
   return String(value).trim()
+}
+
+function buildPdfFieldAliases(values: RetirementNoticeKintoneValues): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries({
+      人材名: values.name,
+      生年月日: values.dob,
+      国籍: values.nationality,
+      性別: values.sex,
+      在留カード番号: values.residenceCardNo,
+      分野: values.specificSkillField,
+      業務区分: values.businessCategory,
+      退職日___支援終了日: values.employmentContractEndDate || values.retirementDate,
+      法人名: values.company,
+      所属機関_法人番号: values.companyCorporateNumber,
+      所属機関_郵便番号: values.companyPostalCode,
+      所属機関_住所: values.companyAddress,
+      担当者_所属先電話番号: values.companyPhone,
+    }).filter(([, value]) => typeof value === 'string' && value.trim())
+  ) as Record<string, string>
 }
 
 function valueOf(record: KintoneRecord | null | undefined, fieldCode: string): string | undefined {

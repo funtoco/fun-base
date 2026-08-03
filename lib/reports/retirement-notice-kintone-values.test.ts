@@ -21,7 +21,7 @@ vi.mock('@/lib/kintone/api-client', () => ({
   }),
 }))
 
-import { getRetirementNoticeKintoneValues } from './retirement-notice-kintone-values'
+import { applyRetirementNoticeKintoneValues, getRetirementNoticeKintoneValues } from './retirement-notice-kintone-values'
 
 const basePerson = {
   id: '1234',
@@ -60,7 +60,11 @@ beforeEach(() => {
           WOID: { value: '1234' },
           COID: { value: '34' },
           OFID: { value: '36' },
+          name: { value: 'KINTONE TARO' },
+          country: { value: 'ミャンマー' },
+          dateOfBirth: { value: '1999-01-14' },
           sex: { value: '男' },
+          latestResidenceCardNo: { value: 'AB12345678CD' },
           field: { value: '介護' },
           kyogikaiText: { value: '介護業務全般' },
           retirementDate: { value: '2026-07-31' },
@@ -74,6 +78,7 @@ beforeEach(() => {
           $id: { value: '34' },
           $revision: { value: '1' },
           法人番号_13桁_: { value: '5120001198866' },
+          companyName: { value: '医療法人テスト' },
           postCode: { value: '556-0004' },
           address: { value: '大阪府大阪市浪速区' },
           telephoneNumber: { value: '06-0000-0000' },
@@ -134,10 +139,15 @@ describe('getRetirementNoticeKintoneValues', () => {
       accessToken: 'new-access-token',
     })
     expect(values).toMatchObject({
+      name: 'KINTONE TARO',
+      nationality: 'ミャンマー',
+      dob: '1999-01-14',
       sex: '男',
+      residenceCardNo: 'AB12345678CD',
       specificSkillField: '介護分野',
       businessCategory: '介護業務全般',
       employmentContractEndDate: '2026-07-31',
+      company: '医療法人テスト',
       companyCorporateNumber: '5120001198866',
       companyPostalCode: '530-0001',
       companyAddress: '大阪府大阪市北区',
@@ -162,6 +172,12 @@ describe('getRetirementNoticeKintoneValues', () => {
             $id: { value: '92' },
             $revision: { value: '1' },
             WOID: { value: '1234' },
+            人材名: { value: 'NYEIN CHAN AUNG' },
+            国籍: { value: 'ミャンマー' },
+            性別: { value: '男' },
+            在留カード番号: { value: 'UH75146642LA' },
+            法人名: { value: '医療法人健佑会' },
+            所属機関_住所: { value: '和歌山県東牟婁郡串本町有田499-1' },
             会社都合: { value: ['会社都合'] },
             事案概要: { value: '本人都合ではない退職です' },
           },
@@ -173,8 +189,23 @@ describe('getRetirementNoticeKintoneValues', () => {
     const values = await getRetirementNoticeKintoneValues(basePerson as any)
 
     expect(values.fieldValues).toMatchObject({
+      人材名: 'NYEIN CHAN AUNG',
+      国籍: 'ミャンマー',
+      性別: '男',
+      在留カード番号: 'UH75146642LA',
+      法人名: '医療法人健佑会',
+      所属機関_住所: '和歌山県東牟婁郡串本町有田499-1',
       会社都合: '✓',
       事案概要: '本人都合ではない退職です',
+    })
+
+    expect(applyRetirementNoticeKintoneValues(basePerson as any, values)).toMatchObject({
+      name: 'NYEIN CHAN AUNG',
+      nationality: 'ミャンマー',
+      sex: '男',
+      residenceCardNo: 'UH75146642LA',
+      company: '医療法人健佑会',
+      companyAddress: '和歌山県東牟婁郡串本町有田499-1',
     })
   })
 })

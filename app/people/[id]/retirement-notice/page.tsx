@@ -125,10 +125,15 @@ export default async function RetirementNoticePage({ params, searchParams }: Ret
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <ReadOnlyField label="氏名（ローマ字）" value={pdfPerson.name} />
+                <ReadOnlyField label="生年月日" value={pdfPerson.dob} />
+                <ReadOnlyField label="国籍・地域" value={pdfPerson.nationality} />
                 <ReadOnlyField label="性別" value={pdfPerson.sex} />
+                <ReadOnlyField label="在留カード番号" value={pdfPerson.residenceCardNo} />
                 <ReadOnlyField label="特定産業分野" value={pdfPerson.specificSkillField} />
                 <ReadOnlyField label="業務区分" value={pdfPerson.businessCategory} />
                 <ReadOnlyField label="雇用契約終了年月日" value={pdfPerson.employmentContractEndDate || pdfPerson.retirementDate || pdfPerson.supportEndDate} />
+                <ReadOnlyField label="機関の氏名又は名称" value={pdfPerson.company || pdfPerson.tenantName} />
                 <ReadOnlyField label="法人番号" value={pdfPerson.companyCorporateNumber} />
                 <ReadOnlyField label="機関の郵便番号" value={pdfPerson.companyPostalCode} />
                 <ReadOnlyField label="機関の電話番号" value={pdfPerson.companyPhone} />
@@ -156,7 +161,7 @@ function ReadOnlyField({ label, value }: { label: string; value?: string | null 
   return (
     <div className="rounded-md border bg-background p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 text-sm font-medium">{value || '未設定'}</div>
+      <div className="mt-1 text-sm font-medium">{value || '未取得/未設定'}</div>
     </div>
   )
 }
