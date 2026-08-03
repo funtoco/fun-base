@@ -11,7 +11,7 @@ import { RETIREMENT_NOTICE_PLACEMENTS, type RetirementNoticePlacement } from './
 const PDF_CONTENT_TYPE = 'application/pdf'
 const TEMPLATE_COORDINATE_WIDTH = 794
 const TEMPLATE_COORDINATE_HEIGHT = 1123
-const FONT_PATH = path.join(process.cwd(), 'public', 'fonts', 'NotoSansJP-Regular.otf')
+const FONT_PATH = path.join(process.cwd(), 'public', 'fonts', 'ZenOldMincho-Regular.ttf')
 
 export async function generateRetirementNoticePdf({
   template,
@@ -57,7 +57,7 @@ export async function generateRetirementNoticePdf({
     if (!page) continue
 
     const rawValue = values[placement.fieldCode]
-    const value = formatPlacementValue(rawValue, placement)
+    const value = formatRetirementNoticePlacementValue(rawValue, placement)
     if (!value) continue
 
     renderText({ page, placement, value, font })
@@ -120,9 +120,16 @@ function renderText({
   const boxHeight = Math.max(placement.height * scaleY, 1)
   const x = placement.x * scaleX
   const y = pageHeight - placement.y * scaleY - boxHeight
-  const fontSize = Math.max((placement.style?.fontSize ?? 12) * scaleY, 6)
   const padding = 1.5 * Math.min(scaleX, scaleY)
   const usableWidth = Math.max(boxWidth - padding * 2, 1)
+  const baseFontSize = Math.max((placement.style?.fontSize ?? 12) * scaleY, 6)
+  const fontSize = fitRetirementNoticeSingleLineFontSize(
+    value,
+    Boolean(placement.style?.textWrap),
+    usableWidth,
+    baseFontSize,
+    font
+  )
   const lines = buildLines(value, Boolean(placement.style?.textWrap), usableWidth, fontSize, font)
   const lineHeight = fontSize * 1.12
   const visibleLines = lines.slice(0, Math.max(Math.floor((boxHeight - padding * 2) / lineHeight), 1))
@@ -176,10 +183,26 @@ function resolveAlignedX(
   return left
 }
 
-function formatPlacementValue(value: string | undefined, placement: RetirementNoticePlacement): string {
+export function fitRetirementNoticeSingleLineFontSize(
+  value: string,
+  textWrap: boolean,
+  maxWidth: number,
+  fontSize: number,
+  font: any
+): number {
+  if (textWrap || value.includes('\n')) return fontSize
+  const textWidth = font.widthOfTextAtSize(value, fontSize)
+  if (textWidth <= maxWidth) return fontSize
+  return Math.max((fontSize * maxWidth) / textWidth, 6)
+}
+
+export function formatRetirementNoticePlacementValue(
+  value: string | undefined,
+  placement: RetirementNoticePlacement
+): string {
   if (!value) return ''
   if (isCheckboxPlacement(placement)) {
-    return value === '✓' || value === placement.fieldCode ? '✓' : ''
+    return value === '✓' || value === placement.fieldCode ? '■' : ''
   }
   if (placement.dateFormat) {
     return formatDateValue(value)

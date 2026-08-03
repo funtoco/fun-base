@@ -6,9 +6,40 @@ import {
   getRetirementNoticeReportTemplate,
   getRetirementNoticeReportTemplates,
 } from './retirement-notice-reports'
-import { buildRetirementNoticePdfFilename, buildRetirementNoticeValueMap, generateRetirementNoticePdf } from './retirement-notice-pdf'
+import {
+  buildRetirementNoticePdfFilename,
+  buildRetirementNoticeValueMap,
+  fitRetirementNoticeSingleLineFontSize,
+  formatRetirementNoticePlacementValue,
+  generateRetirementNoticePdf,
+} from './retirement-notice-pdf'
 
 describe('retirement notice report templates', () => {
+  test('renders selected checkbox values as the filled square used by kintone PDFs', () => {
+    const placement = {
+      fieldCode: '連絡可能',
+      page: 0,
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 20,
+      style: { textAlign: 'center' as const },
+    }
+
+    expect(formatRetirementNoticePlacementValue('✓', placement)).toBe('■')
+    expect(formatRetirementNoticePlacementValue('連絡可能', placement)).toBe('■')
+    expect(formatRetirementNoticePlacementValue('連絡不可能', placement)).toBe('')
+  })
+
+  test('shrinks a long single-line value to stay within its placement', () => {
+    const font = {
+      widthOfTextAtSize: (value: string, fontSize: number) => value.length * fontSize,
+    }
+
+    expect(fitRetirementNoticeSingleLineFontSize('1234567890', false, 100, 20, font)).toBe(10)
+    expect(fitRetirementNoticeSingleLineFontSize('1234567890', true, 100, 20, font)).toBe(20)
+  })
+
   test('allows creating retirement notices for retired and support-ended people', () => {
     expect(canCreateRetirementNotice('退職')).toBe(true)
     expect(canCreateRetirementNotice('支援終了')).toBe(true)
