@@ -23,6 +23,8 @@ export type RetirementNoticePerson = {
   name?: string | null
 }
 
+const RETIREMENT_NOTICE_WORKING_STATUSES = new Set(['退職', '支援終了'])
+
 const COMMON_FIELDS = [
   '人材名',
   '性別',
@@ -212,6 +214,10 @@ export function getRetirementNoticeReportTemplates(): RetirementNoticeReportTemp
 
 export function getRetirementNoticeReportTemplate(reportCode: string): RetirementNoticeReportTemplate | null {
   return getRetirementNoticeReportTemplates().find((template) => template.reportCode === reportCode) ?? null
+}
+
+export function canCreateRetirementNotice(workingStatus?: string | null): boolean {
+  return RETIREMENT_NOTICE_WORKING_STATUSES.has(workingStatus ?? '')
 }
 
 export function buildRetirementNoticeMetadataFilename(

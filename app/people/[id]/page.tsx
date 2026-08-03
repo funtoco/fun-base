@@ -12,6 +12,7 @@ import { getVisasByPersonId } from "@/lib/supabase/visas-server"
 import { getPersonDocumentsByPersonId } from "@/lib/supabase/person-documents-server"
 import { getRegularInterviewsByPersonId, getDailySupportRecordsByPersonId } from "@/lib/kintone-data-server"
 import { isManualPersonId } from "@/lib/person-source"
+import { canCreateRetirementNotice } from "@/lib/reports/retirement-notice-reports"
 import { formatDate, formatDateTime } from "@/lib/utils"
 import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase } from "lucide-react"
 
@@ -405,7 +406,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
           )}
 
           {/* Retirement Notice */}
-          {person.workingStatus === "退職" && (
+          {canCreateRetirementNotice(person.workingStatus) && (
             <Card>
               <CardHeader>
                 <CardTitle>退職届出</CardTitle>

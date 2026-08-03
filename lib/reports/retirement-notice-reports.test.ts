@@ -2,12 +2,20 @@ import { describe, expect, test } from 'vitest'
 
 import {
   APP92_RETIREMENT_NOTICE_SOURCE_APP_ID,
+  canCreateRetirementNotice,
   getRetirementNoticeReportTemplate,
   getRetirementNoticeReportTemplates,
 } from './retirement-notice-reports'
 import { buildRetirementNoticePdfFilename, buildRetirementNoticeValueMap, generateRetirementNoticePdf } from './retirement-notice-pdf'
 
 describe('retirement notice report templates', () => {
+  test('allows creating retirement notices for retired and support-ended people', () => {
+    expect(canCreateRetirementNotice('退職')).toBe(true)
+    expect(canCreateRetirementNotice('支援終了')).toBe(true)
+    expect(canCreateRetirementNotice('在籍中')).toBe(false)
+    expect(canCreateRetirementNotice()).toBe(false)
+  })
+
   test('exposes the published app92 retirement notice templates in display order', () => {
     const templates = getRetirementNoticeReportTemplates()
 
