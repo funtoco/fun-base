@@ -90,41 +90,43 @@ describe('retirement notice report templates', () => {
       人材_電話番号: '090-1234-5678',
       法人名: '株式会社Funtoco',
     })
+    expect(values).not.toHaveProperty('担当者の事業所名')
+    expect(values).not.toHaveProperty('担当者の事業所名_0')
   })
 
-  test('generates a filled PDF from a bundled source template', async () => {
-    const template = getRetirementNoticeReportTemplate('vy0fa9sokdkdu9xnrp9kvqs2nwgaqoz7')!
+  test('generates a filled PDF from every bundled source template', async () => {
+    const person = {
+      id: 'person-1',
+      name: 'NGU WAR KYAW',
+      kana: 'ング ワー チョー',
+      nationality: 'ミャンマー',
+      dob: '1995-01-02',
+      sex: '男',
+      specificSkillField: '介護',
+      businessCategory: '介護業務全般',
+      residenceCardNo: 'AB12345678CD',
+      retirementDate: '2026-07-28',
+      employmentContractDate: '2026-08-01',
+      workingStatus: '退職',
+      company: '株式会社Funtoco',
+      companyPostalCode: '556-0004',
+      companyAddress: '大阪府大阪市浪速区日本橋西2-5-6',
+      companyCorporateNumber: '5120001198866',
+      companyPhone: '06-0000-0000',
+      employmentChangeNotificationDate: '2026-07-28',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-07-01',
+    }
 
-    const pdf = await generateRetirementNoticePdf({
-      template,
-      person: {
-        id: 'person-1',
-        name: 'NGU WAR KYAW',
-        kana: 'ング ワー チョー',
-        nationality: 'ミャンマー',
-        dob: '1995-01-02',
-        sex: '男',
-        specificSkillField: '介護',
-        businessCategory: '介護業務全般',
-        residenceCardNo: 'AB12345678CD',
-        retirementDate: '2026-07-28',
-        workingStatus: '退職',
-        company: '株式会社Funtoco',
-        companyPostalCode: '556-0004',
-        companyAddress: '大阪府大阪市浪速区日本橋西2-5-6',
-        companyCorporateNumber: '5120001198866',
-        companyPhone: '06-0000-0000',
-        employmentChangeNotificationDate: '2026-07-28',
-        createdAt: '2026-01-01',
-        updatedAt: '2026-07-01',
-      },
-    })
+    for (const template of getRetirementNoticeReportTemplates()) {
+      const pdf = await generateRetirementNoticePdf({ template, person })
 
-    expect(pdf.contentType).toBe('application/pdf')
-    expect(pdf.fileName).toBe('退職届出_自己都合退職_NGU WAR KYAW.pdf')
-    expect(pdf.renderedFieldCount).toBeGreaterThan(5)
-    expect(Buffer.from(pdf.data.subarray(0, 5)).toString('utf8')).toBe('%PDF-')
-  })
+      expect(pdf.contentType).toBe('application/pdf')
+      expect(pdf.fileName).toBe(`退職届出_${template.label}_NGU WAR KYAW.pdf`)
+      expect(pdf.renderedFieldCount).toBeGreaterThan(5)
+      expect(Buffer.from(pdf.data.subarray(0, 5)).toString('utf8')).toBe('%PDF-')
+    }
+  }, 30_000)
 
   test('exposes an actual bundled PDF path for each published template', () => {
     expect(getRetirementNoticeReportTemplates().map((template) => template.template.pdfPath)).toEqual([

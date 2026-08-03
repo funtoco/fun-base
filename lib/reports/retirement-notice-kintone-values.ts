@@ -65,6 +65,13 @@ export async function getRetirementNoticeKintoneValues(
     ? await getFirstRecord(client, KINTONE_RETIREMENT_NOTICE_APP_ID, `WOID = ${quoteKintoneValue(workId)} limit 1`)
     : null
 
+  const coid = numericRecordId(valueOf(workRecord, 'COID'))
+  const ofid = numericRecordId(valueOf(workRecord, 'OFID'))
+  const [companyRecord, officeRecord] = await Promise.all([
+    coid ? getRecordById(client, KINTONE_COMPANY_APP_ID, coid) : Promise.resolve(null),
+    ofid ? getRecordById(client, KINTONE_OFFICE_APP_ID, ofid) : Promise.resolve(null),
+  ])
+
   if (retirementRecord) {
     const values = compactValues({
       name: valueOf(retirementRecord, '人材名') || valueOf(workRecord, 'name'),
@@ -76,11 +83,22 @@ export async function getRetirementNoticeKintoneValues(
       businessCategory: valueOf(retirementRecord, '業務区分') || valueOf(workRecord, 'kyogikaiText'),
       employmentContractEndDate: valueOf(retirementRecord, '退職日___支援終了日') || valueOf(workRecord, 'retirementDate'),
       retirementDate: valueOf(retirementRecord, '退職日___支援終了日') || valueOf(workRecord, 'retirementDate'),
-      company: valueOf(retirementRecord, '法人名'),
-      companyCorporateNumber: normalizeCorporateNumber(valueOf(retirementRecord, '所属機関_法人番号')),
-      companyPostalCode: valueOf(retirementRecord, '所属機関_郵便番号'),
-      companyAddress: valueOf(retirementRecord, '所属機関_住所'),
-      companyPhone: valueOf(retirementRecord, '担当者_所属先電話番号'),
+      company: valueOf(retirementRecord, '法人名') || valueOf(companyRecord, 'companyName'),
+      companyCorporateNumber: normalizeCorporateNumber(
+        valueOf(retirementRecord, '所属機関_法人番号') || valueOf(companyRecord, '法人番号_13桁_')
+      ),
+      companyPostalCode:
+        valueOf(retirementRecord, '所属機関_郵便番号') ||
+        valueOf(officeRecord, 'postCode') ||
+        valueOf(companyRecord, 'postCode'),
+      companyAddress:
+        valueOf(retirementRecord, '所属機関_住所') ||
+        valueOf(officeRecord, 'address') ||
+        valueOf(companyRecord, 'address'),
+      companyPhone:
+        valueOf(retirementRecord, '担当者_所属先電話番号') ||
+        valueOf(officeRecord, 'phoneNumber') ||
+        valueOf(companyRecord, 'telephoneNumber'),
     })
     values.fieldValues = {
       ...extractRecordValues(retirementRecord),
@@ -88,13 +106,6 @@ export async function getRetirementNoticeKintoneValues(
     }
     return values
   }
-
-  const coid = numericRecordId(valueOf(workRecord, 'COID'))
-  const ofid = numericRecordId(valueOf(workRecord, 'OFID'))
-  const [companyRecord, officeRecord] = await Promise.all([
-    coid ? getRecordById(client, KINTONE_COMPANY_APP_ID, coid) : Promise.resolve(null),
-    ofid ? getRecordById(client, KINTONE_OFFICE_APP_ID, ofid) : Promise.resolve(null),
-  ])
 
   return compactValues({
     name: valueOf(workRecord, 'name'),

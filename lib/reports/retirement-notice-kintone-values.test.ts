@@ -208,4 +208,89 @@ describe('getRetirementNoticeKintoneValues', () => {
       companyAddress: '和歌山県東牟婁郡串本町有田499-1',
     })
   })
+
+  test('fills fields missing from app92 with work, company, and office master values', async () => {
+    mocks.getRecords.mockImplementation(async (appId: string) => {
+      if (appId === '13') {
+        return [
+          {
+            $id: { value: '1234' },
+            $revision: { value: '1' },
+            WOID: { value: '1234' },
+            COID: { value: 'CO-34' },
+            OFID: { value: 'OF-36' },
+            name: { value: 'WORK TARO' },
+            country: { value: 'ミャンマー' },
+            dateOfBirth: { value: '1999-01-14' },
+            sex: { value: '男' },
+            latestResidenceCardNo: { value: 'AB12345678CD' },
+            field: { value: '介護' },
+            kyogikaiText: { value: '介護業務全般' },
+            retirementDate: { value: '2026-07-31' },
+          },
+        ]
+      }
+      if (appId === '92') {
+        return [
+          {
+            $id: { value: '92' },
+            $revision: { value: '1' },
+            WOID: { value: '1234' },
+            人材名: { value: 'APP92 TARO' },
+            会社都合: { value: ['会社都合'] },
+          },
+        ]
+      }
+      if (appId === '34') {
+        return [
+          {
+            $id: { value: '34' },
+            $revision: { value: '1' },
+            法人番号_13桁_: { value: '5120001198866' },
+            companyName: { value: '医療法人テスト' },
+            postCode: { value: '556-0004' },
+            address: { value: '大阪府大阪市浪速区' },
+            telephoneNumber: { value: '06-0000-0000' },
+          },
+        ]
+      }
+      if (appId === '36') {
+        return [
+          {
+            $id: { value: '36' },
+            $revision: { value: '1' },
+            postCode: { value: '530-0001' },
+            address: { value: '大阪府大阪市北区' },
+            phoneNumber: { value: '06-1111-1111' },
+          },
+        ]
+      }
+      return []
+    })
+
+    const values = await getRetirementNoticeKintoneValues(basePerson as any)
+
+    expect(values).toMatchObject({
+      name: 'APP92 TARO',
+      nationality: 'ミャンマー',
+      dob: '1999-01-14',
+      sex: '男',
+      residenceCardNo: 'AB12345678CD',
+      specificSkillField: '介護分野',
+      businessCategory: '介護業務全般',
+      employmentContractEndDate: '2026-07-31',
+      company: '医療法人テスト',
+      companyCorporateNumber: '5120001198866',
+      companyPostalCode: '530-0001',
+      companyAddress: '大阪府大阪市北区',
+      companyPhone: '06-1111-1111',
+      fieldValues: expect.objectContaining({
+        人材名: 'APP92 TARO',
+        国籍: 'ミャンマー',
+        法人名: '医療法人テスト',
+        所属機関_住所: '大阪府大阪市北区',
+        会社都合: '✓',
+      }),
+    })
+  })
 })

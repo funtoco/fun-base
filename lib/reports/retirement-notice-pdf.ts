@@ -34,7 +34,7 @@ export async function generateRetirementNoticePdf({
 
   const pdf = await PDFDocument.create()
   pdf.registerFontkit(fontkit)
-  const font = await pdf.embedFont(fontBytes, { subset: true })
+  const font = await pdf.embedFont(fontBytes, { subset: false })
   const sourcePdf = await PDFDocument.load(sourcePdfBytes)
   const sourcePageIndices = sourcePdf.getPageIndices()
   const embeddedPages = await pdf.embedPdf(sourcePdfBytes, sourcePageIndices)
@@ -98,8 +98,6 @@ export function buildRetirementNoticeValueMap(person: Person): Record<string, st
     所属機関_郵便番号: person.companyPostalCode,
     所属機関_法人番号: person.companyCorporateNumber,
     担当者_所属先電話番号: person.companyPhone,
-    担当者の事業所名: person.company || person.tenantName,
-    担当者の事業所名_0: person.company || person.tenantName,
     作成日: createdDate,
   }
 }
