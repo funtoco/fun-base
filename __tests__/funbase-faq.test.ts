@@ -6,7 +6,7 @@ describe("FunBase FAQ content", () => {
     expect(quickStartSteps).toHaveLength(3)
     expect(quickStartSteps.map((step) => step.title)).toEqual([
       "1. ログインする",
-      "2. ホームで全体を見る",
+      "2. ホームで全体を確認する",
       "3. 気になる人材を開く",
     ])
   })
@@ -14,9 +14,9 @@ describe("FunBase FAQ content", () => {
   it("covers the core questions from company users", () => {
     const questions = faqSections.flatMap((section) => section.items.map((item) => item.question))
 
-    expect(questions).toContain("まず何を見れば良いですか？")
+    expect(questions).toContain("まず何を確認すれば良いですか？")
     expect(questions).toContain("ビザの進捗はどこで確認できますか？")
-    expect(questions).toContain("面談や日々のサポート内容はどこで見られますか？")
+    expect(questions).toContain("面談や日々のサポート内容はどこで確認できますか？")
     expect(questions).toContain("人材情報を手動で新規登録する方法を教えてください")
     expect(questions).toContain("困ったときは誰に連絡すれば良いですか？")
   })
@@ -33,5 +33,21 @@ describe("FunBase FAQ content", () => {
     expect(manualRegistrationItem?.answer).toContain("Funtocoの支援内容や面談・サポート記録は自動では連携されません")
     expect(manualRegistrationItem?.answer).toContain("FunEdu側には反映されません")
     expect(manualRegistrationItem?.answer).not.toContain("Kintone")
+  })
+
+  it("uses polite customer-facing wording", () => {
+    const faqText = [
+      ...quickStartSteps.flatMap((step) => [step.title, step.description]),
+      ...faqSections.flatMap((section) => [
+        section.title,
+        section.description,
+        ...section.items.flatMap((item) => [item.question, item.answer]),
+      ]),
+    ].join("\n")
+
+    expect(faqText).toContain("お使いいただ")
+    expect(faqText).toContain("ご確認いただ")
+    expect(faqText).not.toContain("見れば大丈夫")
+    expect(faqText).not.toContain("使う企業")
   })
 })

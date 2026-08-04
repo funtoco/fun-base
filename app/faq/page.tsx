@@ -22,8 +22,8 @@ export default function FaqPage() {
                 よくある問い合わせ
               </h1>
               <p className="text-base leading-7 text-muted-foreground md:text-lg">
-                はじめてFunBaseを使う企業担当者様向けに、最初に見る場所と困ったときの確認方法をまとめました。
-                忙しい方は、まず下の3ステップだけ見れば大丈夫です。
+                はじめてFunBaseをお使いいただく企業担当者様向けに、最初にご確認いただく場所と困ったときの確認方法をまとめました。
+                お急ぎの方は、営業担当に直接ご確認いただくか、下記の3ステップをご確認くださいませ。
               </p>
             </div>
           </div>
@@ -82,8 +82,8 @@ export default function FaqPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
-                <p>人材名が分かる場合は、まず「人材一覧」で検索してください。</p>
-                <p>全体の状況を見たい場合は「ホーム」や「タイムライン」から確認するのがおすすめです。</p>
+                <p>人材名がお分かりの場合は、まず「人材一覧」で検索してください。</p>
+                <p>全体の状況を確認されたい場合は、「ホーム」や「タイムライン」からご確認いただくのがおすすめです。</p>
               </CardContent>
             </Card>
 
@@ -91,7 +91,7 @@ export default function FaqPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Mail className="h-5 w-5 text-primary" />
-                  問い合わせ時に伝えること
+                  お問い合わせ時にお伝えいただきたいこと
                 </CardTitle>
               </CardHeader>
               <CardContent>
