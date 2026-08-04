@@ -6,16 +6,24 @@ import type { KintoneRecordPayload } from './types'
 // 転記はこの紐付けを使って app34 / app55 を直接 update する（Aモデル・照合レス）。
 export const CASE_HUB_APP_ID = '296'
 
+/** 雇用条件書サブテーブル(koyou_details)の1行＝1人分の反映先。 */
+export interface KoyouTarget {
+  /** koyou_ref（= app55 雇用条件書 レコード番号）。 */
+  app55RecordId: string
+  /** koyou_hrid（app55 の HRID を自動コピー。FunBase メンバー解決に使う）。 */
+  hrid: string | null
+  /** koyou_applicant_disp（申請人氏名の自動コピー・表示用）。 */
+  applicantName: string | null
+}
+
 /** 案件ハブ（app296）1レコードから解決した反映先リンク。 */
 export interface CaseHubLinks {
   /** app296 のレコード番号（案件キー）。 */
   kintoneCaseId: string
   /** company_ref（= app34 レコード番号 COID）。未設定なら null。 */
   app34RecordId: string | null
-  /** koyou_ref（= app55 レコード番号）。未設定なら null。 */
-  app55RecordId: string | null
-  /** applicant_ref（= app30 レコード番号 HRID）。未設定なら null。 */
-  applicantRecordId: string | null
+  /** 雇用条件書サブテーブルの各行（複数人分の app55 反映先）。 */
+  koyouTargets: KoyouTarget[]
   /** drive_folder_url（その他書類の Drive アップロード先）。未設定なら null。 */
   driveFolderUrl: string | null
 }
@@ -51,17 +59,43 @@ export async function loadCaseHubLinks(
   const record = records[0]
   const field = (code: string): unknown =>
     (record[code] as { value: unknown } | undefined)?.value
+
+  // 雇用条件書サブテーブル(koyou_details)を各行→KoyouTargetへ。koyou_ref が無い行は無視。
+  const subRows =
+    (record['koyou_details'] as { value: SubtableRow[] } | undefined)?.value ?? []
+  const koyouTargets: KoyouTarget[] = []
+  for (const row of subRows) {
+    const cell = (code: string): unknown => row.value?.[code]?.value
+    const app55RecordId = asIdString(cell('koyou_ref'))
+    if (!app55RecordId) {
+      continue
+    }
+    koyouTargets.push({
+      app55RecordId,
+      hrid: asIdString(cell('koyou_hrid')),
+      applicantName:
+        cell('koyou_applicant_disp') != null && cell('koyou_applicant_disp') !== ''
+          ? String(cell('koyou_applicant_disp'))
+          : null,
+    })
+  }
+
   const driveUrl = field('drive_folder_url')
   return {
     kintoneCaseId,
     app34RecordId: asIdString(field('company_ref')),
-    app55RecordId: asIdString(field('koyou_ref')),
-    applicantRecordId: asIdString(field('applicant_ref')),
+    koyouTargets,
     driveFolderUrl:
       driveUrl === undefined || driveUrl === null || driveUrl === ''
         ? null
         : String(driveUrl),
   }
+}
+
+/** SUBTABLE の1行（`{ id?, value: { subCode: { value } } }`）。 */
+interface SubtableRow {
+  id?: string
+  value: Record<string, { value: unknown } | undefined>
 }
 
 /** 反映ステータスの選択肢（app296 の DROP_DOWN）。 */

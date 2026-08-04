@@ -52,6 +52,23 @@ export interface FieldMapping {
   transform: CellTransform
 }
 
+/**
+ * 複数セル → 1フィールドの「合成」マッピング（例: 年/月/日の3セル → 1つの日付）。
+ * kintone 側で年/月/日が日付から自動計算(CALC)される等、書込先が単一フィールドしか無いケース用。
+ */
+export interface DerivedFieldMapping {
+  /** 読み取り対象のシート名。 */
+  sheetName: string
+  /** 合成元セル参照の配列（combine が期待する順）。例: ['B17','E17','G17']（年/月/日）。 */
+  cells: string[]
+  /** kintone のフィールドコード。 */
+  code: string
+  /** フィールド種別（マージ挙動の決定に使う）。 */
+  kind: KintoneFieldKind
+  /** 生値配列 → kintone値 or null（空・不正なら null）。 */
+  combine: (values: unknown[]) => string | number | string[] | null
+}
+
 /** SUBTABLE 内の1列（サブフィールド）のマッピング。 */
 export type SubtableColumnKind = 'TEXT' | 'NUMBER'
 
@@ -92,6 +109,8 @@ export interface AppMapping {
   requiredSheet?: string
   /** セル → フィールドの一覧。 */
   fields: FieldMapping[]
+  /** 複数セル → 1フィールドの合成マッピング一覧（任意。例: 年/月/日 → 日付）。 */
+  derived?: DerivedFieldMapping[]
   /** SUBTABLE フィールドの一覧（任意）。 */
   subtables?: SubtableMapping[]
 }

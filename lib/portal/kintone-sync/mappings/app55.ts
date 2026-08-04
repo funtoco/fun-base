@@ -5,6 +5,7 @@ import {
   checkboxAlways,
   checkboxFromText,
   checkboxOn,
+  combineYmdDate,
   constantText,
   keepIfEquals,
   radioFromText,
@@ -175,8 +176,104 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'U114', code: '_9_1_8_その他の内容', kind: 'TEXT', transform: asText },
     // T116(_9_2_3_その後の頻度) は弊社既定 → 実装しない。
 
+    // ══════════════════════════════════════════════════════════════════════
+    // 雇用条件書「1-6」本体 v5追加（2026-08-04）: 契約更新／労働時間／休日／休暇。
+    // 出典=v1下書き(docs/specs/...mapping-draft.md)のフィールドコード＋値変換 × 表示シート1-6の入力セル。
+    // チェックは各項目が独立の True/False セル（checkboxOn）。⚠️=非結合セル or 割当が要確認。
+    // 契約期間開始/終了日は「年/月/日」の3セル分割 → derived で1つの日付に合成（後述の derived[]）。
+    // 更新上限の有無/最多更新回数/通算年数(契約_年)は ■/□マーカー方式で実装済（下記Ⅰ更新上限）。
+    // 未実装（要判断・別途）: 契約締結日・無期転換(無期条件変更_有/無)・交代制の勤務時間サブテーブル・
+    //   派遣(受け皿無)・就業規則条項各種・分野/業務区分(様式上「弊社で入力」の灰色欄)。
+    // ══════════════════════════════════════════════════════════════════════
+
+    // ── Ⅰ 契約の更新の有無（独立チェック3種）──
+    { sheetName: '1-6', cell: 'B20', code: '_1_2_1_自動的に更新', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'K20', code: '_2_2_更新する場合があり得る', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'T20', code: '_1_2_3_契約更新しない', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    // 更新の判断基準（「更新する場合があり得る」時の基準6項目＋その他内容）
+    { sheetName: '1-6', cell: 'B22', code: '_1_2_2_1_契約期間満了時の業務量', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'K22', code: '_1_2_2_2_労働者の勤務成績態度', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'T22', code: '_1_2_2_3_労働者の業務遂行能力', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'B23', code: '_1_2_2_4_会社の経営状況', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'K23', code: '_1_2_2_5_従事業務の進捗状況', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'T23', code: '_1_2_2_6_その他', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'V23', code: '_1_2_2_6_1_その他の場合その内容', kind: 'TEXT', transform: asText },
+
+    // ── Ⅰ 更新上限の有無（■/□マーカー。セルが「■」のときON＝checkboxFromText(['■'])。□や空はOFF）──
+    // 特定技能は通常「有・通算5年」。有無は独立マーカー（K25=無マーカー / M25=有マーカー）。
+    { sheetName: '1-6', cell: 'M25', code: '更新上限_有', kind: 'CHECK_BOX', transform: checkboxFromText(CHECK_ON) },
+    { sheetName: '1-6', cell: 'K25', code: '更新上限_無', kind: 'CHECK_BOX', transform: checkboxFromText(CHECK_ON) },
+    { sheetName: '1-6', cell: 'R25', code: '最多更新回数', kind: 'NUMBER', transform: asNumber }, // 「回まで」ラベルの左セル＝入力（単位ラベル左の規則）
+    { sheetName: '1-6', cell: 'X25', code: '契約_年', kind: 'NUMBER', transform: asNumber }, // 通算契約期間の年数（既定5）
+
+    // ── Ⅱ 就業の場所（直接雇用チェック＋事業所名/郵便番号/住所/連絡先。いずれも企業記入欄=赤セル）──
+    { sheetName: '1-6', cell: 'B32', code: '_2_1_1_直接雇用', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'F34', code: '事業所名', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'F35', code: '事業所_郵便番号', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'H35', code: '事業所_住所_所在地', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'F36', code: 'OfNumberPhone', kind: 'TEXT', transform: asText },
+    // 派遣雇用(P32)はapp55に受け皿フィールドが無いため未実装。
+
+    // ── Ⅳ 労働時間 1.始業・終業（始業 F45時/H45分＝実フォームで確認済。終業 M45時/O45分も同パターン）──
+    { sheetName: '1-6', cell: 'F45', code: '_4_1_1_1_時', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'H45', code: '_4_1_1_2_分', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'M45', code: '_4_1_2_1_時', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'O45', code: '_4_1_2_2_分', kind: 'NUMBER', transform: asNumber },
+    // 1日の所定労働時間（時=W45結合枠 / 分=Z45＝「分」ラベルの左セル。入力は単位ラベルの左＝確認済）
+    { sheetName: '1-6', cell: 'W45', code: '_4_1_3_1_時間', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'Z45', code: '_4_1_3_2_分', kind: 'NUMBER', transform: asNumber },
+    // 2.制度（変形労働時間制フラグ＋単位／交代制フラグ。交代制の勤務時間サブテーブルは未実装）
+    { sheetName: '1-6', cell: 'B48', code: '_4_1_2_1_変形労働時間制', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'J48', code: '_4_1_2_1_1_変形労働性の時間', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'B53', code: '_4_1_2_2_交代制', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    // 3.休憩時間（日勤/夜勤の分数）
+    { sheetName: '1-6', cell: 'G66', code: '日勤_休憩時間', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'O66', code: '夜勤_休憩時間', kind: 'NUMBER', transform: asNumber },
+    // 4.所定労働時間数（週/月/年 × 時/分）
+    { sheetName: '1-6', cell: 'E68', code: '_4_3_1_1_時間', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'H68', code: '_4_3_1_2_分', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'M68', code: '_4_3_2_1_時間', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'P68', code: '_4_3_2_2_分', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'U68', code: '_4_3_3_1_時間', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'X68', code: '_4_3_3_2_分', kind: 'NUMBER', transform: asNumber },
+    // 5.所定労働日数（週/月/年）
+    { sheetName: '1-6', cell: 'I69', code: '_4_4_1_週所定労働日数', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'P69', code: '_4_4_2_月所定労働日数', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'W69', code: '_4_4_3_年所定労働日数', kind: 'NUMBER', transform: asNumber },
+    // 6.所定時間外労働の有無
+    { sheetName: '1-6', cell: 'I70', code: '_4_5_1_所定時間外労働有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'L70', code: '_4_5_2_所定時間外労働無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+
+    // ── Ⅴ 休日 ──
+    // 定例日: 毎週定休曜日（F74）＋その他（M74）。⚠️祝日/曜日/その他の結合はせず個別格納・要確認。
+    { sheetName: '1-6', cell: 'F74', code: '_5_1_定例日', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'M74', code: '_5_2_その他休日', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'X74', code: '_5_3_年間合計休日日数', kind: 'NUMBER', transform: asNumber },
+    // 非定例日: 週/月チェック＋日数＋その他（⚠️その他の定例/非定例割当は要確認）
+    { sheetName: '1-6', cell: 'E76', code: '_5_2_1_1_週あたり', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'H76', code: '_5_2_1_2_月あたり', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'L76', code: '_5_2_1_3_非定例日', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'S76', code: '_5_2_2_その他休日', kind: 'TEXT', transform: asText },
+
+    // ── Ⅵ 休暇 ──
+    // 1.年次有給休暇: 6か月継続の付与日数＋6か月未満の有無/経過月数/付与日数
+    { sheetName: '1-6', cell: 'N79', code: '_6_1_1_６ヶ月継続勤務した場合', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'O80', code: '_6_1_2_1_有給休暇有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'Q80', code: '_6_1_2_2_有給休暇無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'T80', code: '_6_1_2_3_1_経過月数', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6', cell: 'X80', code: '_6_1_2_3_2_付与日数', kind: 'NUMBER', transform: asNumber },
+    // 2.その他の休暇（有給/無給）
+    { sheetName: '1-6', cell: 'I82', code: '_6_2_1_有給休暇', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'S82', code: '_6_2_2_無給休暇', kind: 'TEXT', transform: asText },
+
     // ── 【介護分野】事業所概要1（app36対象外化に伴い app55 へ振替）──
     { sheetName: '【介護分野】事業所概要1', cell: 'A19', code: '_2その他特記事項', kind: 'TEXT', transform: asText },
+  ],
+  // 合成フィールド: 契約期間は Excel「1-6」で年/月/日が別セル。kintoneの年月日はDATEから自動計算(CALC)の
+  // ため、3セルを1つの日付に合成して日付フィールドへ書く。月/日は単位ラベル(月/日)の左セル＝入力（実フォームで確認済）。
+  derived: [
+    { sheetName: '1-6', cells: ['B17', 'E17', 'G17'], code: '_1_1_1_契約期間開始日', kind: 'DATE', combine: combineYmdDate },
+    { sheetName: '1-6', cells: ['J17', 'M17', 'O17'], code: '_1_1_2_契約期間終了日', kind: 'DATE', combine: combineYmdDate },
   ],
   subtables: [
     // 諸手当(a)〜(h): 1-6別紙 行9〜16。手当名(D列)が空の行はスキップ。
