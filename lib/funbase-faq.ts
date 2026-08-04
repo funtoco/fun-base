@@ -4,6 +4,7 @@ export type QuickStartStep = {
 }
 
 export type FaqItem = {
+  id?: string
   question: string
   answer: string
 }
@@ -55,6 +56,12 @@ export const faqSections: FaqSection[] = [
     title: "人材・ビザの確認",
     description: "人材ごとの状況やビザ進捗を確認する方法です。",
     items: [
+      {
+        id: "manual-person-registration",
+        question: "人材情報を手動で新規登録する方法を教えてください",
+        answer:
+          "左メニューの「人材一覧」を開き、右上の「新規登録」から登録します。登録先の会社を選び、氏名・所属先・連絡先・在留カード情報・メモなど必要な項目を入力して保存してください。必要に応じて写真も登録できます。\n\n手動登録した人材には「手動登録」ラベルが表示されます。あとから人材詳細の編集画面で基本情報を更新できます。\n\n注意点：手動登録した人材はFunBase内の人材情報として追加されますが、Funtocoの支援内容や面談・サポート記録は自動では連携されません。FunEdu側には反映されません。支援内容まで管理したい場合は、通常の連絡ルートでFuntoco担当者へご相談ください。現時点では、手動登録による追加料金は発生しません。",
+      },
       {
         question: "人材の情報はどこで確認できますか？",
         answer:

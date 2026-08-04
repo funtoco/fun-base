@@ -59,9 +59,13 @@ export default function FaqPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {section.items.map((item) => (
-                    <div key={item.question} className="rounded-xl border bg-muted/20 p-4">
+                    <div
+                      key={item.question}
+                      id={item.id}
+                      className="scroll-mt-6 rounded-xl border bg-muted/20 p-4"
+                    >
                       <h3 className="font-medium text-foreground">Q. {item.question}</h3>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">A. {item.answer}</p>
+                      <p className="mt-2 whitespace-pre-line text-sm leading-6 text-muted-foreground">A. {item.answer}</p>
                     </div>
                   ))}
                 </CardContent>
