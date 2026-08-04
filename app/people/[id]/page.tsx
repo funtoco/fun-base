@@ -12,6 +12,7 @@ import { getVisasByPersonId } from "@/lib/supabase/visas-server"
 import { getPersonDocumentsByPersonId } from "@/lib/supabase/person-documents-server"
 import { getRegularInterviewsByPersonId, getDailySupportRecordsByPersonId } from "@/lib/kintone-data-server"
 import { isManualPersonId } from "@/lib/person-source"
+import { canCreateRetirementNotice } from "@/lib/reports/retirement-notice-reports"
 import { formatDate, formatDateTime } from "@/lib/utils"
 import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase } from "lucide-react"
 
@@ -400,6 +401,26 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
               </CardHeader>
               <CardContent>
                 <p className="text-sm">{person.note}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Retirement Notice */}
+          {canCreateRetirementNotice(person.workingStatus) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>退職届出</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  設定されている退職届種類に応じて、この人材の情報を反映したPDFを作成・ダウンロードできます。
+                </p>
+                <Button asChild className="w-full gap-2">
+                  <Link href={`/people/${params.id}/retirement-notice`}>
+                    <FileText className="h-4 w-4" />
+                    退職届出PDFを作成
+                  </Link>
+                </Button>
               </CardContent>
             </Card>
           )}
