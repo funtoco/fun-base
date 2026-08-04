@@ -25,7 +25,7 @@ import { applyRetirementNoticeKintoneValues, getRetirementNoticeKintoneValues } 
 
 const basePerson = {
   id: '1234',
-  externalId: '1234',
+  externalId: '3505',
   tenantId: 'tenant-1',
   name: 'テスト 太郎',
   createdAt: '2026-01-01',
@@ -112,6 +112,37 @@ beforeEach(() => {
 })
 
 describe('getRetirementNoticeKintoneValues', () => {
+  test('uses the FunBase person id for the work record instead of the human-resource external id', async () => {
+    mocks.getRecords.mockImplementation(async (appId: string, query: string) => {
+      if (appId === '13' && query === '$id = 1234 limit 1') {
+        return [
+          {
+            $id: { value: '1234' },
+            $revision: { value: '1' },
+            WOID: { value: '1234' },
+            name: { value: 'CORRECT WORKER' },
+          },
+        ]
+      }
+      if (appId === '13' && query === '$id = 3505 limit 1') {
+        return [
+          {
+            $id: { value: '3505' },
+            $revision: { value: '1' },
+            WOID: { value: '3505' },
+            name: { value: 'DIFFERENT WORKER' },
+          },
+        ]
+      }
+      return []
+    })
+
+    const values = await getRetirementNoticeKintoneValues(basePerson as any)
+
+    expect(mocks.getRecords).toHaveBeenCalledWith('13', '$id = 1234 limit 1', [])
+    expect(values.name).toBe('CORRECT WORKER')
+  })
+
   test('refreshes kintone token with client credentials even when the stored access token is missing', async () => {
     const values = await getRetirementNoticeKintoneValues(basePerson as any)
 

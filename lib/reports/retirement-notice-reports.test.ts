@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
+import { PDFDocument } from '@/lib/vendor/pdf-lib.min.js'
+
 import {
   APP92_RETIREMENT_NOTICE_SOURCE_APP_ID,
   canCreateRetirementNotice,
@@ -164,6 +166,11 @@ describe('retirement notice report templates', () => {
       expect(pdf.fileName).toBe(`退職届出_${template.label}_NGU WAR KYAW.pdf`)
       expect(pdf.renderedFieldCount).toBeGreaterThan(5)
       expect(Buffer.from(pdf.data.subarray(0, 5)).toString('utf8')).toBe('%PDF-')
+
+      if (template.label === 'イレギュラー退職') {
+        const document = await PDFDocument.load(pdf.data)
+        expect(document.getPageCount()).toBe(6)
+      }
     }
   }, 30_000)
 

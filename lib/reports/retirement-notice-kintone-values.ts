@@ -59,7 +59,7 @@ export async function getRetirementNoticeKintoneValues(
     accessToken,
   })
 
-  const workRecord = await getRecordById(client, KINTONE_WORK_APP_ID, person.externalId || person.id)
+  const workRecord = await getRecordById(client, KINTONE_WORK_APP_ID, person.id)
   const workId = valueOf(workRecord, 'WOID')?.replace(/^WO-/, '') || person.id
   const retirementRecord = workId
     ? await getFirstRecord(client, KINTONE_RETIREMENT_NOTICE_APP_ID, `WOID = ${quoteKintoneValue(workId)} limit 1`)

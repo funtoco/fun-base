@@ -121,7 +121,7 @@ export default async function RetirementNoticePage({ params, searchParams }: Ret
               <div className="space-y-2">
                 <h2 className="text-base font-semibold">PDFに反映される情報</h2>
                 <p className="text-sm text-muted-foreground">
-                  kintoneの退職届・就労管理・法人/事業所マスタを参照してPDFへ反映します。
+                  登録されている人材・退職届・法人・事業所の情報をPDFへ反映します。
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -148,7 +148,7 @@ export default async function RetirementNoticePage({ params, searchParams }: Ret
             </div>
 
             <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
-              PDFにはFunBaseの人材情報に加えて、kintone側で参照できる退職届・法人/事業所情報を反映します。
+              PDFには、人材・退職届・法人・事業所の情報を反映します。内容に不明点や修正が必要な箇所がある場合は、Funtocoの営業担当までお問い合わせください。
             </div>
           </CardContent>
         </Card>
