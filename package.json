@@ -63,6 +63,7 @@
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
     "encoding-japanese": "^2.2.0",
+    "exceljs": "^4.4.0",
     "geist": "latest",
     "input-otp": "1.4.1",
     "jose": "^6.1.0",

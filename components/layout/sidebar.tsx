@@ -8,6 +8,7 @@ import {
   Calendar,
   CheckSquare,
   CircleHelp,
+  ClipboardList,
   Clock,
   ExternalLink,
   FileText,
@@ -49,6 +50,14 @@ const navigation: NavigationItem[] = [
     icon: FileText,
     feature: "visas",
   },
+  // 【テスト期間中は非表示】申請ポータル（ビザ案件管理）。
+  // 他企業テナントにはまだ見せないためメニューから外している。/applications への直アクセスは可能。
+  // 一般公開時は下のブロックのコメントを外すだけ（RLSで各社は自社案件のみ閲覧）。
+  // {
+  //   name: "申請ポータル",
+  //   href: "/applications",
+  //   icon: ClipboardList,
+  // },
   {
     name: "面談一覧",
     href: "/meetings",
