@@ -5,6 +5,7 @@ import { PDFDocument } from '@/lib/vendor/pdf-lib.min.js'
 import {
   APP92_RETIREMENT_NOTICE_SOURCE_APP_ID,
   canCreateRetirementNotice,
+  getRetirementNoticeReportTemplateForType,
   getRetirementNoticeReportTemplate,
   getRetirementNoticeReportTemplates,
 } from './retirement-notice-reports'
@@ -80,6 +81,23 @@ describe('retirement notice report templates', () => {
     })
     expect(template?.fields).toContain('人材名')
     expect(template?.fields).toContain('在留カード番号')
+  })
+
+  test.each([
+    ['1号期間満了', 'kvedmwv3etcstujkyxlwr2dxdwd4b1td'],
+    ['イレギュラー退職', 'tkyy4pd6kel6ndjb4ei9mstc2gsq372e'],
+    ['自己都合退職', 'vy0fa9sokdkdu9xnrp9kvqs2nwgaqoz7'],
+    ['年金脱退一時金（帰国時）', 'k4bvypb19xho5ystj8a2rstrupmnk5kh'],
+    ['年金脱退一時金（再入国時）', 'e0y1yblxe7pp8oamvwk0e7mw5n8feo0k'],
+    ['法人内資格切り替え', 'dsggkmicvux18aaq4damigubfx05gdq4'],
+  ])('resolves the app92 retirement notice type %s to its template', (noticeType, reportCode) => {
+    expect(getRetirementNoticeReportTemplateForType(noticeType)?.reportCode).toBe(reportCode)
+  })
+
+  test('does not choose a template when the app92 retirement notice type is missing or unsupported', () => {
+    expect(getRetirementNoticeReportTemplateForType()).toBeNull()
+    expect(getRetirementNoticeReportTemplateForType('')).toBeNull()
+    expect(getRetirementNoticeReportTemplateForType('未対応の種類')).toBeNull()
   })
 
   test('builds a safe PDF filename from person and template labels', () => {

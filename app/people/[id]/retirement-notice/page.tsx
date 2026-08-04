@@ -10,26 +10,24 @@ import {
   getRetirementNoticeKintoneValues,
 } from '@/lib/reports/retirement-notice-kintone-values'
 import {
-  getRetirementNoticeReportTemplate,
-  getRetirementNoticeReportTemplates,
+  getRetirementNoticeReportTemplateForType,
 } from '@/lib/reports/retirement-notice-reports'
 import { getPersonById } from '@/lib/supabase/people-server'
 
 interface RetirementNoticePageProps {
   params: { id: string }
-  searchParams?: { template?: string }
 }
 
-export default async function RetirementNoticePage({ params, searchParams }: RetirementNoticePageProps) {
+export default async function RetirementNoticePage({ params }: RetirementNoticePageProps) {
   const person = await getPersonById(params.id)
   if (!person) notFound()
 
-  const templates = getRetirementNoticeReportTemplates()
-  const selectedTemplate =
-    (searchParams?.template ? getRetirementNoticeReportTemplate(searchParams.template) : null) ?? templates[0]
   const kintoneValues = await getRetirementNoticeKintoneValues(person)
+  const selectedTemplate = getRetirementNoticeReportTemplateForType(kintoneValues.retirementNoticeType)
   const pdfPerson = applyRetirementNoticeKintoneValues(person, kintoneValues)
-  const downloadHref = `/api/retirement-notice/templates/${encodeURIComponent(selectedTemplate.reportCode)}?personId=${encodeURIComponent(person.id)}`
+  const downloadHref = selectedTemplate
+    ? `/api/retirement-notice/templates/${encodeURIComponent(selectedTemplate.reportCode)}?personId=${encodeURIComponent(person.id)}`
+    : null
 
   return (
     <div className="p-6 space-y-6">
@@ -48,33 +46,11 @@ export default async function RetirementNoticePage({ params, searchParams }: Ret
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">退職届出PDFの作成</h1>
         <p className="text-sm text-muted-foreground">
-          {person.name} さんの情報を反映した退職届出PDFを作成できます。必要な届出の種類を選んで出力してください。
+          {person.name} さんに設定された退職届種類のPDFを作成できます。
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">届出の種類</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {templates.map((template) => (
-              <Button
-                key={template.reportCode}
-                asChild
-                variant={template.reportCode === selectedTemplate.reportCode ? 'default' : 'outline'}
-                className="w-full justify-start"
-              >
-                <Link
-                  href={`/people/${encodeURIComponent(person.id)}/retirement-notice?template=${encodeURIComponent(template.reportCode)}`}
-                >
-                  {template.label}
-                </Link>
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
-
+      {selectedTemplate && downloadHref ? (
         <Card>
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -112,7 +88,7 @@ export default async function RetirementNoticePage({ params, searchParams }: Ret
                 <div className="text-sm font-medium">{person.workingStatus || '未設定'}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">出力する様式</div>
+                <div className="text-sm text-muted-foreground">退職届種類</div>
                 <div className="text-sm font-medium">{selectedTemplate.label}</div>
               </div>
             </div>
@@ -152,7 +128,18 @@ export default async function RetirementNoticePage({ params, searchParams }: Ret
             </div>
           </CardContent>
         </Card>
-      </div>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">退職届種類を確認してください</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              退職届種類が未設定、または対応していない種類のため、PDFを作成できません。登録内容を確認し、必要に応じてFuntocoの営業担当までお問い合わせください。
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

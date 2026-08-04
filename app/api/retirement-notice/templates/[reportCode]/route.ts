@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 
 import { getPersonById } from '@/lib/supabase/people-server'
-import { getRetirementNoticeReportTemplate } from '@/lib/reports/retirement-notice-reports'
+import {
+  getRetirementNoticeReportTemplate,
+  getRetirementNoticeReportTemplateForType,
+} from '@/lib/reports/retirement-notice-reports'
 import { generateRetirementNoticePdf } from '@/lib/reports/retirement-notice-pdf'
 import {
   applyRetirementNoticeKintoneValues,
@@ -31,8 +34,22 @@ export async function GET(
   }
 
   const kintoneValues = await getRetirementNoticeKintoneValues(person)
+  const assignedTemplate = getRetirementNoticeReportTemplateForType(kintoneValues.retirementNoticeType)
+  if (!assignedTemplate) {
+    return NextResponse.json(
+      { error: '退職届種類が未設定、または対応していない種類です' },
+      { status: 422 }
+    )
+  }
+  if (assignedTemplate.reportCode !== template.reportCode) {
+    return NextResponse.json(
+      { error: '選択された退職届種類と出力する様式が一致しません' },
+      { status: 409 }
+    )
+  }
+
   const pdf = await generateRetirementNoticePdf({
-    template,
+    template: assignedTemplate,
     person: applyRetirementNoticeKintoneValues(person, kintoneValues),
     extraValues: kintoneValues.fieldValues,
   })

@@ -33,6 +33,7 @@ export type RetirementNoticeKintoneValues = Partial<
     | 'companyPhone'
   >
 > & {
+  retirementNoticeType?: string
   fieldValues?: Record<string, string>
 }
 
@@ -74,6 +75,7 @@ export async function getRetirementNoticeKintoneValues(
 
   if (retirementRecord) {
     const values = compactValues({
+      retirementNoticeType: valueOf(retirementRecord, '退職届種類'),
       name: valueOf(retirementRecord, '人材名') || valueOf(workRecord, 'name'),
       nationality: valueOf(retirementRecord, '国籍') || valueOf(workRecord, 'country'),
       dob: valueOf(retirementRecord, '生年月日') || valueOf(workRecord, 'dateOfBirth'),

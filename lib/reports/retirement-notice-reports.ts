@@ -216,6 +216,19 @@ export function getRetirementNoticeReportTemplate(reportCode: string): Retiremen
   return getRetirementNoticeReportTemplates().find((template) => template.reportCode === reportCode) ?? null
 }
 
+export function getRetirementNoticeReportTemplateForType(
+  retirementNoticeType?: string | null
+): RetirementNoticeReportTemplate | null {
+  const normalizedType = normalizeRetirementNoticeType(retirementNoticeType)
+  if (!normalizedType) return null
+
+  return (
+    getRetirementNoticeReportTemplates().find(
+      (template) => normalizeRetirementNoticeType(template.label) === normalizedType
+    ) ?? null
+  )
+}
+
 export function canCreateRetirementNotice(workingStatus?: string | null): boolean {
   return RETIREMENT_NOTICE_WORKING_STATUSES.has(workingStatus ?? '')
 }
@@ -238,4 +251,8 @@ function sanitizeFilenamePart(value: string): string {
     .trim()
 
   return sanitized || '未設定'
+}
+
+function normalizeRetirementNoticeType(value?: string | null): string {
+  return value?.normalize('NFKC').replace(/\s+/g, '').trim() ?? ''
 }

@@ -203,6 +203,7 @@ describe('getRetirementNoticeKintoneValues', () => {
             $id: { value: '92' },
             $revision: { value: '1' },
             WOID: { value: '1234' },
+            退職届種類: { value: '自己都合退職' },
             人材名: { value: 'NYEIN CHAN AUNG' },
             国籍: { value: 'ミャンマー' },
             性別: { value: '男' },
@@ -229,6 +230,7 @@ describe('getRetirementNoticeKintoneValues', () => {
       会社都合: '✓',
       事案概要: '本人都合ではない退職です',
     })
+    expect(values.retirementNoticeType).toBe('自己都合退職')
 
     expect(applyRetirementNoticeKintoneValues(basePerson as any, values)).toMatchObject({
       name: 'NYEIN CHAN AUNG',
