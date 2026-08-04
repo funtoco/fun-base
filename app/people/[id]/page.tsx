@@ -413,7 +413,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  退職届出PDFを作成できます。届出の種類を選ぶと、この人材の情報を反映したPDFをダウンロードできます。
+                  設定されている退職届種類に応じて、この人材の情報を反映したPDFを作成・ダウンロードできます。
                 </p>
                 <Button asChild className="w-full gap-2">
                   <Link href={`/people/${params.id}/retirement-notice`}>
