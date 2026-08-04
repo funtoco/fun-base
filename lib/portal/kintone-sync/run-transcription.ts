@@ -1,29 +1,53 @@
 import { getServiceClient } from '../storage'
 import { createKintoneWriteClientFromEnv } from './kintone-write-client'
-import { loadCaseHubLinks, writeBackSyncStatus, type CaseHubLinks } from './case-hub'
+import {
+  loadCaseHubLinks,
+  writeBackSyncStatus,
+  type CaseHubLinks,
+  type SyncStatus,
+} from './case-hub'
 import { loadApplicationWorkbook, APPLICATION_WORKBOOK_CODE } from './source'
 import {
   transcribeWorkbook,
   syncStatusLabelForAction,
   type TranscribeTargets,
-  type TranscribeWorkbookResult,
+  type TranscribeResult,
 } from './transcribe'
+import type { KintoneRecordPayload } from './types'
 
 // 提出Excel → kintone 転記の「システム実行」コア。
 // 認可（writer 判定など）は呼び出し側の責務。転記route（手動・writer限定）と
 // アップロード自動トリガー（システム）から共通で使う。
 
+/** app55（雇用条件書）1人分の書込結果。 */
+export interface App55WriteResult {
+  /** 反映先 app55 レコード番号（koyou_ref）。 */
+  app55RecordId: string
+  /** 実行された操作。 */
+  action: 'update' | 'dry-run' | 'error'
+  /** 表示用の申請人名（koyou_applicant_disp・あれば）。 */
+  applicantName: string | null
+  /** action='error' 時のメッセージ。 */
+  error?: string
+}
+
 export interface RunCaseTranscriptionResult {
   dryRun: boolean
   kintoneCaseId: string | null
   links: CaseHubLinks | null
-  result: TranscribeWorkbookResult
+  /** 法人(app34)の転記結果。 */
+  app34: TranscribeResult
+  /** app55 に送った共通payload（人固有項目は除外済み）。 */
+  app55Record: KintoneRecordPayload
+  /** 雇用条件書(app55)を各人へ fan-out した結果（0件=紐付け無し）。 */
+  app55Writes: App55WriteResult[]
   sourceFileName: string | null
 }
 
 /**
  * 案件の提出Excelを転記する。
- * - kintoneCaseId + client あり: app296 の事前紐付けを解決し、Aモデルで app34/app55 を直接 update。
+ * - kintoneCaseId + client あり: app296 の事前紐付けを解決し、Aモデルで app34 を直接 update、
+ *   app55（雇用条件書）は koyou_details サブテーブルの各人へ同一payloadを fan-out。
  * - 実書き込み（dryRun=false かつ client あり）時は結果を app296 に書き戻す（成功/エラー）。
  * - dryRun（既定 false）や client 無しは書き込みなし。
  */
@@ -35,7 +59,7 @@ export async function runCaseTranscription(params: {
   const dryRun = params.dryRun ?? false
   const client = createKintoneWriteClientFromEnv()
 
-  // app296（案件ハブ）から反映先レコード（company_ref/koyou_ref）を解決。
+  // app296（案件ハブ）から反映先（company_ref / koyou_details サブテーブル）を解決。
   let links: CaseHubLinks | null = null
   let targets: TranscribeTargets = {}
   if (client && params.kintoneCaseId) {
@@ -47,7 +71,6 @@ export async function runCaseTranscription(params: {
     }
     targets = {
       app34RecordId: links.app34RecordId,
-      app55RecordId: links.app55RecordId,
     }
   }
 
@@ -55,6 +78,8 @@ export async function runCaseTranscription(params: {
   if (!workbook.ok) {
     throw new Error(workbook.error)
   }
+
+  const koyouTargets = links?.koyouTargets ?? []
 
   try {
     const result = await transcribeWorkbook({
@@ -64,18 +89,51 @@ export async function runCaseTranscription(params: {
       targets,
     })
 
-    // 実書き込み時のみ app296 に結果を書き戻す。app34/app55 は plan.action で個別に成否判定
-    // （部分成功=app34成功/app55失敗 なら 反映済/エラー のように別々に記録）。
+    // app55（雇用条件書）は複数人。共通payloadを各人のレコードへ fan-out する。
+    // 1人分の失敗が他の人を巻き添えにしないよう、行ごとに成否を収集する（app34同様の分離方針）。
+    const app55Writes: App55WriteResult[] = []
+    for (const target of koyouTargets) {
+      if (dryRun || !client) {
+        app55Writes.push({
+          app55RecordId: target.app55RecordId,
+          action: 'dry-run',
+          applicantName: target.applicantName,
+        })
+        continue
+      }
+      try {
+        await client.updateRecord('55', target.app55RecordId, result.app55Record)
+        app55Writes.push({
+          app55RecordId: target.app55RecordId,
+          action: 'update',
+          applicantName: target.applicantName,
+        })
+      } catch (e) {
+        app55Writes.push({
+          app55RecordId: target.app55RecordId,
+          action: 'error',
+          applicantName: target.applicantName,
+          error: e instanceof Error ? e.message : String(e),
+        })
+      }
+    }
+
+    // 実書き込み時のみ app296 に結果を書き戻す。app34 と app55(全人の集計) を個別に成否判定。
     // 書き戻し自体の失敗は握り潰す（実書き込み結果のラベルを覆さない・元処理は成功扱い）。
     if (!dryRun && client && params.kintoneCaseId) {
+      const okCount = app55Writes.filter((w) => w.action === 'update').length
+      const errCount = app55Writes.filter((w) => w.action === 'error').length
+      // 1人でも失敗→エラー / 対象0人→未反映 / 全員成功→反映済。
+      const koyouStatus: SyncStatus =
+        app55Writes.length === 0 ? '未反映' : errCount > 0 ? 'エラー' : '反映済'
       try {
         await writeBackSyncStatus(client, params.kintoneCaseId, {
           companyStatus: syncStatusLabelForAction(result.app34.plan.action),
-          koyouStatus: syncStatusLabelForAction(result.app55.plan.action),
+          koyouStatus,
           syncedAt: new Date().toISOString(),
           log:
             `法人(app34)=${result.app34.plan.action}/rec ${result.app34.plan.recordId ?? '-'} / ` +
-            `雇用条件書(app55)=${result.app55.plan.action}/rec ${result.app55.plan.recordId ?? '-'}`,
+            `雇用条件書(app55)=${okCount}件反映済・${errCount}件エラー（計${app55Writes.length}人）`,
         })
       } catch (writebackError) {
         console.error('Error writing back sync status to app296:', writebackError)
@@ -86,7 +144,9 @@ export async function runCaseTranscription(params: {
       dryRun,
       kintoneCaseId: params.kintoneCaseId,
       links,
-      result,
+      app34: result.app34,
+      app55Record: result.app55Record,
+      app55Writes,
       sourceFileName: workbook.data.fileName,
     }
   } catch (error) {

@@ -16,7 +16,9 @@ import { APP34_MAPPING } from '@/lib/portal/kintone-sync/mappings/app34'
 import { APP55_MAPPING } from '@/lib/portal/kintone-sync/mappings/app55'
 import {
   transcribeWorkbook,
+  buildApp55Record,
   syncStatusLabelForAction,
+  APP55_PERSON_SPECIFIC_CODES,
 } from '@/lib/portal/kintone-sync/transcribe'
 import {
   CASE_HUB_APP_ID,
@@ -353,7 +355,7 @@ function makeMockClient(overrides: Partial<KintoneWriteClient> = {}): KintoneWri
 }
 
 describe('transcribeWorkbook', () => {
-  it('app34 既存1件あり（dryRun=false）→ update・app55 は常に dry-run', async () => {
+  it('app34 既存1件あり（dryRun=false）→ update・app55 は payload のみ返す（書込なし）', async () => {
     const buffer = await makeWorkbookBuffer(APP34_SHEETS)
     const client = makeMockClient({
       getRecords: vi.fn().mockResolvedValue([readRecord('42')]),
@@ -367,10 +369,10 @@ describe('transcribeWorkbook', () => {
       '42',
       expect.objectContaining({ 法人番号_13桁_: { value: '1180001012345' } })
     )
-    // app55 は書き込まない（キー未定）
-    expect(result.app55.plan.action).toBe('dry-run')
-    expect(result.app55.plan.keyValue).toBeNull()
-    expect(result.plans).toHaveLength(2)
+    // app55 は payload のみ（fan-out は run-transcription 側）。app34 の1回だけ書込。
+    expect(result.app55Record).toBeTypeOf('object')
+    expect(result.app55Sheet).toBe('1-4')
+    expect(client.updateRecord).toHaveBeenCalledTimes(1)
   })
 
   it('app34 既存なし（dryRun=false）→ create、app55 は書込未呼出', async () => {
@@ -386,7 +388,7 @@ describe('transcribeWorkbook', () => {
     expect(client.createRecord).toHaveBeenCalledTimes(1) // app34 のみ、app55 は呼ばない
   })
 
-  it('dryRun=true → 書込メソッドは一切呼ばれず両 plan を返す', async () => {
+  it('dryRun=true → 書込メソッドは一切呼ばれず app34 plan と app55 payload を返す', async () => {
     const buffer = await makeWorkbookBuffer(APP34_SHEETS)
     const client = makeMockClient({
       getRecords: vi.fn().mockResolvedValue([readRecord('42')]),
@@ -395,16 +397,16 @@ describe('transcribeWorkbook', () => {
 
     expect(result.app34.plan.action).toBe('dry-run')
     expect(result.app34.plan.keyValue).toBe('1180001012345')
-    expect(result.app55.plan.action).toBe('dry-run')
+    expect(result.app55Record).toBeTypeOf('object')
     expect(client.createRecord).not.toHaveBeenCalled()
     expect(client.updateRecord).not.toHaveBeenCalled()
   })
 
-  it('client 未指定でも dryRun として両 plan を返す（書込なし）', async () => {
+  it('client 未指定でも dryRun として app34 plan と app55 payload を返す（書込なし）', async () => {
     const buffer = await makeWorkbookBuffer(APP34_SHEETS)
     const result = await transcribeWorkbook({ buffer })
     expect(result.app34.plan.action).toBe('dry-run')
-    expect(result.app55.plan.action).toBe('dry-run')
+    expect(result.app55Record).toBeTypeOf('object')
   })
 
   it('app34 複数ヒット（dryRun=false）→ エラー（重複のため中止・書込なし）', async () => {
@@ -444,20 +446,6 @@ describe('transcribeWorkbook: targets（app296 事前紐付け・Aモデル）',
     expect(getRecords).not.toHaveBeenCalled()
   })
 
-  it('app55RecordId 指定（dryRun=false）→ app55 を実 update（実書き込み解禁）', async () => {
-    const buffer = await makeWorkbookBuffer(APP34_SHEETS)
-    const client = makeMockClient()
-    const result = await transcribeWorkbook({
-      buffer,
-      dryRun: false,
-      client,
-      targets: { app34RecordId: '100', app55RecordId: '55' },
-    })
-    expect(result.app55.plan.action).toBe('update')
-    expect(result.app55.plan.recordId).toBe('55')
-    expect(client.updateRecord).toHaveBeenCalledWith('55', '55', expect.any(Object))
-  })
-
   it('targets 指定でも dryRun=true → 書込なし・recordId はプレビュー表示', async () => {
     const buffer = await makeWorkbookBuffer(APP34_SHEETS)
     const client = makeMockClient()
@@ -465,47 +453,32 @@ describe('transcribeWorkbook: targets（app296 事前紐付け・Aモデル）',
       buffer,
       dryRun: true,
       client,
-      targets: { app34RecordId: '100', app55RecordId: '55' },
+      targets: { app34RecordId: '100' },
     })
     expect(result.app34.plan.action).toBe('dry-run')
     expect(result.app34.plan.recordId).toBe('100')
-    expect(result.app55.plan.action).toBe('dry-run')
     expect(client.updateRecord).not.toHaveBeenCalled()
     expect(client.createRecord).not.toHaveBeenCalled()
   })
+})
 
-  it('app55 target 無し（dryRun=false）→ app55 はドライラン（後方互換・app34のみ書込）', async () => {
-    const buffer = await makeWorkbookBuffer(APP34_SHEETS)
-    const client = makeMockClient()
-    const result = await transcribeWorkbook({
-      buffer,
-      dryRun: false,
-      client,
-      targets: { app34RecordId: '100' }, // app55 は指定しない
+// ── buildApp55Record: 共通payload生成（人固有項目は除外）───────────────
+describe('buildApp55Record（複数人・共通payload）', () => {
+  it('人固有項目（氏名/性別/経験年数）は除外し、共通項目は残す', () => {
+    const getCell = cellsReader({
+      '1-4': { D10: 'グエン', H12: '男', K12: 2, E13: 200000 },
     })
-    expect(result.app55.plan.action).toBe('dry-run')
-    expect(client.updateRecord).toHaveBeenCalledTimes(1)
-    expect(client.updateRecord).toHaveBeenCalledWith('34', '100', expect.any(Object))
-  })
-
-  it('部分成功: app34成功・app55書込失敗 → app34=update / app55=error（throwしない）', async () => {
-    const buffer = await makeWorkbookBuffer(APP34_SHEETS)
-    const client = makeMockClient({
-      updateRecord: vi.fn().mockImplementation(async (appId: string) => {
-        if (appId === '55') throw new Error('app55 update failed (404)')
-        return { revision: '2' }
-      }),
-    })
-    const result = await transcribeWorkbook({
-      buffer,
-      dryRun: false,
-      client,
-      targets: { app34RecordId: '100', app55RecordId: '55' },
-    })
-    // app34 は成功、app55 だけ error。例外は投げない。
-    expect(result.app34.plan.action).toBe('update')
-    expect(result.app55.plan.action).toBe('error')
-    expect(result.app55.plan.error).toMatch(/404/)
+    const record = buildApp55Record(getCell)
+    // 人固有（HRIDルックアップが人材マスタから補完する項目）は payload に出さない。
+    for (const code of APP55_PERSON_SPECIFIC_CODES) {
+      expect(code in record).toBe(false)
+    }
+    expect('申請人氏名' in record).toBe(false)
+    expect('性別' in record).toBe(false)
+    expect('申請人_経験年数' in record).toBe(false)
+    // 共通項目（全員一緒）は残る。月給金額あり → 月給 CHECK_BOX 自動ON。
+    expect(record.月給金額).toEqual({ value: 200000 })
+    expect(record.月給).toEqual({ value: ['■'] })
   })
 })
 
@@ -524,12 +497,31 @@ describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
     return {
       $id: { value: '5' },
       company_ref: { value: '100' },
-      koyou_ref: { value: '55' },
-      applicant_ref: { value: '7' },
+      // 雇用条件書サブテーブル（複数人）。
+      koyou_details: {
+        value: [
+          {
+            id: '1',
+            value: {
+              koyou_ref: { value: '55' },
+              koyou_hrid: { value: 'HR-001' },
+              koyou_applicant_disp: { value: 'グエン' },
+            },
+          },
+          {
+            id: '2',
+            value: {
+              koyou_ref: { value: '56' },
+              koyou_hrid: { value: 'HR-002' },
+              koyou_applicant_disp: { value: 'タン' },
+            },
+          },
+        ],
+      } as unknown as { value: unknown },
     }
   }
 
-  it('loadCaseHubLinks: app296 レコードから紐付けIDを解決する', async () => {
+  it('loadCaseHubLinks: app296 レコードから company_ref と雇用条件書サブテーブルを解決する', async () => {
     const getRecords = vi.fn().mockResolvedValue([hubRecord()])
     const client = makeMockClient({ getRecords })
     const links = await loadCaseHubLinks(client, '5')
@@ -537,24 +529,39 @@ describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
     expect(links).toEqual({
       kintoneCaseId: '5',
       app34RecordId: '100',
-      app55RecordId: '55',
-      applicantRecordId: '7',
+      koyouTargets: [
+        { app55RecordId: '55', hrid: 'HR-001', applicantName: 'グエン' },
+        { app55RecordId: '56', hrid: 'HR-002', applicantName: 'タン' },
+      ],
       driveFolderUrl: null,
     })
   })
 
-  it('loadCaseHubLinks: 未設定フィールドは null に正規化', async () => {
+  it('loadCaseHubLinks: koyou_ref 無しの行はスキップ、hrid/氏名 空は null に正規化', async () => {
     const rec: KintoneReadRecord = {
       $id: { value: '5' },
       company_ref: { value: '100' },
-      koyou_ref: { value: '' },
-      applicant_ref: { value: '' },
+      koyou_details: {
+        value: [
+          {
+            id: '1',
+            value: {
+              koyou_ref: { value: '55' },
+              koyou_hrid: { value: '' },
+              koyou_applicant_disp: { value: '' },
+            },
+          },
+          // koyou_ref 空の行は反映先が無いのでスキップ。
+          { id: '2', value: { koyou_ref: { value: '' } } },
+        ],
+      } as unknown as { value: unknown },
     }
     const client = makeMockClient({ getRecords: vi.fn().mockResolvedValue([rec]) })
     const links = await loadCaseHubLinks(client, '5')
     expect(links?.app34RecordId).toBe('100')
-    expect(links?.app55RecordId).toBeNull()
-    expect(links?.applicantRecordId).toBeNull()
+    expect(links?.koyouTargets).toEqual([
+      { app55RecordId: '55', hrid: null, applicantName: null },
+    ])
   })
 
   it('loadCaseHubLinks: 見つからなければ null', async () => {

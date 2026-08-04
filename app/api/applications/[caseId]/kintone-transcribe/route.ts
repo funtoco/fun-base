@@ -1,38 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCase, isPortalWriter } from '@/lib/portal/applications'
-import { loadApplicationWorkbook } from '@/lib/portal/kintone-sync/source'
-import {
-  transcribeWorkbook,
-  syncStatusLabelForAction,
-} from '@/lib/portal/kintone-sync/transcribe'
-import type { TranscribeTargets } from '@/lib/portal/kintone-sync/transcribe'
 import { createKintoneWriteClientFromEnv } from '@/lib/portal/kintone-sync/kintone-write-client'
-import { loadCaseHubLinks, writeBackSyncStatus } from '@/lib/portal/kintone-sync/case-hub'
+import { runCaseTranscription } from '@/lib/portal/kintone-sync/run-transcription'
 
 // POST /api/applications/[caseId]/kintone-transcribe
 // 提出Excel（申請書類作成フォーム）を読み、kintone app34（マスタ_法人）と app55（雇用条件書）へ
 // 転記する（app36 は対象外）。
 //
-// Aモデル: 反映先は kintone「ビザ案件管理」(app296) の事前紐付け（company_ref / koyou_ref）で確定。
-//   クエリ ?kintoneCaseId=<app296レコード番号> を渡すと、そのハブから反映先レコードIDを解決し、
-//   照合せず直接 update する（重複ゼロ）。結果は app296 の sync_*_status / synced_at / sync_log に
-//   書き戻す。
+// Aモデル: 反映先は kintone「ビザ案件管理」(app296) の事前紐付けで確定。
+//   ?kintoneCaseId=<app296レコード番号>（無ければ案件の kintone_record_id）から反映先を解決し、
+//   照合せず直接 update する（重複ゼロ）。app55（雇用条件書）は koyou_details サブテーブルの
+//   各人へ同一payloadを fan-out。結果は app296 の sync_*_status / synced_at / sync_log に書き戻す。
+//   実書き込みの中核・書き戻し・エラー処理は runCaseTranscription に集約している。
 //
 // 既定は dryRun（本番kintoneに書かない）。実書き込みは以下がすべて揃うときのみ:
 //   - クエリ ?dryRun=false（明示）
 //   - kintone 書込の認証が env に設定済み（KINTONE_BASE_URL + トークン or ユーザー/パス）
 //   - 呼び出しユーザーが writer（OP など）
-//   - app55 の実書き込みは ?kintoneCaseId 経由で koyou_ref（紐付け先）が解決できたときのみ。
 export async function POST(
   request: NextRequest,
   { params }: { params: { caseId: string } }
 ) {
-  // catch でのエラー書き戻しに使うため try の外で保持。
-  let client = createKintoneWriteClientFromEnv()
-  let kintoneCaseId: string | null = null
-  let requestedRealWrite = false
-
   try {
     const supabase = await createClient()
     const {
@@ -60,15 +49,15 @@ export async function POST(
 
     // dryRun 判定（既定 true）。?dryRun=false のときだけ実書き込みを試みる。
     const dryRunParam = request.nextUrl.searchParams.get('dryRun')
-    requestedRealWrite = dryRunParam === 'false'
+    const requestedRealWrite = dryRunParam === 'false'
     // ?kintoneCaseId 明示 → 無ければ案件の永続リンク（kintone_record_id）をフォールバック。
-    kintoneCaseId =
+    const kintoneCaseId =
       request.nextUrl.searchParams.get('kintoneCaseId')?.trim() ||
       detail.kintoneRecordId ||
       null
 
     // 実書き込み要求なのに認証未設定なら 400（サイレントに書かない）。
-    if (requestedRealWrite && !client) {
+    if (requestedRealWrite && !createKintoneWriteClientFromEnv()) {
       return NextResponse.json(
         {
           error:
@@ -78,85 +67,29 @@ export async function POST(
       )
     }
 
-    // app296（案件ハブ）から反映先レコードを解決（＝照合レスの肝）。
-    // client があり kintoneCaseId 指定時のみ。dryRun でも解決してプレビューに反映する。
-    let targets: TranscribeTargets = {}
-    let links = null
-    if (client && kintoneCaseId) {
-      links = await loadCaseHubLinks(client, kintoneCaseId)
-      if (!links) {
-        return NextResponse.json(
-          {
-            error: `ビザ案件管理(app296)にレコード「${kintoneCaseId}」が見つかりません`,
-          },
-          { status: 404 }
-        )
-      }
-      targets = {
-        app34RecordId: links.app34RecordId,
-        app55RecordId: links.app55RecordId,
-      }
-    }
-
-    // 提出Excel（application_workbook）を取得。
-    const workbook = await loadApplicationWorkbook(params.caseId)
-    if (!workbook.ok) {
-      return NextResponse.json({ error: workbook.error }, { status: workbook.status })
-    }
-
-    const result = await transcribeWorkbook({
-      buffer: workbook.data.buffer,
+    // 転記の中核（紐付け解決・app34 update・app55 fan-out・app296書き戻し・エラー書き戻し）を委譲。
+    const result = await runCaseTranscription({
+      caseId: params.caseId,
+      kintoneCaseId,
       dryRun: !requestedRealWrite,
-      client,
-      targets,
     })
-
-    // 実書き込み時のみ、結果を app296 に書き戻す。app34/app55 は plan.action で個別に成否判定。
-    // 書き戻し失敗は握り潰す（実書き込み結果のラベルを覆さない）。
-    if (requestedRealWrite && client && kintoneCaseId) {
-      try {
-        await writeBackSyncStatus(client, kintoneCaseId, {
-          companyStatus: syncStatusLabelForAction(result.app34.plan.action),
-          koyouStatus: syncStatusLabelForAction(result.app55.plan.action),
-          syncedAt: new Date().toISOString(),
-          log:
-            `法人(app34)=${result.app34.plan.action}/rec ${result.app34.plan.recordId ?? '-'} / ` +
-            `雇用条件書(app55)=${result.app55.plan.action}/rec ${result.app55.plan.recordId ?? '-'}`,
-        })
-      } catch (writebackError) {
-        console.error('Error writing back sync status to app296:', writebackError)
-      }
-    }
 
     return NextResponse.json({
       success: true,
-      dryRun: !requestedRealWrite,
-      kintoneCaseId,
-      links,
-      sourceFileName: workbook.data.fileName,
-      plans: result.plans,
+      dryRun: result.dryRun,
+      kintoneCaseId: result.kintoneCaseId,
+      links: result.links,
+      sourceFileName: result.sourceFileName,
       app34: result.app34,
-      app55: result.app55,
+      app55Record: result.app55Record,
+      app55Writes: result.app55Writes,
     })
   } catch (error) {
     console.error('Error transcribing application workbook to kintone:', error)
     const message =
       error instanceof Error ? error.message : 'kintone転記に失敗しました'
-
-    // 実書き込み中の失敗は app296 にエラーを書き戻す（可能なら）。書き戻し失敗は無視。
-    if (requestedRealWrite && client && kintoneCaseId) {
-      try {
-        await writeBackSyncStatus(client, kintoneCaseId, {
-          companyStatus: 'エラー',
-          koyouStatus: 'エラー',
-          syncedAt: new Date().toISOString(),
-          log: `エラー: ${message}`,
-        })
-      } catch (writebackError) {
-        console.error('Error writing back sync error to app296:', writebackError)
-      }
-    }
-
-    return NextResponse.json({ error: message }, { status: 500 })
+    // 案件ハブ(app296)にレコードが無い場合は 404（それ以外は 500）。
+    const status = message.startsWith('ビザ案件管理(app296)') ? 404 : 500
+    return NextResponse.json({ error: message }, { status })
   }
 }

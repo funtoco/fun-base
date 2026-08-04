@@ -43,24 +43,31 @@ export interface TranscribeResult {
   plan: TranscribePlan
 }
 
-/** app34/app55 の両 plan をまとめたワークブック単位の転記結果。 */
+/** ワークブック単位の転記結果。app55 は payload のみ返し、N件(複数人)への書込は run-transcription が fan-out する。 */
 export interface TranscribeWorkbookResult {
+  /** 法人(app34)。案件レベルで1回 update/preview。 */
   app34: TranscribeResult
-  app55: TranscribeResult
-  /** app34, app55 の plan 配列（API がそのまま返せる形）。app36 は対象外で含めない。 */
-  plans: TranscribePlan[]
+  /** 雇用条件書(app55)の payload（人固有項目は除外済み・共通項目のみ）。 */
+  app55Record: KintoneRecordPayload
+  /** app55 の主ソースシート。 */
+  app55Sheet: string
 }
 
 /**
  * 反映先レコードID（app296「ビザ案件管理」の事前紐付けから解決した値）。
  * Aモデル: 「どのレコードに書くか」は事前紐付けで確定済みなので、照合せず直接 update する。
+ * app55 は雇用条件書サブテーブル(複数人)なので targets には含めず、run-transcription が各行へ書く。
  */
 export interface TranscribeTargets {
   /** app296 の company_ref（= app34 マスタ_法人 のレコード番号 COID）。 */
   app34RecordId?: string | null
-  /** app296 の koyou_ref（= app55 雇用条件書 のレコード番号）。 */
-  app55RecordId?: string | null
 }
+
+/**
+ * app55（雇用条件書）の人固有項目。app55 の HRID ルックアップが人材マスタから自動補完するため、
+ * 転記からは除外する（複数人へ同一Excelを適用しても氏名/性別が上書きされない）。
+ */
+export const APP55_PERSON_SPECIFIC_CODES = ['申請人氏名', '性別', '申請人_経験年数']
 
 export interface TranscribeOptions {
   buffer: ArrayBuffer | Buffer | Uint8Array
@@ -71,8 +78,8 @@ export interface TranscribeOptions {
   /**
    * 反映先レコードID（app296 の事前紐付け）。
    * - app34RecordId 指定時: 法人番号照合をスキップし、その ID へ直接 update（Aモデル）。
-   * - app55RecordId 指定時: app55 を実書き込み（従来はキー未定でドライラン固定だった制約を解除）。
-   * 未指定のフィールドは従来動作（app34=法人番号upsert / app55=ドライラン）にフォールバック。
+   * - 未指定時: 従来動作（app34=法人番号upsert）にフォールバック。
+   * app55（雇用条件書）は複数人サブテーブルのため targets には含めず、run-transcription が各人へ fan-out。
    */
   targets?: TranscribeTargets
 }
@@ -197,67 +204,21 @@ async function transcribeApp34(
 }
 
 /**
- * app55（雇用条件書）を転記する。
- * - targetRecordId 指定（Aモデル/app296 の koyou_ref）＋実書き込み要求: その ID へ直接 update。
- *   → 従来「upsert キー未定でドライラン固定」だった制約を、事前紐付けで解除する。
- * - それ以外（紐付け無し or dryRun）: payload 生成のみ（ドライラン・書き込み無し）。
+ * app55（雇用条件書）の payload を生成する（人固有項目は除外・共通項目のみ）。
+ * 実際の書込は複数人（サブテーブル）へ run-transcription が fan-out する。
  */
-async function transcribeApp55(
-  getCell: CellReader,
-  dryRun: boolean,
-  client: KintoneWriteClient | null,
-  targetRecordId: string | null
-): Promise<TranscribeResult> {
-  const mapping = APP55_MAPPING
-  const record = buildRecord(getCell, mapping)
-
-  // 実書き込み（Aモデル）: 事前紐付け済みの雇用条件書レコードへ直接 update。
-  // 書込実行の失敗は throw せず error plan で返す（app34 の成否を巻き添えにしない）。
-  if (!dryRun && client && targetRecordId) {
-    try {
-      await client.updateRecord(mapping.appId, targetRecordId, record)
-      return {
-        sheet: '1-4',
-        plan: {
-          appId: mapping.appId,
-          action: 'update',
-          recordId: targetRecordId,
-          keyValue: null,
-          record,
-        },
-      }
-    } catch (e) {
-      return {
-        sheet: '1-4',
-        plan: {
-          appId: mapping.appId,
-          action: 'error',
-          recordId: targetRecordId,
-          keyValue: null,
-          record,
-          error: e instanceof Error ? e.message : String(e),
-        },
-      }
-    }
+export function buildApp55Record(getCell: CellReader): KintoneRecordPayload {
+  const record = buildRecord(getCell, APP55_MAPPING)
+  for (const code of APP55_PERSON_SPECIFIC_CODES) {
+    delete record[code]
   }
-
-  // ドライラン: 紐付け未指定で実書き込みを要求された場合はその旨を note に残す。
-  const note =
-    !dryRun && client && !targetRecordId
-      ? 'app55 の紐付け先（koyou_ref）が未指定のためドライラン（実書き込みスキップ）。'
-      : 'app55 は payload 生成（ドライラン）。実書き込みは紐付け先レコードID指定時のみ。'
-  return {
-    sheet: '1-4',
-    plan: { appId: mapping.appId, action: 'dry-run', keyValue: null, record, note },
-  }
+  return record
 }
 
 /**
- * 提出Excel（申請書類作成フォーム）を読み、app34 と app55 の転記 plan を返す。
- * app36 は対象外（内定時に別フローで登録済みのため）。
- *
- * - app34: 法人番号で upsert（dryRun=false かつ client ありのときのみ実書き込み）。
- * - app55: payload 生成のみ（upsert キー未定・実書き込み未対応）。常に dry-run。
+ * 提出Excel（申請書類作成フォーム）を読み、app34 を転記し、app55 の payload を返す。
+ * app55（雇用条件書）は複数人（サブテーブル）なので、ここでは payload 生成のみ。
+ * 各人の雇用条件書レコードへの書込は run-transcription が fan-out する。app36 は対象外。
  */
 export async function transcribeWorkbook(
   options: TranscribeOptions
@@ -277,7 +238,7 @@ export async function transcribeWorkbook(
   const getCell = workbookCellReader(workbook)
 
   const app34 = await transcribeApp34(getCell, dryRun, client, targets.app34RecordId ?? null)
-  const app55 = await transcribeApp55(getCell, dryRun, client, targets.app55RecordId ?? null)
+  const app55Record = buildApp55Record(getCell)
 
-  return { app34, app55, plans: [app34.plan, app55.plan] }
+  return { app34, app55Record, app55Sheet: '1-4' }
 }

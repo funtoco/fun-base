@@ -8,7 +8,8 @@ import type { KintoneWebhookEvent } from './webhook'
 //  - 法人 COID(company_ref) → connector_app_filters(field_code='COID', filter_value=COID)
 //      → connectors.tenant_id
 //  - 事業所 (office_name_disp) → 同一 tenant 内の tenant_offices.name と完全一致 → tenant_office_id
-//  - 申請人 HRID(applicant_ref) → people.external_id（同一 tenant）→ people.id（案件メンバー）
+//  - 申請人 HRID(koyou_details[].koyou_hrid) → people.external_id（同一 tenant）→ people.id
+//      （雇用条件書サブテーブルの各行＝複数人分の案件メンバー）
 
 type ServiceClient = ReturnType<typeof getServiceClient>
 
@@ -26,6 +27,16 @@ const BUNYA_TO_FIELD: Record<
   その他: 'other',
 }
 
+/** 雇用条件書サブテーブル(koyou_details)1行から抽出した申請人素材。 */
+export interface KoyouMemberSource {
+  /** koyou_hrid（申請人HRID・人材マスタ照合キー）。 */
+  hrid: string | null
+  /** koyou_applicant_disp（申請人氏名の表示用コピー）。 */
+  applicantName: string | null
+  /** koyou_ref（app55 雇用条件書 レコード番号）。 */
+  app55RecordId: string | null
+}
+
 /** app296 レコード（Webhook payload）から案件行の素材を取り出す（純粋）。 */
 export interface MappedCaseRow {
   kintoneRecordId: string
@@ -37,8 +48,8 @@ export interface MappedCaseRow {
   /** crosswalk 素材 */
   coid: string | null
   officeName: string | null
-  hrid: string | null
-  app55RecordId: string | null
+  /** 雇用条件書サブテーブルの各行（複数人分の申請人素材）。 */
+  koyouTargets: KoyouMemberSource[]
 }
 
 function fieldStr(record: Record<string, FieldValue>, code: string): string | null {
@@ -47,6 +58,38 @@ function fieldStr(record: Record<string, FieldValue>, code: string): string | nu
     return null
   }
   return String(v)
+}
+
+/** SUBTABLE の1行（`{ id?, value: { subCode: { value } } }`）。 */
+type SubtableRow = { id?: string; value: Record<string, FieldValue> }
+
+/** koyou_details サブテーブル → 申請人素材の配列（koyou_ref/koyou_hrid が両方無い行は無視）。 */
+function readKoyouTargets(r: Record<string, FieldValue>): KoyouMemberSource[] {
+  const raw = r['koyou_details']?.value
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  const out: KoyouMemberSource[] = []
+  for (const row of raw as SubtableRow[]) {
+    const cell = (code: string): string | null => {
+      const v = row.value?.[code]?.value
+      if (v === undefined || v === null || v === '') {
+        return null
+      }
+      return String(v)
+    }
+    const target: KoyouMemberSource = {
+      hrid: cell('koyou_hrid'),
+      applicantName: cell('koyou_applicant_disp'),
+      app55RecordId: cell('koyou_ref'),
+    }
+    // 空行（両キー無し）はスキップ。
+    if (!target.hrid && !target.app55RecordId) {
+      continue
+    }
+    out.push(target)
+  }
+  return out
 }
 
 /**
@@ -67,8 +110,7 @@ export function mapKintoneRecordToCaseRow(event: KintoneWebhookEvent): MappedCas
     driveFolderUrl: fieldStr(r, 'drive_folder_url'),
     coid: fieldStr(r, 'company_ref'),
     officeName: fieldStr(r, 'office_name_disp'),
-    hrid: fieldStr(r, 'applicant_ref'),
-    app55RecordId: fieldStr(r, 'koyou_ref'),
+    koyouTargets: readKoyouTargets(r),
   }
 }
 
@@ -248,35 +290,47 @@ export async function mirrorCaseFromKintone(
     created = true
   }
 
-  // 申請人メンバー（重複回避で upsert）。
-  const personId = await resolvePersonByHrid(service, tenantId, mapped.hrid)
-  if (personId) {
+  // 申請人メンバー（雇用条件書サブテーブルの各人）。重複回避で upsert。
+  // 同一 person が複数行に現れても1回だけ付与する（同一イベント内の重複を吸収）。
+  const seenPersonIds = new Set<string>()
+  let insertedMember = false
+  for (const target of mapped.koyouTargets) {
+    const personId = await resolvePersonByHrid(service, tenantId, target.hrid)
+    if (!personId || seenPersonIds.has(personId)) {
+      continue
+    }
+    seenPersonIds.add(personId)
     const { data: member } = await service
       .from('visa_application_case_members')
       .select('id')
       .eq('case_id', caseId)
       .eq('person_id', personId)
       .maybeSingle()
-    if (!member) {
-      // tenant_id/tenant_office_id は NOT NULL＋複合FK(case_id,tenant_id,tenant_office_id)。
-      // service-role でも列制約はバイパスされないため、案件と同一の値を必ず渡す。
-      const { error: memberError } = await service
-        .from('visa_application_case_members')
-        .insert({
-          case_id: caseId,
-          tenant_id: tenantId,
-          tenant_office_id: tenantOfficeId,
-          person_id: personId,
-        })
-      if (memberError) {
-        // メンバー付与失敗は person 系必要書類の materialize 欠落に直結するため握り潰さない。
-        console.error('Error inserting case member:', memberError)
-      }
+    if (member) {
+      continue
+    }
+    // tenant_id/tenant_office_id は NOT NULL＋複合FK(case_id,tenant_id,tenant_office_id)。
+    // service-role でも列制約はバイパスされないため、案件と同一の値を必ず渡す。
+    const { error: memberError } = await service
+      .from('visa_application_case_members')
+      .insert({
+        case_id: caseId,
+        tenant_id: tenantId,
+        tenant_office_id: tenantOfficeId,
+        person_id: personId,
+      })
+    if (memberError) {
+      // メンバー付与失敗は person 系必要書類の materialize 欠落に直結するため握り潰さない。
+      console.error('Error inserting case member:', memberError)
+    } else {
+      insertedMember = true
     }
   }
 
-  // 新規時は必要書類を materialize（ベストエフォート・失敗しても案件は成立）。
-  if (created) {
+  // 必要書類を materialize（ベストエフォート・失敗しても案件は成立）。
+  // 新規案件、または既存案件に新メンバーを追加した時（複数人を後から追加した UPDATE 等）に実行。
+  // materialize_case_requirements は ON CONFLICT DO NOTHING で冪等なので、追加分の person 要件だけが増える。
+  if (created || insertedMember) {
     try {
       await service.rpc('materialize_case_requirements', { p_case_id: caseId })
     } catch (materializeError) {
