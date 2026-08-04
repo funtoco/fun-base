@@ -7,6 +7,7 @@ import {
   checkboxAlways,
   checkboxFromText,
   checkboxOn,
+  combineYmdDate,
   constantText,
   keepIfEquals,
   radioFromText,
@@ -116,6 +117,34 @@ describe('transforms: checkbox / radio / 有無 / 固定', () => {
     const t = constantText('水道光熱費')
     expect(t(null)).toBe('水道光熱費')
     expect(t('anything')).toBe('水道光熱費')
+  })
+
+  it('combineYmdDate: 年/月/日3セル→YYYY-MM-DD、単位付き吸収、欠け/範囲外はnull', () => {
+    expect(combineYmdDate([2026, 8, 4])).toBe('2026-08-04')
+    expect(combineYmdDate(['2026年', '12月', '31日'])).toBe('2026-12-31')
+    expect(combineYmdDate([2026, '', 4])).toBeNull() // 月が空
+    expect(combineYmdDate([2026, 13, 4])).toBeNull() // 月が範囲外
+    expect(combineYmdDate([1800, 1, 1])).toBeNull() // 年が範囲外
+    expect(combineYmdDate([2026, 8])).toBeNull() // 日が無い
+  })
+})
+
+// ── buildRecord: derived（複数セル合成）───────────────────────────────
+describe('buildRecord: derived（年/月/日→日付）', () => {
+  const mapping: AppMapping = {
+    appId: 'X',
+    fields: [],
+    derived: [
+      { sheetName: '1-6', cells: ['B17', 'E17', 'G17'], code: '_1_1_1_契約期間開始日', kind: 'DATE', combine: combineYmdDate },
+    ],
+  }
+
+  it('3セルが揃えば日付を合成、いずれか空なら出さない', () => {
+    const filled = buildRecord(cellsReader({ '1-6': { B17: 2026, E17: 8, G17: 4 } }), mapping)
+    expect(filled._1_1_1_契約期間開始日).toEqual({ value: '2026-08-04' })
+
+    const partial = buildRecord(cellsReader({ '1-6': { B17: 2026, E17: 8 } }), mapping)
+    expect('_1_1_1_契約期間開始日' in partial).toBe(false)
   })
 })
 

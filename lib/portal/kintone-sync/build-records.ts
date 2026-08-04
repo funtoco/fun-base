@@ -95,6 +95,16 @@ export function buildRecord(
     mergeField(record, field.code, field.kind, value)
   }
 
+  // 合成フィールド（複数セル → 1フィールド。例: 年/月/日 → 日付）。
+  for (const derived of mapping.derived ?? []) {
+    const raws = derived.cells.map((c) => getCell(derived.sheetName, c))
+    const value = derived.combine(raws)
+    if (value === null) {
+      continue
+    }
+    mergeField(record, derived.code, derived.kind, value)
+  }
+
   for (const subtable of mapping.subtables ?? []) {
     const rows = buildSubtableRows(getCell, subtable)
     if (rows.length > 0) {
