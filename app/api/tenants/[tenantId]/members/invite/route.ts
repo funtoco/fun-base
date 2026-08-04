@@ -8,24 +8,13 @@ import {
   canManageTenant,
   TENANT_INVITABLE_ROLES,
 } from "@/lib/tenant-access"
-import { validateInviteOffices } from "@/lib/portal/invite-validation"
+import {
+  parseOfficeIds,
+  resolveOfficeIdsForScope,
+  validateInviteOffices,
+} from "@/lib/portal/invite-validation"
 
 const INVITABLE_ROLES = new Set(TENANT_INVITABLE_ROLES)
-
-function normalizeOfficeIds(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return Array.from(
-    new Set(
-      value
-        .filter((id): id is string => typeof id === "string")
-        .map((id) => id.trim())
-        .filter(Boolean)
-    )
-  )
-}
 
 export async function POST(
   request: NextRequest,
@@ -41,7 +30,11 @@ export async function POST(
 
     const body = await request.json()
     const { email, role } = body
-    const officeIds = normalizeOfficeIds(body.officeIds)
+    const officeIdsResult = parseOfficeIds(body.officeIds)
+    if (!officeIdsResult.ok) {
+      return NextResponse.json({ error: officeIdsResult.error }, { status: 400 })
+    }
+    const officeIds = officeIdsResult.officeIds
     const normalizedEmail = typeof email === "string" ? email.toLowerCase().trim() : ""
 
     if (!normalizedEmail || !role) {
@@ -96,29 +89,18 @@ export async function POST(
       return NextResponse.json({ error: officeCheck.error }, { status: 400 })
     }
 
-    if (officeIds.length > 0) {
-      const { data: offices, error: officesError } = await supabase
-        .from("tenant_offices")
-        .select("id")
-        .eq("tenant_id", params.tenantId)
-        .eq("is_active", true)
-        .in("id", officeIds)
-
-      if (officesError) {
-        console.error("Error verifying invitation offices:", officesError)
-        return NextResponse.json(
-          { error: "Failed to verify affiliations" },
-          { status: 500 }
-        )
-      }
-
-      if ((offices || []).length !== officeIds.length) {
-        return NextResponse.json(
-          { error: "Invalid officeIds" },
-          { status: 400 }
-        )
-      }
+    const effectiveOfficeIdsResult = await resolveOfficeIdsForScope(
+      supabase,
+      params.tenantId,
+      officeIds,
+    )
+    if (!effectiveOfficeIdsResult.ok) {
+      return NextResponse.json(
+        { error: effectiveOfficeIdsResult.error },
+        { status: effectiveOfficeIdsResult.status }
+      )
     }
+    const effectiveOfficeIds = effectiveOfficeIdsResult.officeIds
 
     // Check if email is already a member
     const { data: existingMemberships, error: existingMembershipsError } = await supabase
@@ -198,10 +180,10 @@ export async function POST(
 
       createdUserTenantId = userTenant.id
 
-      if (officeIds.length > 0) {
+      if (effectiveOfficeIds.length > 0) {
         const { error: officeAssignmentError } = await adminSupabase
           .from("user_tenant_offices")
-          .insert(officeIds.map((officeId) => ({
+          .insert(effectiveOfficeIds.map((officeId) => ({
             tenant_id: params.tenantId,
             user_tenant_id: userTenant.id,
             tenant_office_id: officeId,

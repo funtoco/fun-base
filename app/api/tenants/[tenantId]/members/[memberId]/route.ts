@@ -9,25 +9,12 @@ import {
   TENANT_FEATURE_PERMISSION_KEYS,
   type TenantFeaturePermissions,
 } from "@/lib/tenant-access"
+import {
+  parseOfficeIds,
+  resolveOfficeIdsForScope,
+} from "@/lib/portal/invite-validation"
 
 type ManageableRole = (typeof TENANT_MANAGEABLE_ROLES)[number]
-
-function normalizeOfficeIds(value: unknown): string[] | null {
-  if (typeof value === "undefined") {
-    return null
-  }
-
-  if (!Array.isArray(value)) {
-    return null
-  }
-
-  const normalizedIds = value
-    .filter((id): id is string => typeof id === "string")
-    .map((id) => id.trim())
-    .filter(Boolean)
-
-  return Array.from(new Set(normalizedIds))
-}
 
 function normalizeFeaturePermissions(value: unknown): TenantFeaturePermissions | null {
   if (typeof value === "undefined") {
@@ -65,10 +52,11 @@ export async function PATCH(
 
     const body = await request.json()
     const { role } = body
-    const officeIds = normalizeOfficeIds(body.officeIds)
-    const featurePermissions = normalizeFeaturePermissions(body.featurePermissions)
     const hasRoleUpdate = typeof role !== "undefined"
     const hasOfficeUpdate = typeof body.officeIds !== "undefined"
+    const officeIdsResult = hasOfficeUpdate ? parseOfficeIds(body.officeIds) : null
+    const officeIds = officeIdsResult?.ok ? officeIdsResult.officeIds : null
+    const featurePermissions = normalizeFeaturePermissions(body.featurePermissions)
     const hasFeaturePermissionsUpdate = typeof body.featurePermissions !== "undefined"
 
     if (!hasRoleUpdate && !hasOfficeUpdate && !hasFeaturePermissionsUpdate) {
@@ -85,7 +73,7 @@ export async function PATCH(
       )
     }
 
-    if (hasOfficeUpdate && officeIds === null) {
+    if (hasOfficeUpdate && (!officeIdsResult || !officeIdsResult.ok)) {
       return NextResponse.json(
         { error: "Invalid officeIds" },
         { status: 400 }
@@ -218,31 +206,18 @@ export async function PATCH(
     }
 
     if (hasOfficeUpdate) {
-      const nextOfficeIds = officeIds || []
-
-      if (nextOfficeIds.length > 0) {
-        const { data: offices, error: officesError } = await supabase
-          .from("tenant_offices")
-          .select("id")
-          .eq("tenant_id", params.tenantId)
-          .eq("is_active", true)
-          .in("id", nextOfficeIds)
-
-        if (officesError) {
-          console.error("Error verifying member offices:", officesError)
-          return NextResponse.json(
-            { error: "Failed to verify affiliations" },
-            { status: 500 }
-          )
-        }
-
-        if ((offices || []).length !== nextOfficeIds.length) {
-          return NextResponse.json(
-            { error: "Invalid officeIds" },
-            { status: 400 }
-          )
-        }
+      const effectiveOfficeIdsResult = await resolveOfficeIdsForScope(
+        supabase,
+        params.tenantId,
+        officeIds || [],
+      )
+      if (!effectiveOfficeIdsResult.ok) {
+        return NextResponse.json(
+          { error: effectiveOfficeIdsResult.error },
+          { status: effectiveOfficeIdsResult.status }
+        )
       }
+      const nextOfficeIds = effectiveOfficeIdsResult.officeIds
 
       const { error: deleteOfficeError } = await supabase
         .from("user_tenant_offices")
