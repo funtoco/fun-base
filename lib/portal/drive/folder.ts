@@ -53,8 +53,10 @@ export function buildDriveFileName(params: {
 }): string {
   const ext = safeExtension(params.originalFileName)
   const d = params.date ?? new Date()
-  const ymd = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(
-    d.getUTCDate()
+  // Asia/Tokyo(+9h) の暦日で YYYYMMDD（JST早朝の書類が前日日付になるのを防ぐ）。
+  const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
+  const ymd = `${jst.getUTCFullYear()}${String(jst.getUTCMonth() + 1).padStart(2, '0')}${String(
+    jst.getUTCDate()
   ).padStart(2, '0')}`
   const parts = [params.caseTitle, params.documentName]
     .filter((x): x is string => Boolean(x && x.trim()))

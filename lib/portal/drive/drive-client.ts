@@ -61,10 +61,11 @@ export class RestDriveClient implements DriveClient {
 
   private async getAccessToken(): Promise<string> {
     const key = await importPKCS8(this.auth.privateKey, 'RS256')
+    // 共有フォルダ方式（SA 自身が権限を持つ）。ドメイン全体委任は使わないため sub は付けない
+    // （sub に SA 自身を入れると自己代理扱いで token エンドポイントが unauthorized_client を返す）。
     const assertion = await new SignJWT({ scope: DRIVE_SCOPE })
       .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
       .setIssuer(this.auth.clientEmail)
-      .setSubject(this.auth.clientEmail)
       .setAudience(TOKEN_ENDPOINT)
       .setIssuedAt()
       .setExpirationTime('1h')

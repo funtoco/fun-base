@@ -14,7 +14,10 @@ import {
 import { buildRecord } from '@/lib/portal/kintone-sync/build-records'
 import { APP34_MAPPING } from '@/lib/portal/kintone-sync/mappings/app34'
 import { APP55_MAPPING } from '@/lib/portal/kintone-sync/mappings/app55'
-import { transcribeWorkbook } from '@/lib/portal/kintone-sync/transcribe'
+import {
+  transcribeWorkbook,
+  syncStatusLabelForAction,
+} from '@/lib/portal/kintone-sync/transcribe'
 import {
   CASE_HUB_APP_ID,
   loadCaseHubLinks,
@@ -483,6 +486,35 @@ describe('transcribeWorkbook: targets（app296 事前紐付け・Aモデル）',
     expect(result.app55.plan.action).toBe('dry-run')
     expect(client.updateRecord).toHaveBeenCalledTimes(1)
     expect(client.updateRecord).toHaveBeenCalledWith('34', '100', expect.any(Object))
+  })
+
+  it('部分成功: app34成功・app55書込失敗 → app34=update / app55=error（throwしない）', async () => {
+    const buffer = await makeWorkbookBuffer(APP34_SHEETS)
+    const client = makeMockClient({
+      updateRecord: vi.fn().mockImplementation(async (appId: string) => {
+        if (appId === '55') throw new Error('app55 update failed (404)')
+        return { revision: '2' }
+      }),
+    })
+    const result = await transcribeWorkbook({
+      buffer,
+      dryRun: false,
+      client,
+      targets: { app34RecordId: '100', app55RecordId: '55' },
+    })
+    // app34 は成功、app55 だけ error。例外は投げない。
+    expect(result.app34.plan.action).toBe('update')
+    expect(result.app55.plan.action).toBe('error')
+    expect(result.app55.plan.error).toMatch(/404/)
+  })
+})
+
+describe('syncStatusLabelForAction', () => {
+  it('action → app296 反映ステータスラベル', () => {
+    expect(syncStatusLabelForAction('update')).toBe('反映済')
+    expect(syncStatusLabelForAction('create')).toBe('反映済')
+    expect(syncStatusLabelForAction('dry-run')).toBe('未反映')
+    expect(syncStatusLabelForAction('error')).toBe('エラー')
   })
 })
 

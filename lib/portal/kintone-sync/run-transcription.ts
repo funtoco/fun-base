@@ -4,6 +4,7 @@ import { loadCaseHubLinks, writeBackSyncStatus, type CaseHubLinks } from './case
 import { loadApplicationWorkbook, APPLICATION_WORKBOOK_CODE } from './source'
 import {
   transcribeWorkbook,
+  syncStatusLabelForAction,
   type TranscribeTargets,
   type TranscribeWorkbookResult,
 } from './transcribe'
@@ -63,20 +64,22 @@ export async function runCaseTranscription(params: {
       targets,
     })
 
-    // 実書き込み時のみ app296 に成功サマリを書き戻す。
+    // 実書き込み時のみ app296 に結果を書き戻す。app34/app55 は plan.action で個別に成否判定
+    // （部分成功=app34成功/app55失敗 なら 反映済/エラー のように別々に記録）。
+    // 書き戻し自体の失敗は握り潰す（実書き込み結果のラベルを覆さない・元処理は成功扱い）。
     if (!dryRun && client && params.kintoneCaseId) {
-      const companyStatus =
-        result.app34.plan.action === 'dry-run' ? '未反映' : '反映済'
-      const koyouStatus =
-        result.app55.plan.action === 'update' ? '反映済' : '未反映'
-      await writeBackSyncStatus(client, params.kintoneCaseId, {
-        companyStatus,
-        koyouStatus,
-        syncedAt: new Date().toISOString(),
-        log:
-          `法人(app34)=${result.app34.plan.action}/rec ${result.app34.plan.recordId ?? '-'} / ` +
-          `雇用条件書(app55)=${result.app55.plan.action}/rec ${result.app55.plan.recordId ?? '-'}`,
-      })
+      try {
+        await writeBackSyncStatus(client, params.kintoneCaseId, {
+          companyStatus: syncStatusLabelForAction(result.app34.plan.action),
+          koyouStatus: syncStatusLabelForAction(result.app55.plan.action),
+          syncedAt: new Date().toISOString(),
+          log:
+            `法人(app34)=${result.app34.plan.action}/rec ${result.app34.plan.recordId ?? '-'} / ` +
+            `雇用条件書(app55)=${result.app55.plan.action}/rec ${result.app55.plan.recordId ?? '-'}`,
+        })
+      } catch (writebackError) {
+        console.error('Error writing back sync status to app296:', writebackError)
+      }
     }
 
     return {

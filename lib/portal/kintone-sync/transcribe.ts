@@ -5,14 +5,14 @@ import { APP55_MAPPING } from './mappings/app55'
 import type { KintoneWriteClient } from './kintone-write-client'
 import type { AppMapping, CellReader, KintoneRecordPayload } from './types'
 
-export type TranscribeAction = 'create' | 'update' | 'dry-run'
+export type TranscribeAction = 'create' | 'update' | 'dry-run' | 'error'
 
 export interface TranscribePlan {
   /** 転記先アプリID（例: '34'）。 */
   appId: string
-  /** 実行された/される操作。dryRun のときは 'dry-run'。 */
+  /** 実行された/される操作。dryRun のときは 'dry-run'。書込実行が失敗すると 'error'。 */
   action: TranscribeAction
-  /** update / 既存ヒット時の kintone レコードID。create 実行時は新規ID。 */
+  /** update / 既存ヒット時の kintone レコードID。create 実行時は新規ID。error 時は対象ID。 */
   recordId?: string
   /** upsert キーの値（app34=法人番号）。キー未定/空なら null。 */
   keyValue: string | null
@@ -20,6 +20,21 @@ export interface TranscribePlan {
   record: KintoneRecordPayload
   /** 補足（app55 の upsert キー未定など、実書込できない理由）。 */
   note?: string
+  /** action='error' 時のエラーメッセージ。 */
+  error?: string
+}
+
+/** plan.action → app296 の反映ステータスラベル（app 別に成否を可視化する）。 */
+export function syncStatusLabelForAction(
+  action: TranscribeAction
+): '反映済' | '未反映' | 'エラー' {
+  if (action === 'error') {
+    return 'エラー'
+  }
+  if (action === 'dry-run') {
+    return '未反映'
+  }
+  return '反映済'
 }
 
 export interface TranscribeResult {
@@ -124,11 +139,26 @@ async function transcribeApp34(
   }
 
   // 実書き込み（Aモデル）: 事前紐付けで確定済みのレコードへ直接 update（照合不要・重複ゼロ）。
+  // 書込「実行」の失敗は throw せず error plan で返す（他アプリの成否を巻き添えにしない）。
   if (targetRecordId) {
-    await client.updateRecord(mapping.appId, targetRecordId, record)
-    return {
-      sheet,
-      plan: { appId: mapping.appId, action: 'update', recordId: targetRecordId, keyValue, record },
+    try {
+      await client.updateRecord(mapping.appId, targetRecordId, record)
+      return {
+        sheet,
+        plan: { appId: mapping.appId, action: 'update', recordId: targetRecordId, keyValue, record },
+      }
+    } catch (e) {
+      return {
+        sheet,
+        plan: {
+          appId: mapping.appId,
+          action: 'error',
+          recordId: targetRecordId,
+          keyValue,
+          record,
+          error: e instanceof Error ? e.message : String(e),
+        },
+      }
     }
   }
 
@@ -136,18 +166,33 @@ async function transcribeApp34(
   if (!keyValue) {
     throw new Error('法人番号（法人番号_13桁_）が空のため転記できません')
   }
+  // findExistingRecordId は重複ヒット時に throw（安全のための転記中止＝write前）。
   const existingId = await findExistingRecordId(client, mapping.appId, keyCode, keyValue)
-  if (existingId) {
-    await client.updateRecord(mapping.appId, existingId, record)
+  try {
+    if (existingId) {
+      await client.updateRecord(mapping.appId, existingId, record)
+      return {
+        sheet,
+        plan: { appId: mapping.appId, action: 'update', recordId: existingId, keyValue, record },
+      }
+    }
+    const created = await client.createRecord(mapping.appId, record)
     return {
       sheet,
-      plan: { appId: mapping.appId, action: 'update', recordId: existingId, keyValue, record },
+      plan: { appId: mapping.appId, action: 'create', recordId: created.id, keyValue, record },
     }
-  }
-  const created = await client.createRecord(mapping.appId, record)
-  return {
-    sheet,
-    plan: { appId: mapping.appId, action: 'create', recordId: created.id, keyValue, record },
+  } catch (e) {
+    return {
+      sheet,
+      plan: {
+        appId: mapping.appId,
+        action: 'error',
+        recordId: existingId ?? undefined,
+        keyValue,
+        record,
+        error: e instanceof Error ? e.message : String(e),
+      },
+    }
   }
 }
 
@@ -167,17 +212,32 @@ async function transcribeApp55(
   const record = buildRecord(getCell, mapping)
 
   // 実書き込み（Aモデル）: 事前紐付け済みの雇用条件書レコードへ直接 update。
+  // 書込実行の失敗は throw せず error plan で返す（app34 の成否を巻き添えにしない）。
   if (!dryRun && client && targetRecordId) {
-    await client.updateRecord(mapping.appId, targetRecordId, record)
-    return {
-      sheet: '1-4',
-      plan: {
-        appId: mapping.appId,
-        action: 'update',
-        recordId: targetRecordId,
-        keyValue: null,
-        record,
-      },
+    try {
+      await client.updateRecord(mapping.appId, targetRecordId, record)
+      return {
+        sheet: '1-4',
+        plan: {
+          appId: mapping.appId,
+          action: 'update',
+          recordId: targetRecordId,
+          keyValue: null,
+          record,
+        },
+      }
+    } catch (e) {
+      return {
+        sheet: '1-4',
+        plan: {
+          appId: mapping.appId,
+          action: 'error',
+          recordId: targetRecordId,
+          keyValue: null,
+          record,
+          error: e instanceof Error ? e.message : String(e),
+        },
+      }
     }
   }
 

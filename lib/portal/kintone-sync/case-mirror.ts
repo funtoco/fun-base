@@ -80,16 +80,21 @@ export async function resolveTenantByCoid(
   if (!coid) {
     return null
   }
+  // 有効(is_active)なフィルタのみ。ソフトデリートの残骸行や無効化コネクタを避ける。
   const { data: filters } = await service
     .from('connector_app_filters')
     .select('connector_id')
     .eq('field_code', 'COID')
     .eq('filter_value', coid)
-    .limit(1)
-  const connectorId = (filters as { connector_id: string }[] | null)?.[0]?.connector_id
-  if (!connectorId) {
+    .eq('is_active', true)
+    .limit(2)
+  const rows = (filters as { connector_id: string }[] | null) ?? []
+  // 複数の有効フィルタが別コネクタ(別テナント)を指す場合は曖昧として解決しない。
+  const uniqueConnectors = Array.from(new Set(rows.map((r) => r.connector_id)))
+  if (uniqueConnectors.length !== 1) {
     return null
   }
+  const connectorId = uniqueConnectors[0]
   const { data: conn } = await service
     .from('connectors')
     .select('tenant_id')
@@ -107,13 +112,17 @@ export async function resolveTenantOfficeByName(
   if (!officeName) {
     return null
   }
+  // DB は UNIQUE(tenant_id, lower(name))、コードベースの正準キーは name.trim().toLocaleLowerCase('ja-JP')。
+  // 完全一致(eq)だと大小文字・空白のドリフトで案件がサイレント欠落するため、正規化して照合する。
+  const normalize = (s: string) => s.trim().toLocaleLowerCase('ja-JP')
+  const target = normalize(officeName)
   const { data } = await service
     .from('tenant_offices')
-    .select('id')
+    .select('id, name')
     .eq('tenant_id', tenantId)
-    .eq('name', officeName)
-    .limit(1)
-  return (data as { id: string }[] | null)?.[0]?.id ?? null
+  const rows = (data as { id: string; name: string }[] | null) ?? []
+  const match = rows.find((r) => normalize(r.name) === target)
+  return match?.id ?? null
 }
 
 /** HRID → people.id（同一 tenant の external_id 一致）。未解決は null。 */
@@ -125,13 +134,24 @@ export async function resolvePersonByHrid(
   if (!hrid) {
     return null
   }
+  // external_id(=人材ID) は UNIQUE 撤去済みで同一 tenant 内に複数 people 行があり得る。
+  // 任意の1件を選ぶと誤紐付けになるため、複数一致は曖昧としてスキップ（本流同期の ambiguous-person 慣行に合わせる）。
   const { data } = await service
     .from('people')
     .select('id')
     .eq('tenant_id', tenantId)
     .eq('external_id', hrid)
-    .limit(1)
-  return (data as { id: string }[] | null)?.[0]?.id ?? null
+    .limit(2)
+  const rows = (data as { id: string }[] | null) ?? []
+  if (rows.length !== 1) {
+    if (rows.length > 1) {
+      console.warn(
+        `resolvePersonByHrid: HRID ${hrid} が tenant ${tenantId} で複数一致（曖昧）→ メンバー付与をスキップ`
+      )
+    }
+    return null
+  }
+  return rows[0].id
 }
 
 export interface MirrorResult {
@@ -221,9 +241,20 @@ export async function mirrorCaseFromKintone(
       .eq('person_id', personId)
       .maybeSingle()
     if (!member) {
-      await service
+      // tenant_id/tenant_office_id は NOT NULL＋複合FK(case_id,tenant_id,tenant_office_id)。
+      // service-role でも列制約はバイパスされないため、案件と同一の値を必ず渡す。
+      const { error: memberError } = await service
         .from('visa_application_case_members')
-        .insert({ case_id: caseId, person_id: personId })
+        .insert({
+          case_id: caseId,
+          tenant_id: tenantId,
+          tenant_office_id: tenantOfficeId,
+          person_id: personId,
+        })
+      if (memberError) {
+        // メンバー付与失敗は person 系必要書類の materialize 欠落に直結するため握り潰さない。
+        console.error('Error inserting case member:', memberError)
+      }
     }
   }
 

@@ -36,7 +36,8 @@ export async function applyKintoneStatusToCase(
     return { updated: false }
   }
   const service = getServiceClient()
-  await service
+  // error と影響行を検査。未ミラー(0件)や DB エラーで黙って updated:true を返さない。
+  const { data, error } = await service
     .from('visa_application_cases')
     .update({
       status: caseStatus,
@@ -44,6 +45,15 @@ export async function applyKintoneStatusToCase(
       kintone_last_synced_at: new Date().toISOString(),
     })
     .eq('kintone_record_id', kintoneCaseId)
+    .select('id')
+  if (error) {
+    console.error('Error applying kintone status to case:', error)
+    return { updated: false }
+  }
+  if (!data || data.length === 0) {
+    // 対応する案件がまだミラーされていない。
+    return { updated: false }
+  }
   return { updated: true, status: caseStatus }
 }
 
