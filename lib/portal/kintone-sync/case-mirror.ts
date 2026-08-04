@@ -182,6 +182,11 @@ export async function mirrorCaseFromKintone(
   // クロスウォーク（tenant / office は案件 NOT NULL のため必須）。
   const tenantId = await resolveTenantByCoid(service, mapped.coid)
   if (!tenantId) {
+    // 法人(COID)が FunBase のコネクタ/テナントに紐づいていない。
+    console.warn(
+      `[case-mirror] skipped=tenant_not_resolved kintoneRecord=${mapped.kintoneRecordId} ` +
+        `COID=${mapped.coid ?? 'null'}（この法人はFunBaseにコネクタ/テナントが無い）`
+    )
     return { caseId: null, created: false, skipped: 'tenant_not_resolved' }
   }
   const tenantOfficeId = await resolveTenantOfficeByName(
@@ -190,6 +195,18 @@ export async function mirrorCaseFromKintone(
     mapped.officeName
   )
   if (!tenantOfficeId) {
+    // 事業所名が FunBase の tenant_offices と一致しない。OP が正しい名前を選べるよう候補を出す。
+    const { data: offices } = await service
+      .from('tenant_offices')
+      .select('name')
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true)
+    const names = ((offices as { name: string }[] | null) ?? []).map((o) => o.name)
+    console.warn(
+      `[case-mirror] skipped=office_not_resolved kintoneRecord=${mapped.kintoneRecordId} ` +
+        `tenant=${tenantId} officeName=${JSON.stringify(mapped.officeName)} ` +
+        `／FunBaseにあるこの法人の事業所名: ${JSON.stringify(names)}`
+    )
     return { caseId: null, created: false, skipped: 'office_not_resolved' }
   }
 
