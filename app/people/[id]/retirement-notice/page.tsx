@@ -169,7 +169,7 @@ function ReadOnlyField({
   className?: string
 }) {
   return (
-    <div className={cn('grid min-h-12 grid-cols-[7.5rem_minmax(0,1fr)] bg-background', className)}>
+    <div className={cn('grid min-h-12 grid-cols-[8.5rem_minmax(0,1fr)] bg-background', className)}>
       <dt className="flex items-center bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{label}</dt>
       <dd className="flex min-w-0 items-center break-words px-3 py-2 text-sm font-medium">
         {value || '未取得/未設定'}
