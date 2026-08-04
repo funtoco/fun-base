@@ -31,7 +31,7 @@ export default async function RetirementNoticePage({ params }: RetirementNoticeP
     : null
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-4 md:p-5">
+    <div className="w-full space-y-4 p-4">
       <div>
         <Button asChild variant="ghost" size="sm" className="-ml-3 gap-2">
           <Link href={`/people/${encodeURIComponent(person.id)}`}>
@@ -49,8 +49,8 @@ export default async function RetirementNoticePage({ params }: RetirementNoticeP
       </div>
 
       {selectedTemplate && downloadHref ? (
-        <Card className="gap-0 overflow-hidden py-0">
-          <div className="grid grid-cols-2 gap-4 p-4 lg:grid-cols-[1fr_1.35fr_1fr_1fr_auto] lg:items-center lg:gap-0">
+        <Card className="gap-0 overflow-hidden rounded-lg py-0">
+          <div className="grid grid-cols-2 gap-4 p-5 lg:grid-cols-[1fr_1.35fr_1fr_1fr_auto] lg:items-center lg:gap-0">
             <SummaryField label="対象者" value={person.name} className="lg:pr-4" />
             <SummaryField
               label="所属先"
@@ -72,13 +72,13 @@ export default async function RetirementNoticePage({ params }: RetirementNoticeP
               </Badge>
             </div>
             <div className="col-span-2 flex flex-col gap-2 sm:flex-row lg:col-span-1 lg:ml-4">
-              <Button asChild variant="outline" size="sm" className="gap-2">
+              <Button asChild variant="outline" className="gap-2">
                 <a href={selectedTemplate.template.pdfPath} target="_blank" rel="noreferrer">
                   <ExternalLink className="h-4 w-4" />
                   空の様式を確認
                 </a>
               </Button>
-              <Button asChild size="sm" className="gap-2">
+              <Button asChild className="gap-2">
                 <a href={downloadHref}>
                   <Download className="h-4 w-4" />
                   PDFを作成
@@ -87,7 +87,7 @@ export default async function RetirementNoticePage({ params }: RetirementNoticeP
             </div>
           </div>
 
-          <CardContent className="space-y-4 border-t p-4">
+          <CardContent className="space-y-5 border-t p-5">
             <div className="space-y-1">
               <h2 className="text-base font-semibold">PDFに反映される情報</h2>
               <p className="text-sm text-muted-foreground">
@@ -120,7 +120,7 @@ export default async function RetirementNoticePage({ params }: RetirementNoticeP
               <ReadOnlyField label="機関の電話番号" value={pdfPerson.companyPhone} />
             </dl>
 
-            <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+            <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <p>
                 PDFには、人材・退職届・法人・事業所の情報を反映します。内容に不明点や修正が必要な箇所がある場合は、Funtocoの営業担当までお問い合わせください。
@@ -175,7 +175,7 @@ function ReadOnlyField({
   return (
     <div
       className={cn(
-        'grid min-h-12 bg-background',
+        'grid min-h-14 bg-background',
         wideLabel ? 'grid-cols-[8.5rem_minmax(0,1fr)]' : 'grid-cols-[7.5rem_minmax(0,1fr)]',
         className
       )}
