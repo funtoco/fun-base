@@ -106,11 +106,13 @@ export default async function RetirementNoticePage({ params }: RetirementNoticeP
               <ReadOnlyField
                 label="雇用契約終了年月日"
                 value={pdfPerson.employmentContractEndDate || pdfPerson.retirementDate || pdfPerson.supportEndDate}
+                wideLabel
               />
               <ReadOnlyField
                 label="機関の氏名又は名称"
                 value={pdfPerson.company || pdfPerson.tenantName}
                 className="xl:col-span-2"
+                wideLabel
               />
               <ReadOnlyField label="法人番号" value={pdfPerson.companyCorporateNumber} />
               <ReadOnlyField label="機関の郵便番号" value={pdfPerson.companyPostalCode} />
@@ -163,13 +165,21 @@ function ReadOnlyField({
   label,
   value,
   className,
+  wideLabel = false,
 }: {
   label: string
   value?: string | null
   className?: string
+  wideLabel?: boolean
 }) {
   return (
-    <div className={cn('grid min-h-12 grid-cols-[8.5rem_minmax(0,1fr)] bg-background', className)}>
+    <div
+      className={cn(
+        'grid min-h-12 bg-background',
+        wideLabel ? 'grid-cols-[8.5rem_minmax(0,1fr)]' : 'grid-cols-[7.5rem_minmax(0,1fr)]',
+        className
+      )}
+    >
       <dt className="flex items-center bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{label}</dt>
       <dd className="flex min-w-0 items-center break-words px-3 py-2 text-sm font-medium">
         {value || '未取得/未設定'}
