@@ -182,8 +182,9 @@ export const APP55_MAPPING: AppMapping = {
     // チェックは各項目が独立の True/False セル（checkboxOn）。⚠️=非結合セル or 割当が要確認。
     // 契約期間開始/終了日は「年/月/日」の3セル分割 → derived で1つの日付に合成（後述の derived[]）。
     // 更新上限の有無/最多更新回数/通算年数(契約_年)は ■/□マーカー方式で実装済（下記Ⅰ更新上限）。
-    // 未実装（要判断・別途）: 契約締結日・無期転換(無期条件変更_有/無)・交代制の勤務時間サブテーブル・
-    //   派遣(受け皿無)・就業規則条項各種・分野/業務区分(様式上「弊社で入力」の灰色欄)。
+    // 未実装（要判断・別途）: 契約締結日・無期転換(無期条件変更_有/無)・就業規則条項各種・
+    //   派遣(受け皿無)・分野/業務区分(様式上「弊社で入力」の灰色欄)。
+    //   1-11-1/1-11-1別紙(所属機関概要書・役員一覧・決算)はマッピング対象外（ユーザー確定）。
     // ══════════════════════════════════════════════════════════════════════
 
     // ── Ⅰ 契約の更新の有無（独立チェック3種）──
@@ -266,6 +267,17 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'I82', code: '_6_2_1_有給休暇', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'S82', code: '_6_2_2_無給休暇', kind: 'TEXT', transform: asText },
 
+    // ── Ⅷ退職に関する事項（1-6 行108：自己都合退職の届出）──
+    { sheetName: '1-6', cell: 'J108', code: '届出に関する日数', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'O108', code: '退職の届出先', kind: 'TEXT', transform: asText },
+    // ── 雇用管理の改善等に関する相談窓口（1-6 行118）──
+    { sheetName: '1-6', cell: 'E118', code: '相談_部署', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'M118', code: '相談_担当者氏名', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'W118', code: '相談_連絡先', kind: 'TEXT', transform: asText },
+    // ── 労働保険番号・雇用保険適用事業所番号（はじめに④⑤ → app55へ非正規化転記）──
+    { sheetName: 'はじめに', cell: 'E16', code: '労働保険番号', kind: 'TEXT', transform: asText },
+    { sheetName: 'はじめに', cell: 'E17', code: '雇用保険番号', kind: 'TEXT', transform: asText },
+
     // ── 【介護分野】事業所概要1（app36対象外化に伴い app55 へ振替）──
     { sheetName: '【介護分野】事業所概要1', cell: 'A19', code: '_2その他特記事項', kind: 'TEXT', transform: asText },
   ],
@@ -299,6 +311,24 @@ export const APP55_MAPPING: AppMapping = {
       columns: [
         { subCode: 'その他控除項目', col: 'D', kind: 'TEXT', transform: asText },
         { subCode: 'その他の控除額', col: 'S', kind: 'NUMBER', transform: asNumber },
+      ],
+    },
+    // 交代制の勤務時間: 1-6 行54〜62（Ⅳ労働時間 2.交代制）。適用日(P列)が空の行はスキップ。
+    // 各行: 始業(時D/分F)・終業(時J/分L)・適用日(P)・1日の所定労働時間(時W/分Z)。
+    {
+      code: '交代制の勤務時間等',
+      sheetName: '1-6',
+      rowStart: 54,
+      rowEnd: 62,
+      keyCol: 'P',
+      columns: [
+        { subCode: '始業時間_時', col: 'D', kind: 'NUMBER', transform: asNumber },
+        { subCode: '始業時間_分', col: 'F', kind: 'NUMBER', transform: asNumber },
+        { subCode: '終業時間_時', col: 'J', kind: 'NUMBER', transform: asNumber },
+        { subCode: '終業時間_分', col: 'L', kind: 'NUMBER', transform: asNumber },
+        { subCode: '交代制の勤務時間_適用日', col: 'P', kind: 'TEXT', transform: asText },
+        { subCode: '_1日の所定労働時間_時間', col: 'W', kind: 'NUMBER', transform: asNumber },
+        { subCode: '_1日の所定労働時間_分', col: 'Z', kind: 'NUMBER', transform: asNumber },
       ],
     },
   ],
