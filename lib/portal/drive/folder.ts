@@ -42,24 +42,37 @@ function safeExtension(fileName: string): string {
 }
 
 /**
- * Drive へ上げるファイル名を生成する（§6: {案件名}_{書類種別}_{YYYYMMDD}.{ext}）。
- * date 省略時は現在時刻（UTC 成分）。案件名が無ければ書類種別のみ。
+ * Drive のファイル名に使う書類種別（OP が実運用で使っている短縮名）。
+ * ここに無い書類はカタログ名をそのまま使う。
+ */
+const DRIVE_DOC_LABELS: Record<string, string> = {
+  corp_registry: '履歴事項全部証明書',
+  resident_record_corp: '住民票の写し',
+  labor_insurance_cert: '労働保険料等納付証明書',
+  corp_tax_cert_type3: '納税証明書その3',
+  social_insurance_proof: '社会保険料納入状況照会回答票',
+  corp_residence_tax_cert: '法人住民税納税証明書',
+  kyogikai_cert: '協議会加入証明書',
+  business_license: '営業許可証',
+  resident_record_sp: '住民票の写し',
+  labor_insurance_cert_sp: '労働保険料等納付証明書',
+  sp_tax_cert_type3: '納税証明書その3',
+  social_insurance_proof_sp: '社会保険料納入状況照会回答票',
+  sp_residence_tax_cert: '個人住民税納税証明書',
+}
+
+/**
+ * Drive へ上げるファイル名を生成する（OP の既存命名: `[書類種別] 法人名.{ext}`）。
+ * 法人名が取れない場合は書類種別のみ。同名ファイルは上書きせず並ぶ（旧版は OP が OLD へ退避する運用）。
  */
 export function buildDriveFileName(params: {
-  caseTitle?: string | null
+  documentCode: string
   documentName: string
+  companyName?: string | null
   originalFileName: string
-  date?: Date
 }): string {
   const ext = safeExtension(params.originalFileName)
-  const d = params.date ?? new Date()
-  // Asia/Tokyo(+9h) の暦日で YYYYMMDD（JST早朝の書類が前日日付になるのを防ぐ）。
-  const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
-  const ymd = `${jst.getUTCFullYear()}${String(jst.getUTCMonth() + 1).padStart(2, '0')}${String(
-    jst.getUTCDate()
-  ).padStart(2, '0')}`
-  const parts = [params.caseTitle, params.documentName]
-    .filter((x): x is string => Boolean(x && x.trim()))
-    .map(sanitize)
-  return `${parts.join('_')}_${ymd}.${ext}`
+  const label = sanitize(DRIVE_DOC_LABELS[params.documentCode] ?? params.documentName)
+  const company = params.companyName?.trim() ? sanitize(params.companyName) : null
+  return company ? `[${label}] ${company}.${ext}` : `[${label}].${ext}`
 }
