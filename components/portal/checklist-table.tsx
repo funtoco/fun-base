@@ -175,7 +175,12 @@ function RequirementRow({
             ref={fileInputRef}
             type="file"
             className="hidden"
-            accept="image/png,image/jpeg,image/webp,image/heic,image/heif,application/pdf"
+            // 申請書類作成フォーム(application_workbook)はExcel(.xlsx)、それ以外は画像/PDF。
+            accept={
+              item.documentCode === 'application_workbook'
+                ? '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : 'image/png,image/jpeg,image/webp,image/heic,image/heif,application/pdf'
+            }
             onChange={(e) => {
               const file = e.target.files?.[0]
               if (file) {
