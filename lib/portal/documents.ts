@@ -107,9 +107,10 @@ export async function uploadRequirementDocument(params: {
       .eq('document_code', requirement.document_code)
       .maybeSingle()
 
+    // 差し替えで同名ファイルを上げ直しても同一パスを上書きできるよう upsert:true。
     const { error: uploadError } = await service.storage
       .from(OFFICE_BUCKET)
-      .upload(objectKey, buffer, { contentType, upsert: false })
+      .upload(objectKey, buffer, { contentType, upsert: true })
     if (uploadError) {
       console.error('Office storage upload error:', uploadError)
       return { ok: false, status: 500, error: 'ファイルのアップロードに失敗しました' }
@@ -179,9 +180,10 @@ export async function uploadRequirementDocument(params: {
     fileName: file.name,
   })
 
+  // 差し替えで同名ファイルを上げ直しても同一パスを上書きできるよう upsert:true。
   const { error: uploadError } = await service.storage
     .from(PERSON_BUCKET)
-    .upload(objectKey, buffer, { contentType, upsert: false })
+    .upload(objectKey, buffer, { contentType, upsert: true })
   if (uploadError) {
     console.error('Person storage upload error:', uploadError)
     return { ok: false, status: 500, error: 'ファイルのアップロードに失敗しました' }
