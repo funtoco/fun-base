@@ -26,6 +26,7 @@ import {
   loadCaseHubLinks,
   writeBackSyncStatus,
 } from '@/lib/portal/kintone-sync/case-hub'
+import { buildKoyouRowStatuses } from '@/lib/portal/kintone-sync/run-transcription'
 import type {
   KintoneReadRecord,
   KintoneWriteClient,
@@ -559,11 +560,21 @@ describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
       kintoneCaseId: '5',
       app34RecordId: '100',
       koyouTargets: [
-        { app55RecordId: '55', hrid: 'HR-001', applicantName: 'グエン' },
-        { app55RecordId: '56', hrid: 'HR-002', applicantName: 'タン' },
+        { rowId: '1', app55RecordId: '55', hrid: 'HR-001', applicantName: 'グエン' },
+        { rowId: '2', app55RecordId: '56', hrid: 'HR-002', applicantName: 'タン' },
       ],
+      koyouRowIds: ['1', '2'],
       driveFolderUrl: null,
+      companyName: null,
     })
+  })
+
+  it('loadCaseHubLinks: company_name_disp を companyName として返す（Driveのファイル名に使う）', async () => {
+    const rec = hubRecord()
+    rec.company_name_disp = { value: '医療法人縁和会' }
+    const client = makeMockClient({ getRecords: vi.fn().mockResolvedValue([rec]) })
+    const links = await loadCaseHubLinks(client, '5')
+    expect(links?.companyName).toBe('医療法人縁和会')
   })
 
   it('loadCaseHubLinks: koyou_ref 無しの行はスキップ、hrid/氏名 空は null に正規化', async () => {
@@ -589,8 +600,10 @@ describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
     const links = await loadCaseHubLinks(client, '5')
     expect(links?.app34RecordId).toBe('100')
     expect(links?.koyouTargets).toEqual([
-      { app55RecordId: '55', hrid: null, applicantName: null },
+      { rowId: '1', app55RecordId: '55', hrid: null, applicantName: null },
     ])
+    // 反映先が無い行も「サブテーブル書き戻しで消さない」ため行IDは保持する。
+    expect(links?.koyouRowIds).toEqual(['1', '2'])
   })
 
   it('loadCaseHubLinks: 見つからなければ null', async () => {
@@ -603,15 +616,70 @@ describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
     const client = makeMockClient({ updateRecord })
     await writeBackSyncStatus(client, '5', {
       companyStatus: '反映済',
-      koyouStatus: '反映済',
+      koyouRows: [
+        { rowId: '1', status: '反映済' },
+        { rowId: '2', status: 'エラー' },
+      ],
       syncedAt: '2026-08-03T02:35:00Z',
       log: 'ok',
     })
+    // 雇用条件書の反映ステータスは koyou_details サブテーブルの行単位（koyou_sync_status）。
+    // レコード直下の sync_koyou_status は kintone 側に存在しないので送らない。
     expect(updateRecord).toHaveBeenCalledWith(CASE_HUB_APP_ID, '5', {
       sync_company_status: { value: '反映済' },
-      sync_koyou_status: { value: '反映済' },
+      koyou_details: {
+        value: [
+          { id: '1', value: { koyou_sync_status: { value: '反映済' } } },
+          { id: '2', value: { koyou_sync_status: { value: 'エラー' } } },
+        ],
+      },
       synced_at: { value: '2026-08-03T02:35:00Z' },
       sync_log: { value: 'ok' },
     })
+    const payload = updateRecord.mock.calls[0][2] as Record<string, unknown>
+    expect('sync_koyou_status' in payload).toBe(false)
+  })
+
+  it('writeBackSyncStatus: koyouRows 未指定なら koyou_details を送らない（既存行を消さない）', async () => {
+    const updateRecord = vi.fn().mockResolvedValue({ revision: '2' })
+    const client = makeMockClient({ updateRecord })
+    await writeBackSyncStatus(client, '5', { companyStatus: 'エラー' })
+    expect(updateRecord).toHaveBeenCalledWith(CASE_HUB_APP_ID, '5', {
+      sync_company_status: { value: 'エラー' },
+    })
+  })
+})
+
+// ── run-transcription: 行単位の反映ステータス組み立て ──────────────────
+describe('buildKoyouRowStatuses', () => {
+  it('行IDごとに書込結果 → 反映ステータス。結果が無い行（反映先未設定）は未反映', () => {
+    expect(
+      buildKoyouRowStatuses(
+        ['1', '2', '3', '4'],
+        [
+          { rowId: '1', app55RecordId: '55', action: 'update', applicantName: 'グエン' },
+          {
+            rowId: '2',
+            app55RecordId: '56',
+            action: 'error',
+            applicantName: 'タン',
+            error: 'boom',
+          },
+          { rowId: '3', app55RecordId: '57', action: 'dry-run', applicantName: null },
+        ]
+      )
+    ).toEqual([
+      { rowId: '1', status: '反映済' },
+      { rowId: '2', status: 'エラー' },
+      { rowId: '3', status: '未反映' },
+      { rowId: '4', status: '未反映' },
+    ])
+  })
+
+  it('全行を同一ステータスで上書きできる（転記自体が失敗したときのエラー書き戻し用）', () => {
+    expect(buildKoyouRowStatuses(['1', '2'], [], 'エラー')).toEqual([
+      { rowId: '1', status: 'エラー' },
+      { rowId: '2', status: 'エラー' },
+    ])
   })
 })

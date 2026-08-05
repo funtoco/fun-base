@@ -8,6 +8,8 @@ export const CASE_HUB_APP_ID = '296'
 
 /** 雇用条件書サブテーブル(koyou_details)の1行＝1人分の反映先。 */
 export interface KoyouTarget {
+  /** サブテーブルの行ID。行単位の反映ステータス(koyou_sync_status)を書き戻すのに使う。 */
+  rowId: string | null
   /** koyou_ref（= app55 雇用条件書 レコード番号）。 */
   app55RecordId: string
   /** koyou_hrid（app55 の HRID を自動コピー。FunBase メンバー解決に使う）。 */
@@ -24,8 +26,15 @@ export interface CaseHubLinks {
   app34RecordId: string | null
   /** 雇用条件書サブテーブルの各行（複数人分の app55 反映先）。 */
   koyouTargets: KoyouTarget[]
+  /**
+   * koyou_details の全行ID（フォーム上の並び順）。koyou_ref 未設定の行も含む。
+   * サブテーブル更新は「送信した行で置換」なので、書き戻し時にここの全行を送り返す。
+   */
+  koyouRowIds: string[]
   /** drive_folder_url（その他書類の Drive アップロード先）。未設定なら null。 */
   driveFolderUrl: string | null
+  /** company_name_disp（法人ルックアップの自動コピー。Drive のファイル名に使う）。未設定なら null。 */
+  companyName: string | null
 }
 
 /** kintone クエリの文字列リテラル用エスケープ。 */
@@ -64,13 +73,19 @@ export async function loadCaseHubLinks(
   const subRows =
     (record['koyou_details'] as { value: SubtableRow[] } | undefined)?.value ?? []
   const koyouTargets: KoyouTarget[] = []
+  const koyouRowIds: string[] = []
   for (const row of subRows) {
+    const rowId = asIdString(row.id)
+    if (rowId) {
+      koyouRowIds.push(rowId)
+    }
     const cell = (code: string): unknown => row.value?.[code]?.value
     const app55RecordId = asIdString(cell('koyou_ref'))
     if (!app55RecordId) {
       continue
     }
     koyouTargets.push({
+      rowId,
       app55RecordId,
       hrid: asIdString(cell('koyou_hrid')),
       applicantName:
@@ -81,14 +96,20 @@ export async function loadCaseHubLinks(
   }
 
   const driveUrl = field('drive_folder_url')
+  const companyName = field('company_name_disp')
   return {
     kintoneCaseId,
     app34RecordId: asIdString(field('company_ref')),
     koyouTargets,
+    koyouRowIds,
     driveFolderUrl:
       driveUrl === undefined || driveUrl === null || driveUrl === ''
         ? null
         : String(driveUrl),
+    companyName:
+      companyName === undefined || companyName === null || companyName === ''
+        ? null
+        : String(companyName),
   }
 }
 
@@ -101,9 +122,21 @@ interface SubtableRow {
 /** 反映ステータスの選択肢（app296 の DROP_DOWN）。 */
 export type SyncStatus = '未反映' | '反映済' | 'エラー'
 
+/** koyou_details 1行分の反映ステータス書き戻し指定。 */
+export interface KoyouRowStatus {
+  /** サブテーブルの行ID。 */
+  rowId: string
+  status: SyncStatus
+}
+
 export interface SyncStatusWriteback {
   companyStatus: SyncStatus
-  koyouStatus: SyncStatus
+  /**
+   * 雇用条件書の反映ステータス（koyou_details 行単位の koyou_sync_status）。
+   * kintone のサブテーブル更新は送信した行での置換なので、**全行分**を渡すこと
+   * （渡さなかった行は kintone 側で削除される）。未指定・空なら koyou_details は触らない。
+   */
+  koyouRows?: KoyouRowStatus[]
   /** ISO 8601（例: 2026-08-03T02:35:00Z）。kintone DATETIME 用。 */
   syncedAt?: string
   /** 反映ログ（成功サマリ or エラー詳細）。 */
@@ -111,7 +144,8 @@ export interface SyncStatusWriteback {
 }
 
 /**
- * 反映結果を app296（案件ハブ）に書き戻す（sync_*_status / synced_at / sync_log）。
+ * 反映結果を app296（案件ハブ）に書き戻す
+ * （sync_company_status / koyou_details[].koyou_sync_status / synced_at / sync_log）。
  */
 export async function writeBackSyncStatus(
   client: KintoneWriteClient,
@@ -120,7 +154,16 @@ export async function writeBackSyncStatus(
 ): Promise<void> {
   const record: KintoneRecordPayload = {
     sync_company_status: { value: status.companyStatus },
-    sync_koyou_status: { value: status.koyouStatus },
+  }
+  // 雇用条件書は複数人（koyou_details サブテーブル）なので、反映ステータスも行ごとに書く。
+  // レコード直下の sync_koyou_status はサブテーブル化に伴い kintone 側から廃止済み。
+  if (status.koyouRows && status.koyouRows.length > 0) {
+    record.koyou_details = {
+      value: status.koyouRows.map((row) => ({
+        id: row.rowId,
+        value: { koyou_sync_status: { value: row.status } },
+      })),
+    }
   }
   if (status.syncedAt) {
     record.synced_at = { value: status.syncedAt }

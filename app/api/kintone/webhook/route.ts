@@ -9,6 +9,12 @@ import {
   resolveCaseByKintoneRecord,
   importKintoneComment,
 } from '@/lib/portal/kintone-sync/comment-sync'
+import {
+  applyKintoneOfficeDocStatuses,
+  pushOfficeDocStatuses,
+} from '@/lib/portal/kintone-sync/office-doc-sync'
+import { listFilledOfficeDocCodes } from '@/lib/portal/kintone-sync/office-doc-status'
+import { createKintoneWriteClientFromEnv } from '@/lib/portal/kintone-sync/kintone-write-client'
 import { getServiceClient } from '@/lib/portal/storage'
 
 export const runtime = 'nodejs'
@@ -44,7 +50,29 @@ export async function POST(request: NextRequest) {
       case 'UPDATE_RECORD':
       case 'DELETE_RECORD': {
         const result = await mirrorCaseFromKintone(event)
-        return NextResponse.json({ ok: true, event: event.type, ...result })
+        if (!result.caseId) {
+          return NextResponse.json({ ok: true, event: event.type, ...result })
+        }
+        // 事業所書類ステータス（doc_status_*）: kintone が正。
+        // まず OP の変更を FunBase へ反映し、次に kintone 側が空欄の書類だけ初期化する。
+        // 初期化で発火する Webhook は2周目に空欄が無くなるため停止する。
+        const docStatus = await applyKintoneOfficeDocStatuses({
+          caseId: result.caseId,
+          record: event.record,
+        })
+        const docStatusInit = await pushOfficeDocStatuses({
+          caseId: result.caseId,
+          kintoneCaseId: event.recordId,
+          client: createKintoneWriteClientFromEnv(),
+          skipDocumentCodes: listFilledOfficeDocCodes(event.record),
+        })
+        return NextResponse.json({
+          ok: true,
+          event: event.type,
+          ...result,
+          docStatus,
+          docStatusInit,
+        })
       }
       // Phase5: ステータス変更を Supabase に反映（kintone へは再送しない＝ループ防止）。
       case 'UPDATE_STATUS': {

@@ -5,6 +5,7 @@ import { maybeAutoTranscribeOnUpload } from '@/lib/portal/kintone-sync/run-trans
 import { createKintoneWriteClientFromEnv } from '@/lib/portal/kintone-sync/kintone-write-client'
 import { mirrorRequirementDocumentToDrive } from '@/lib/portal/drive/mirror'
 import { createDriveClientFromEnv } from '@/lib/portal/drive/drive-client'
+import { pushRequirementStatusToKintone } from '@/lib/portal/kintone-sync/office-doc-sync'
 
 // POST /api/applications/[caseId]/requirements/[requirementId]/documents
 // multipart/form-data の file を受け取り、要件に紐付けてアップロードする。
@@ -75,7 +76,27 @@ export async function POST(
       driveMirror = { status: 'error' }
     }
 
-    return NextResponse.json({ success: true, ...result.data, autoTranscribe, driveMirror })
+    // 事業所書類なら app296 の doc_status_* を「確認中」に更新（ベストエフォート）。
+    // 対象外の書類（Excel・人材書類）はミラー側で自動 skip されるので条件分岐は不要。
+    let docStatusSync: { status: string; reason?: string } | undefined
+    try {
+      docStatusSync = await pushRequirementStatusToKintone({
+        caseId: params.caseId,
+        requirementId: params.requirementId,
+        client: createKintoneWriteClientFromEnv(),
+      })
+    } catch (statusError) {
+      console.error('Office doc status push on upload failed:', statusError)
+      docStatusSync = { status: 'error' }
+    }
+
+    return NextResponse.json({
+      success: true,
+      ...result.data,
+      autoTranscribe,
+      driveMirror,
+      docStatusSync,
+    })
   } catch (error) {
     console.error('Error uploading requirement document:', error)
     return NextResponse.json(

@@ -4,6 +4,7 @@ import {
   loadCaseHubLinks,
   writeBackSyncStatus,
   type CaseHubLinks,
+  type KoyouRowStatus,
   type SyncStatus,
 } from './case-hub'
 import { loadApplicationWorkbook, APPLICATION_WORKBOOK_CODE } from './source'
@@ -21,6 +22,8 @@ import type { KintoneRecordPayload } from './types'
 
 /** app55（雇用条件書）1人分の書込結果。 */
 export interface App55WriteResult {
+  /** 由来した koyou_details の行ID（app296 へ行単位の反映ステータスを書き戻すのに使う）。 */
+  rowId: string | null
   /** 反映先 app55 レコード番号（koyou_ref）。 */
   app55RecordId: string
   /** 実行された操作。 */
@@ -29,6 +32,37 @@ export interface App55WriteResult {
   applicantName: string | null
   /** action='error' 時のメッセージ。 */
   error?: string
+}
+
+/**
+ * app296 の koyou_details 全行分の反映ステータスを組み立てる。
+ * - 書込結果がある行はその成否（update=反映済 / error=エラー / dry-run=未反映）
+ * - 結果が無い行（koyou_ref 未設定＝反映先なし）は「未反映」
+ * - overrideStatus 指定時は全行をその値に（転記自体が落ちたときのエラー書き戻し用）
+ *
+ * サブテーブル更新は送信した行での置換になるため、更新しない行も含めて必ず全行返す。
+ */
+export function buildKoyouRowStatuses(
+  koyouRowIds: string[],
+  writes: App55WriteResult[],
+  overrideStatus?: SyncStatus
+): KoyouRowStatus[] {
+  const writeByRowId = new Map<string, App55WriteResult>()
+  for (const write of writes) {
+    if (write.rowId) {
+      writeByRowId.set(write.rowId, write)
+    }
+  }
+  return koyouRowIds.map((rowId) => {
+    if (overrideStatus) {
+      return { rowId, status: overrideStatus }
+    }
+    const write = writeByRowId.get(rowId)
+    return {
+      rowId,
+      status: write ? syncStatusLabelForAction(write.action) : '未反映',
+    }
+  })
 }
 
 export interface RunCaseTranscriptionResult {
@@ -95,6 +129,7 @@ export async function runCaseTranscription(params: {
     for (const target of koyouTargets) {
       if (dryRun || !client) {
         app55Writes.push({
+          rowId: target.rowId,
           app55RecordId: target.app55RecordId,
           action: 'dry-run',
           applicantName: target.applicantName,
@@ -104,12 +139,14 @@ export async function runCaseTranscription(params: {
       try {
         await client.updateRecord('55', target.app55RecordId, result.app55Record)
         app55Writes.push({
+          rowId: target.rowId,
           app55RecordId: target.app55RecordId,
           action: 'update',
           applicantName: target.applicantName,
         })
       } catch (e) {
         app55Writes.push({
+          rowId: target.rowId,
           app55RecordId: target.app55RecordId,
           action: 'error',
           applicantName: target.applicantName,
@@ -123,13 +160,11 @@ export async function runCaseTranscription(params: {
     if (!dryRun && client && params.kintoneCaseId) {
       const okCount = app55Writes.filter((w) => w.action === 'update').length
       const errCount = app55Writes.filter((w) => w.action === 'error').length
-      // 1人でも失敗→エラー / 対象0人→未反映 / 全員成功→反映済。
-      const koyouStatus: SyncStatus =
-        app55Writes.length === 0 ? '未反映' : errCount > 0 ? 'エラー' : '反映済'
       try {
         await writeBackSyncStatus(client, params.kintoneCaseId, {
           companyStatus: syncStatusLabelForAction(result.app34.plan.action),
-          koyouStatus,
+          // 雇用条件書の反映は人ごと（koyou_details の行単位）に記録する。
+          koyouRows: buildKoyouRowStatuses(links?.koyouRowIds ?? [], app55Writes),
           syncedAt: new Date().toISOString(),
           log:
             `法人(app34)=${result.app34.plan.action}/rec ${result.app34.plan.recordId ?? '-'} / ` +
@@ -157,7 +192,7 @@ export async function runCaseTranscription(params: {
       try {
         await writeBackSyncStatus(client, params.kintoneCaseId, {
           companyStatus: 'エラー',
-          koyouStatus: 'エラー',
+          koyouRows: buildKoyouRowStatuses(links?.koyouRowIds ?? [], [], 'エラー'),
           syncedAt: new Date().toISOString(),
           log: `エラー: ${message}`,
         })
