@@ -2,10 +2,21 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/client"
 import { canManageTenant, TENANT_INVITABLE_ROLES } from "@/lib/tenant-access"
-import {
-  parseOfficeIds,
-  resolveOfficeIdsForScope,
-} from "@/lib/portal/invite-validation"
+
+function normalizeOfficeIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .filter((id): id is string => typeof id === "string")
+        .map((id) => id.trim())
+        .filter(Boolean)
+    )
+  )
+}
 
 async function replaceOfficeAssignments(
   adminSupabase: ReturnType<typeof createAdminClient>,
@@ -58,11 +69,7 @@ export async function POST(
 
     const body = await request.json()
     const { userId, role } = body
-    const officeIdsResult = parseOfficeIds(body.officeIds)
-    if (!officeIdsResult.ok) {
-      return NextResponse.json({ error: officeIdsResult.error }, { status: 400 })
-    }
-    const officeIds = officeIdsResult.officeIds
+    const officeIds = normalizeOfficeIds(body.officeIds)
 
     if (!userId || !role) {
       return NextResponse.json(
@@ -101,18 +108,29 @@ export async function POST(
       )
     }
 
-    const effectiveOfficeIdsResult = await resolveOfficeIdsForScope(
-      supabase,
-      params.tenantId,
-      officeIds,
-    )
-    if (!effectiveOfficeIdsResult.ok) {
-      return NextResponse.json(
-        { error: effectiveOfficeIdsResult.error },
-        { status: effectiveOfficeIdsResult.status }
-      )
+    if (officeIds.length > 0) {
+      const { data: offices, error: officesError } = await supabase
+        .from("tenant_offices")
+        .select("id")
+        .eq("tenant_id", params.tenantId)
+        .eq("is_active", true)
+        .in("id", officeIds)
+
+      if (officesError) {
+        console.error("Error verifying member offices:", officesError)
+        return NextResponse.json(
+          { error: "Failed to verify affiliations" },
+          { status: 500 }
+        )
+      }
+
+      if ((offices || []).length !== officeIds.length) {
+        return NextResponse.json(
+          { error: "Invalid officeIds" },
+          { status: 400 }
+        )
+      }
     }
-    const effectiveOfficeIds = effectiveOfficeIdsResult.officeIds
 
     // Check if the user is already a member
     const { data: existingMemberships, error: existingMembershipsError } = await supabase
@@ -169,19 +187,10 @@ export async function POST(
           adminSupabase,
           params.tenantId,
           pendingMembership.id,
-          effectiveOfficeIds
+          officeIds
         )
 
         if (officeAssignmentError) {
-          await adminSupabase
-            .from('user_tenants')
-            .update({
-              role: pendingMembership.role,
-              status: 'pending',
-              joined_at: null,
-            })
-            .eq('id', pendingMembership.id)
-
           return NextResponse.json(
             { error: officeAssignmentError },
             { status: 500 }
@@ -259,15 +268,10 @@ export async function POST(
       adminSupabase,
       params.tenantId,
       userTenant.id,
-      effectiveOfficeIds
+      officeIds
     )
 
     if (officeAssignmentError) {
-      await adminSupabase
-        .from('user_tenants')
-        .delete()
-        .eq('id', userTenant.id)
-
       return NextResponse.json(
         { error: officeAssignmentError },
         { status: 500 }

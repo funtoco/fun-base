@@ -154,20 +154,18 @@ export async function getAccessibleOffices(): Promise<AccessibleOffice[]> {
     }
   }
 
-  // 割当ベース（member/guest 用）。取得失敗時は安全側で空配列にする。
+  // 割当ベース（member/guest 用）
   const assignedOfficeIds = new Set<string>()
   if (membershipIds.length > 0) {
     const { data: assignments, error: assignError } = await supabase
       .from('user_tenant_offices')
-      .select('user_tenant_id, tenant_office_id')
+      .select('tenant_office_id')
       .in('user_tenant_id', membershipIds)
     if (assignError) {
       console.error('Error fetching office assignments:', assignError)
-      return []
     } else {
       for (const a of assignments || []) {
-        const assignment = a as { user_tenant_id: string; tenant_office_id: string }
-        assignedOfficeIds.add(assignment.tenant_office_id)
+        assignedOfficeIds.add((a as { tenant_office_id: string }).tenant_office_id)
       }
     }
   }
