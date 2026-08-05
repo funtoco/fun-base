@@ -169,6 +169,26 @@ export async function runCaseTranscription(params: {
   }
 }
 
+/** アップロード時自動転記の結果サマリ（UIの「連携中→反映済/エラー」表示用）。 */
+export interface AutoTranscribeSummary {
+  /** 認証未設定などでドライラン（実書き込みなし）だったか。 */
+  dryRun: boolean
+  /** 法人(app34)の操作。 */
+  app34Action: TranscribeResult['plan']['action']
+  /** 雇用条件書(app55)の反映成功件数。 */
+  app55Ok: number
+  /** 雇用条件書(app55)のエラー件数。 */
+  app55Error: number
+  /** 雇用条件書(app55)の対象人数。 */
+  app55Total: number
+}
+
+export interface MaybeAutoTranscribeResult {
+  triggered: boolean
+  reason?: string
+  summary?: AutoTranscribeSummary
+}
+
 /**
  * アップロード自動トリガー。
  * 対象要件が application_workbook（office 提出Excel）で、案件が app296 と紐付いていれば、
@@ -177,7 +197,7 @@ export async function runCaseTranscription(params: {
 export async function maybeAutoTranscribeOnUpload(params: {
   caseId: string
   requirementId: string
-}): Promise<{ triggered: boolean; reason?: string }> {
+}): Promise<MaybeAutoTranscribeResult> {
   const service = getServiceClient()
 
   // 要件の document_code を確認（application_workbook 以外は対象外）。
@@ -204,10 +224,19 @@ export async function maybeAutoTranscribeOnUpload(params: {
     return { triggered: false, reason: 'no_kintone_link' }
   }
 
-  await runCaseTranscription({
+  const result = await runCaseTranscription({
     caseId: params.caseId,
     kintoneCaseId,
     dryRun: false,
   })
-  return { triggered: true }
+  return {
+    triggered: true,
+    summary: {
+      dryRun: result.dryRun,
+      app34Action: result.app34.plan.action,
+      app55Ok: result.app55Writes.filter((w) => w.action === 'update').length,
+      app55Error: result.app55Writes.filter((w) => w.action === 'error').length,
+      app55Total: result.app55Writes.length,
+    },
+  }
 }
