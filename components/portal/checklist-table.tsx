@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, Eye, Upload } from 'lucide-react'
+import { Building2, Eye, Loader2, Upload } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -83,6 +83,8 @@ function RequirementRow({
   const doc = requirementDoc(item)
   // 未提出/要修正はもちろん、確認中(提出済み・未承認)も差し替え可能にする。承認済みのみロック。
   const canUpload = item.status !== 'approved'
+  // 申請書類作成フォームは提出時に内容登録・連携が走る（時間がかかる）ので進捗表示を出し分ける。
+  const isWorkbook = item.documentCode === 'application_workbook'
 
   function setBusy(on: boolean) {
     setActions((prev) => ({ ...prev, busyId: on ? item.id : null }))
@@ -106,7 +108,33 @@ function RequirementRow({
         })
         return
       }
-      toast({ title: '提出しました', description: `「${item.name}」を提出しました（確認中）。` })
+      // 申請書類作成フォームは提出時に内容を登録・連携する。その結果をメッセージに反映（社内名は出さない）。
+      const auto = (
+        result as {
+          autoTranscribe?: {
+            triggered?: boolean
+            summary?: { dryRun: boolean; app55Ok: number; app55Error: number; app55Total: number }
+          }
+        }
+      ).autoTranscribe
+      const s = auto?.summary
+      if (s && !s.dryRun && s.app55Error > 0) {
+        toast({
+          variant: 'destructive',
+          title: '提出しました（一部の登録・連携に失敗）',
+          description: `内容を登録・連携しました（成功 ${s.app55Ok}件・エラー ${s.app55Error}件／計 ${s.app55Total}件）。`,
+        })
+      } else if (s && !s.dryRun) {
+        toast({
+          title: '提出・登録が完了しました',
+          description:
+            s.app55Total > 0
+              ? `内容を確認して登録・連携しました（${s.app55Total}件）。`
+              : '内容を確認して登録・連携しました。',
+        })
+      } else {
+        toast({ title: '提出しました', description: `「${item.name}」を提出しました（確認中）。` })
+      }
       router.refresh()
     } catch {
       toast({
@@ -198,12 +226,21 @@ function RequirementRow({
               onClick={() => fileInputRef.current?.click()}
               className="gap-1"
             >
-              <Upload className="h-3.5 w-3.5" />
-              {item.status === 'needs_fix'
-                ? '再提出'
-                : item.status === 'reviewing'
-                  ? '差し替え'
-                  : 'アップロード'}
+              {busy ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {isWorkbook ? '内容を確認して登録・連携中…' : 'アップロード中…'}
+                </>
+              ) : (
+                <>
+                  <Upload className="h-3.5 w-3.5" />
+                  {item.status === 'needs_fix'
+                    ? '再提出'
+                    : item.status === 'reviewing'
+                      ? '差し替え'
+                      : 'アップロード'}
+                </>
+              )}
             </Button>
           )}
           {doc && (
