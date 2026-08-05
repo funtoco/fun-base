@@ -73,12 +73,11 @@ export async function mirrorRequirementDocumentToDrive(params: {
     // 案件 → kintone_record_id → app296 の drive_folder_url → フォルダID。
     const { data: caseData } = await service
       .from('visa_application_cases')
-      .select('kintone_record_id, title')
+      .select('kintone_record_id')
       .eq('id', params.caseId)
       .maybeSingle()
     const caseRow = caseData as {
       kintone_record_id: string | null
-      title: string | null
     } | null
     const kintoneCaseId = caseRow?.kintone_record_id
     if (!kintoneCaseId) {
@@ -100,8 +99,9 @@ export async function mirrorRequirementDocumentToDrive(params: {
     const buffer = Buffer.from(await blob.arrayBuffer())
 
     const name = buildDriveFileName({
-      caseTitle: caseRow?.title ?? null,
+      documentCode: req.document_code,
       documentName: doc.documentName,
+      companyName: links?.companyName ?? null,
       originalFileName: doc.fileName ?? doc.documentName,
     })
     const created = await driveClient.createFile({

@@ -33,6 +33,8 @@ export interface CaseHubLinks {
   koyouRowIds: string[]
   /** drive_folder_url（その他書類の Drive アップロード先）。未設定なら null。 */
   driveFolderUrl: string | null
+  /** company_name_disp（法人ルックアップの自動コピー。Drive のファイル名に使う）。未設定なら null。 */
+  companyName: string | null
 }
 
 /** kintone クエリの文字列リテラル用エスケープ。 */
@@ -94,6 +96,7 @@ export async function loadCaseHubLinks(
   }
 
   const driveUrl = field('drive_folder_url')
+  const companyName = field('company_name_disp')
   return {
     kintoneCaseId,
     app34RecordId: asIdString(field('company_ref')),
@@ -103,6 +106,10 @@ export async function loadCaseHubLinks(
       driveUrl === undefined || driveUrl === null || driveUrl === ''
         ? null
         : String(driveUrl),
+    companyName:
+      companyName === undefined || companyName === null || companyName === ''
+        ? null
+        : String(companyName),
   }
 }
 

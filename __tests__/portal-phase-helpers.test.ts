@@ -131,23 +131,63 @@ describe('drive/folder', () => {
     expect(extractDriveFolderId('short')).toBeNull()
   })
 
-  it('buildDriveFileName: {案件名}_{書類種別}_{YYYYMMDD}.{ext}', () => {
+  it('buildDriveFileName: [書類種別] 法人名.{ext}（OP の既存命名に合わせる）', () => {
     const name = buildDriveFileName({
-      caseTitle: 'A社/初回',
+      documentCode: 'corp_registry',
       documentName: '履歴事項全部証明書',
+      companyName: '医療法人縁和会',
       originalFileName: 'scan.PDF',
-      date: new Date(Date.UTC(2026, 7, 3)),
     })
-    expect(name).toBe('A社_初回_履歴事項全部証明書_20260803.pdf') // '/' は _ に、拡張子小文字
+    expect(name).toBe('[履歴事項全部証明書] 医療法人縁和会.pdf') // 拡張子は小文字
   })
 
-  it('buildDriveFileName: caseTitle 無し・拡張子欠落のフォールバック', () => {
+  it('buildDriveFileName: 書類種別は Drive 用の短縮名を使う', () => {
+    expect(
+      buildDriveFileName({
+        documentCode: 'kyogikai_cert',
+        documentName: '特定技能協議会加入証明書',
+        companyName: '医療法人縁和会',
+        originalFileName: 'a.pdf',
+      })
+    ).toBe('[協議会加入証明書] 医療法人縁和会.pdf')
+
+    expect(
+      buildDriveFileName({
+        documentCode: 'resident_record_corp',
+        documentName: '住民票（本籍地記載あり・マイナンバー記載無）',
+        companyName: '医療法人縁和会',
+        originalFileName: 'a.pdf',
+      })
+    ).toBe('[住民票の写し] 医療法人縁和会.pdf')
+  })
+
+  it('buildDriveFileName: 短縮名の無い書類はカタログ名をそのまま使う', () => {
     const name = buildDriveFileName({
-      caseTitle: null,
-      documentName: '住民票',
-      originalFileName: 'noext',
-      date: new Date(Date.UTC(2026, 0, 9)),
+      documentCode: 'unknown_doc',
+      documentName: '前回申請している書類一式',
+      companyName: 'A社',
+      originalFileName: 'a.pdf',
     })
-    expect(name).toBe('住民票_20260109.bin')
+    expect(name).toBe('[前回申請している書類一式] A社.pdf')
+  })
+
+  it('buildDriveFileName: 法人名無し・拡張子欠落・不正文字のフォールバック', () => {
+    expect(
+      buildDriveFileName({
+        documentCode: 'corp_registry',
+        documentName: '履歴事項全部証明書',
+        companyName: null,
+        originalFileName: 'noext',
+      })
+    ).toBe('[履歴事項全部証明書].bin')
+
+    expect(
+      buildDriveFileName({
+        documentCode: 'corp_registry',
+        documentName: '履歴事項全部証明書',
+        companyName: 'A/B社',
+        originalFileName: 'a.pdf',
+      })
+    ).toBe('[履歴事項全部証明書] A_B社.pdf')
   })
 })

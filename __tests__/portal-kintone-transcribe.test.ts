@@ -565,7 +565,16 @@ describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
       ],
       koyouRowIds: ['1', '2'],
       driveFolderUrl: null,
+      companyName: null,
     })
+  })
+
+  it('loadCaseHubLinks: company_name_disp を companyName として返す（Driveのファイル名に使う）', async () => {
+    const rec = hubRecord()
+    rec.company_name_disp = { value: '医療法人縁和会' }
+    const client = makeMockClient({ getRecords: vi.fn().mockResolvedValue([rec]) })
+    const links = await loadCaseHubLinks(client, '5')
+    expect(links?.companyName).toBe('医療法人縁和会')
   })
 
   it('loadCaseHubLinks: koyou_ref 無しの行はスキップ、hrid/氏名 空は null に正規化', async () => {

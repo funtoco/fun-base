@@ -158,7 +158,10 @@ FunBase 既存の申請フローに揃える：
 - **フォルダ**: **OP が手動で** フォルダ URL を案件に貼る（**自動作成しない**）
   - URL からフォルダ ID を抽出（`/folders/{id}`）
 - **アップロード**: FunBase の「その他書類」アップロード → Drive `files.create`（`parents=[folderId]`）
-- **命名**: `{案件名}_{書類種別}_{YYYYMMDD}.{ext}` 等（§10 で確定）
+- **命名**: `[{書類種別}] {法人名}.{ext}`（2026-08-05 確定。OP が Drive で実運用している命名に合わせた）
+  - 書類種別は `drive/folder.ts` の `DRIVE_DOC_LABELS`（例: `kyogikai_cert` → 協議会加入証明書、`resident_record_corp` → 住民票の写し）。未定義コードはカタログ名をそのまま使う
+  - 法人名は app296 の `company_name_disp`（法人ルックアップの自動コピー）
+  - 同名ファイルは上書きせず並ぶ。旧版は OP が `OLD` フォルダへ退避する運用
 - **権限**: サービスアカウントが共有ドライブメンバーであること
 
 ---
@@ -205,7 +208,7 @@ FunBase 既存の申請フローに揃える：
 2. **事業所マスタアプリ**の有無（あればルックアップ、無ければ文字列 or 法人に内包）
 3. **分野の選択肢**（介護・外食・…／特定技能の対象分野をどこまで持つか）
 4. **種別「変更」時**の反映差分（新規と同じ全項目上書きでよいか、差分のみか）
-5. **Drive ファイル命名規則**・重複時の扱い（上書き/版管理）
+5. ~~**Drive ファイル命名規則**・重複時の扱い（上書き/版管理）~~ → §6 で確定（`[{書類種別}] {法人名}.{ext}`・上書きしない）
 6. **コメント連携の投稿者表示**（bot 名・接頭辞の文言）
 
 ---
@@ -248,6 +251,7 @@ FunBase 既存の申請フローに揃える：
 - ✅ **Phase 5 ステータス双方向完成**: `status-sync.ts`（`extractKintoneStatusLabel`（STATUS field=`ステータス`）／受信`applyKintoneStatusToCase`=Supabase更新のみ・kintone非再送でループ防止／送信`advanceKintoneCaseStatus`=現状からアクション列で前進・同一/後退/archivedはno-op）＋`applications.ts`の`updateCaseStatus`（writer認可→service-role更新→紐付けありなら`advanceKintoneCaseStatus`）＋`PATCH /api/applications/[caseId]/status`＋Webhook `UPDATE_STATUS`結線
 - ✅ **Phase 6 コメント双方向完成**: マイグレ`20260803010000_case_comments_kintone_sync.sql`（source/kintone_comment_id/kintone_author/synced_to_kintone_at＋重複排除unique）＋`comment-sync.ts`（buildKintoneCommentText/isFunbaseOriginText/pushCommentToKintone/importKintoneComment/resolveCaseByKintoneRecord/resolveKintoneRecordId、**三重ループ防止=接頭辞[FunBase]＋(case_id,kintone_comment_id)一意＋sourceフラグ**）＋`comments.ts`（addCommentでpush・listCommentsでsource/kintone_author反映）＋Webhook `ADD_RECORD_COMMENT`結線
 - ✅ **Phase 4 Google Drive完成**: `drive/drive-client.ts`（`jose`でSA-JWT RS256→OAuth→multipartアップロード、googleapis不要、`GOOGLE_SERVICE_ACCOUNT_JSON`未設定ならnull）＋`drive/mirror.ts`（`mirrorRequirementDocumentToDrive`=その他書類をapp296の`drive_folder_url`フォルダへbest-effort）＋`case-hub.ts`に`driveFolderUrl`追加＋文書アップロードrouteに結線
+- ✅ **事業所書類ステータスのkintone同期（2026-08-05）**: app296に固定フィールド`doc_status_*`7本を追加し、書類1件ごとのステータスをkintone正で管理。`office-doc-status.ts`（純粋: マッピング表／ラベル双方向／payload生成／record抽出／差分抽出）＋`office-doc-sync.ts`（orchestration: `pushOfficeDocStatuses`／`applyKintoneOfficeDocStatuses`／`pushRequirementStatusToKintone`）＋Webhook `ADD_RECORD`/`UPDATE_RECORD`に受信＋空欄初期化を結線＋アップロードrouteに「確認中」pushを結線。空欄=未使用/未初期化、受信は差分のみ更新でループ防止。設計は[specs/2026-08-05-office-doc-status-kintone-sync-design.md](superpowers/specs/2026-08-05-office-doc-status-kintone-sync-design.md)
 - **テスト計 229件pass**・型クリーン（新規: phase-helpers 15 / client-methods 5 / case-mirror 5 / status-sync 6 / comment-sync 6 / drive 5）
 
 ## 🎉 全Phase(1〜6)実装完了。GO-LIVEに必要な外部作業のみ残り：
