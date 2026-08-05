@@ -159,10 +159,10 @@ export async function POST(
       )
     }
 
-    // Get person's tenant_id
+    // Get person's tenant/office scope so RLS allows office-scoped company users to save documents.
     const { data: person, error: personError } = await supabase
       .from('people')
-      .select('tenant_id')
+      .select('tenant_id, tenant_office_id')
       .eq('id', personId)
       .single()
 
@@ -254,6 +254,7 @@ export async function POST(
       .insert({
         person_id: personId,
         tenant_id: tenantId,
+        tenant_office_id: person.tenant_office_id ?? null,
         document_type: documentType,
         storage_path: filePath,
         title: title?.trim() || documentToReplace?.title || null,
