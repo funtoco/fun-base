@@ -24,6 +24,12 @@ export type KintoneCellValue = string | number | string[]
 
 /** SUBTABLE の1行（`{ value: { subCode: { value } } }`）。 */
 export interface KintoneSubtableRow {
+  /**
+   * 既存行の行ID。指定した行は「指定したサブフィールドだけ」更新される（未指定行は新規追加）。
+   * kintone のレコード更新は送信した行でサブテーブルを置換するため、既存行を残したいときは
+   * 更新しない行も含めて全行を id 付きで送る必要がある。
+   */
+  id?: string
   value: Record<string, { value: string | number }>
 }
 
