@@ -160,3 +160,25 @@ export function keepIfEquals(expected: string, out: string = expected): CellTran
 export function constantText(text: string): CellTransform {
   return () => text
 }
+
+/**
+ * 年/月/日が別セルに分かれた日付を1つの 'YYYY-MM-DD' に合成する（合成フィールド用）。
+ * kintone の年/月/日フィールドは日付から自動計算(CALC)のため、書けるのは日付フィールド1つだけ。
+ * values は [年, 月, 日] の順（各セルの生値）。単位付き（例: '2026年'）は asNumber で吸収。
+ * いずれかが空・数値化不能・範囲外なら null（部分的な日付は作らない）。
+ */
+export function combineYmdDate(values: unknown[]): string | null {
+  // 年/月/日の単位が同一セルに紛れても吸収する（通常は単位ラベルが別セルで数値のみ）。
+  const num = (v: unknown) =>
+    asNumber(typeof v === 'string' ? v.replace(/[年月日]/g, '') : v)
+  const y = num(values[0])
+  const m = num(values[1])
+  const d = num(values[2])
+  if (y === null || m === null || d === null) {
+    return null
+  }
+  if (y < 1900 || y > 2200 || m < 1 || m > 12 || d < 1 || d > 31) {
+    return null
+  }
+  return `${y}-${pad2(m)}-${pad2(d)}`
+}

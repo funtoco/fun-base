@@ -11,7 +11,7 @@ function event(
 }
 
 describe('mapKintoneRecordToCaseRow', () => {
-  it('app296 レコードを案件行素材へ写像する', () => {
+  it('app296 レコードを案件行素材へ写像する（雇用条件書サブテーブル→複数人）', () => {
     const mapped = mapKintoneRecordToCaseRow(
       event({
         case_title: { value: '近江舞子しょうぶ苑・初回' },
@@ -19,9 +19,27 @@ describe('mapKintoneRecordToCaseRow', () => {
         bunya: { value: '介護' },
         company_ref: { value: '20951' },
         office_name_disp: { value: '近江舞子しょうぶ苑' },
-        applicant_ref: { value: '1' },
-        koyou_ref: { value: '4102' },
         drive_folder_url: { value: 'https://drive.google.com/drive/folders/ABC' },
+        koyou_details: {
+          value: [
+            {
+              id: '1',
+              value: {
+                koyou_ref: { value: '4102' },
+                koyou_hrid: { value: '1' },
+                koyou_applicant_disp: { value: 'グエン' },
+              },
+            },
+            {
+              id: '2',
+              value: {
+                koyou_ref: { value: '4103' },
+                koyou_hrid: { value: '2' },
+                koyou_applicant_disp: { value: 'タン' },
+              },
+            },
+          ],
+        },
       })
     )
     expect(mapped).toEqual({
@@ -33,9 +51,29 @@ describe('mapKintoneRecordToCaseRow', () => {
       driveFolderUrl: 'https://drive.google.com/drive/folders/ABC',
       coid: '20951',
       officeName: '近江舞子しょうぶ苑',
-      hrid: '1',
-      app55RecordId: '4102',
+      koyouTargets: [
+        { hrid: '1', applicantName: 'グエン', app55RecordId: '4102' },
+        { hrid: '2', applicantName: 'タン', app55RecordId: '4103' },
+      ],
     })
+  })
+
+  it('koyou_details: 両キー空の行はスキップ・片方のみでも残す', () => {
+    const mapped = mapKintoneRecordToCaseRow(
+      event({
+        koyou_details: {
+          value: [
+            { id: '1', value: { koyou_ref: { value: '4102' }, koyou_hrid: { value: '' } } },
+            { id: '2', value: {} }, // 両キー空 → スキップ
+            { id: '3', value: { koyou_hrid: { value: '9' } } }, // hrid のみでも残る
+          ],
+        },
+      })
+    )
+    expect(mapped.koyouTargets).toEqual([
+      { hrid: null, applicantName: null, app55RecordId: '4102' },
+      { hrid: '9', applicantName: null, app55RecordId: null },
+    ])
   })
 
   it('apply_type 変更→renewal / 新規・その他→initial', () => {
@@ -63,7 +101,7 @@ describe('mapKintoneRecordToCaseRow', () => {
     expect(mapped.title).toBeNull()
     expect(mapped.coid).toBeNull()
     expect(mapped.officeName).toBeNull()
-    expect(mapped.hrid).toBeNull()
+    expect(mapped.koyouTargets).toEqual([])
     expect(mapped.driveFolderUrl).toBeNull()
   })
 
