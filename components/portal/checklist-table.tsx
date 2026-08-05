@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/table'
 import { useToast } from '@/lib/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import { NO_BUSY, markBusy, clearBusy, isBusy, type BusyIds } from '@/lib/portal/busy-ids'
 import {
   COPY_TYPE_LABELS,
   REQUIREMENT_STATUS_LABELS,
@@ -60,34 +61,31 @@ function requirementDoc(
   return null
 }
 
-interface RowActionsState {
-  busyId: string | null
-}
-
 function RequirementRow({
   caseId,
   item,
-  actions,
-  setActions,
+  busyIds,
+  setBusyIds,
 }: {
   caseId: string
   item: CaseDocumentRequirement
-  actions: RowActionsState
-  setActions: React.Dispatch<React.SetStateAction<RowActionsState>>
+  busyIds: BusyIds
+  setBusyIds: React.Dispatch<React.SetStateAction<BusyIds>>
 }) {
   const router = useRouter()
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const busy = actions.busyId === item.id
+  const busy = isBusy(busyIds, item.id)
   const doc = requirementDoc(item)
   // 未提出/要修正はもちろん、確認中(提出済み・未承認)も差し替え可能にする。承認済みのみロック。
   const canUpload = item.status !== 'approved'
   // 申請書類作成フォームは提出時に内容登録・連携が走る（時間がかかる）ので進捗表示を出し分ける。
   const isWorkbook = item.documentCode === 'application_workbook'
 
+  // 行ごとに独立して管理する。連続アップロード中に他の行の表示を消さないため。
   function setBusy(on: boolean) {
-    setActions((prev) => ({ ...prev, busyId: on ? item.id : null }))
+    setBusyIds((prev) => (on ? markBusy(prev, item.id) : clearBusy(prev, item.id)))
   }
 
   async function handleUpload(file: File) {
@@ -267,16 +265,16 @@ function ChecklistSection({
   icon,
   items,
   emptyLabel,
-  actions,
-  setActions,
+  busyIds,
+  setBusyIds,
 }: {
   caseId: string
   title: string
   icon: React.ReactNode
   items: CaseDocumentRequirement[]
   emptyLabel: string
-  actions: RowActionsState
-  setActions: React.Dispatch<React.SetStateAction<RowActionsState>>
+  busyIds: BusyIds
+  setBusyIds: React.Dispatch<React.SetStateAction<BusyIds>>
 }) {
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm">
@@ -305,8 +303,8 @@ function ChecklistSection({
                   key={item.id}
                   caseId={caseId}
                   item={item}
-                  actions={actions}
-                  setActions={setActions}
+                  busyIds={busyIds}
+                  setBusyIds={setBusyIds}
                 />
               ))}
             </TableBody>
@@ -324,7 +322,7 @@ export function ChecklistTable({
   caseId: string
   requirements: GroupedRequirements
 }) {
-  const [actions, setActions] = useState<RowActionsState>({ busyId: null })
+  const [busyIds, setBusyIds] = useState<BusyIds>(NO_BUSY)
 
   return (
     <div className="space-y-6">
@@ -334,8 +332,8 @@ export function ChecklistTable({
         icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
         items={requirements.office}
         emptyLabel="会社の必要書類はまだありません。"
-        actions={actions}
-        setActions={setActions}
+        busyIds={busyIds}
+        setBusyIds={setBusyIds}
       />
     </div>
   )
