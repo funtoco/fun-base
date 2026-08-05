@@ -7,6 +7,8 @@ import {
   TEMPLATE_SHEET_NAME,
   fillOfficeNames,
 } from '@/lib/portal/workbook-template'
+import { generateApplicationWorkbook } from '@/lib/portal/template-source'
+import type { CaseDetail } from '@/lib/portal/types'
 
 /** 「はじめに」シートだけを持つ最小ワークブック。 */
 function blankWorkbook(sheetName = TEMPLATE_SHEET_NAME): ExcelJS.Workbook {
@@ -151,5 +153,83 @@ describe('同梱テンプレの実ファイル', () => {
   it('企業に渡す前提の DATA シートは非表示のまま', async () => {
     const workbook = await loadTemplate()
     expect(workbook.getWorksheet('DATA')?.state).toBe('hidden')
+  })
+})
+
+describe('generateApplicationWorkbook', () => {
+  function caseDetail(officeNames: (string | null)[], title: string | null = null): CaseDetail {
+    return {
+      id: 'case-1',
+      tenantId: 'ten-1',
+      offices: officeNames.map((name, index) => ({
+        id: `co-${index}`,
+        caseId: 'case-1',
+        tenantOfficeId: `off-${index}`,
+        name,
+        sortOrder: index,
+      })),
+      entityType: 'corporate',
+      applicationCategory: 'initial',
+      field: 'care',
+      applicationType: null,
+      managementNumber: null,
+      status: 'collecting',
+      title,
+      note: null,
+      kintoneRecordId: null,
+      kintoneSyncStatus: null,
+      kintoneLastSyncedAt: null,
+      createdAt: '2026-08-01T00:00:00Z',
+      updatedAt: '2026-08-01T00:00:00Z',
+      members: [],
+    }
+  }
+
+  async function readBack(buffer: Buffer): Promise<ExcelJS.Worksheet> {
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer)
+    return workbook.getWorksheet(TEMPLATE_SHEET_NAME)!
+  }
+
+  it('同梱テンプレを読んで事業所名を差し込んだ xlsx を返す', async () => {
+    const result = await generateApplicationWorkbook(
+      caseDetail(['慈誠会前野病院', 'メロディハウス'], '慈誠会・初回'),
+      new Date('2026-08-05T00:00:00Z')
+    )
+    const sheet = await readBack(result.buffer)
+    expect(sheet.getCell('C29').value).toBe('慈誠会前野病院')
+    expect(sheet.getCell('C30').value).toBe('メロディハウス')
+    expect(result.overflow).toEqual([])
+    expect(result.fileName).toBe('慈誠会・初回_申請書類作成フォーム_20260805.xlsx')
+  })
+
+  it('事業所0件でも空欄のテンプレを返す（企業が手で埋められる）', async () => {
+    const result = await generateApplicationWorkbook(caseDetail([], '無題'))
+    const sheet = await readBack(result.buffer)
+    expect(sheet.getCell('C29').value == null).toBe(true)
+    expect(result.overflow).toEqual([])
+  })
+
+  it('6事業所は5件だけ差し込み、残りを overflow で返す', async () => {
+    const result = await generateApplicationWorkbook(
+      caseDetail(['A', 'B', 'C', 'D', 'E', 'F'], '6事業所案件')
+    )
+    const sheet = await readBack(result.buffer)
+    expect(sheet.getCell('C33').value).toBe('E')
+    expect(result.overflow).toEqual(['F'])
+  })
+
+  it('案件名が無ければ代表事業所名をファイル名に使う', async () => {
+    const result = await generateApplicationWorkbook(
+      caseDetail(['慈誠会前野病院'], null),
+      new Date('2026-08-05T00:00:00Z')
+    )
+    expect(result.fileName).toBe('慈誠会前野病院_申請書類作成フォーム_20260805.xlsx')
+  })
+
+  it('名称未取得(null)の事業所は欄を消費しない', async () => {
+    const result = await generateApplicationWorkbook(caseDetail([null, 'メロディハウス']))
+    const sheet = await readBack(result.buffer)
+    expect(sheet.getCell('C29').value).toBe('メロディハウス')
   })
 })
