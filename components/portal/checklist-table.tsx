@@ -81,7 +81,8 @@ function RequirementRow({
 
   const busy = actions.busyId === item.id
   const doc = requirementDoc(item)
-  const canUpload = item.status === 'not_submitted' || item.status === 'needs_fix'
+  // 未提出/要修正はもちろん、確認中(提出済み・未承認)も差し替え可能にする。承認済みのみロック。
+  const canUpload = item.status !== 'approved'
 
   function setBusy(on: boolean) {
     setActions((prev) => ({ ...prev, busyId: on ? item.id : null }))
@@ -198,7 +199,11 @@ function RequirementRow({
               className="gap-1"
             >
               <Upload className="h-3.5 w-3.5" />
-              {item.status === 'needs_fix' ? '再提出' : 'アップロード'}
+              {item.status === 'needs_fix'
+                ? '再提出'
+                : item.status === 'reviewing'
+                  ? '差し替え'
+                  : 'アップロード'}
             </Button>
           )}
           {doc && (
