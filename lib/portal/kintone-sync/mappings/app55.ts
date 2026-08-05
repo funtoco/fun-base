@@ -99,16 +99,9 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-4', cell: 'D58', code: '近い日本人_報酬額と同等以上であると考える理由', kind: 'TEXT', transform: asText },
     { sheetName: '1-4', cell: 'D60', code: '近い日本人_その他', kind: 'TEXT', transform: asText },
 
-    // 特定技能所属機関・作成責任者（1-4 が正）
-    { sheetName: '1-4', cell: 'E75', code: '特定技能所属機関名_法人名', kind: 'TEXT', transform: asText },
-    { sheetName: '1-4', cell: 'E77', code: '資料作成者_役職', kind: 'TEXT', transform: asText },
-    { sheetName: '1-4', cell: 'I77', code: '資料作成者_氏名', kind: 'TEXT', transform: asText },
-    // 作成日=署名日として同一視。DATE→YYYY-MM-DD。
+    // 特定技能所属機関名(COIDルックアップ)・資料作成者役職/氏名(連絡先ID_資料作成者ルックアップ)は
+    // app55側で自動供給される書込ロック項目のため転記しない。作成日のみ転記する。
     { sheetName: '1-4', cell: 'E74', code: '書類に反映する_作成日_署名日', kind: 'DATE', transform: asDate },
-
-    // ── 1-11-1別紙（作成責任者 役職/氏名の再掲＝1-4と同一値。先勝ちで無視される）──
-    { sheetName: '1-11-1別紙', cell: 'J1', code: '資料作成者_役職', kind: 'TEXT', transform: asText },
-    { sheetName: '1-11-1別紙', cell: 'O1', code: '資料作成者_氏名', kind: 'TEXT', transform: asText },
 
     // ── 1-6別紙（賃金区分・時給換算・控除）───────────────────
     // 賃金区分の明示チェック（金額有無からの自動判定と OR 合成）。
@@ -187,11 +180,8 @@ export const APP55_MAPPING: AppMapping = {
     //   1-11-1/1-11-1別紙(所属機関概要書・役員一覧・決算)はマッピング対象外（ユーザー確定）。
     // ══════════════════════════════════════════════════════════════════════
 
-    // ── Ⅰ 契約の更新の有無（独立チェック3種）──
-    { sheetName: '1-6', cell: 'B20', code: '_1_2_1_自動的に更新', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'K20', code: '_2_2_更新する場合があり得る', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'T20', code: '_1_2_3_契約更新しない', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    // 更新の判断基準（「更新する場合があり得る」時の基準6項目＋その他内容）
+    // 契約の更新の有無(自動更新/更新あり得る/更新しない)は事業所(OFID)ルックアップの自動供給＝書込ロックのため除外。
+    // 更新の判断基準（「更新する場合があり得る」時の基準6項目＋その他内容）は書込可なので転記する。
     { sheetName: '1-6', cell: 'B22', code: '_1_2_2_1_契約期間満了時の業務量', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'K22', code: '_1_2_2_2_労働者の勤務成績態度', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'T22', code: '_1_2_2_3_労働者の業務遂行能力', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
@@ -207,13 +197,10 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'R25', code: '最多更新回数', kind: 'NUMBER', transform: asNumber }, // 「回まで」ラベルの左セル＝入力（単位ラベル左の規則）
     { sheetName: '1-6', cell: 'X25', code: '契約_年', kind: 'NUMBER', transform: asNumber }, // 通算契約期間の年数（既定5）
 
-    // ── Ⅱ 就業の場所（直接雇用チェック＋事業所名/郵便番号/住所/連絡先。いずれも企業記入欄=赤セル）──
+    // ── Ⅱ 就業の場所（直接雇用チェックのみ）──
+    // 事業所名/郵便番号/住所/連絡先は app55の事業所(OFID)ルックアップが app36 から自動供給する
+    // 書込ロック項目のため転記しない。派遣雇用(P32)は受け皿フィールド無し。
     { sheetName: '1-6', cell: 'B32', code: '_2_1_1_直接雇用', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'F34', code: '事業所名', kind: 'TEXT', transform: asText },
-    { sheetName: '1-6', cell: 'F35', code: '事業所_郵便番号', kind: 'TEXT', transform: asText },
-    { sheetName: '1-6', cell: 'H35', code: '事業所_住所_所在地', kind: 'TEXT', transform: asText },
-    { sheetName: '1-6', cell: 'F36', code: 'OfNumberPhone', kind: 'TEXT', transform: asText },
-    // 派遣雇用(P32)はapp55に受け皿フィールドが無いため未実装。
 
     // ── Ⅳ 労働時間 1.始業・終業（始業 F45時/H45分＝実フォームで確認済。終業 M45時/O45分も同パターン）──
     { sheetName: '1-6', cell: 'F45', code: '_4_1_1_1_時', kind: 'NUMBER', transform: asNumber },
@@ -230,17 +217,7 @@ export const APP55_MAPPING: AppMapping = {
     // 3.休憩時間（日勤/夜勤の分数）
     { sheetName: '1-6', cell: 'G66', code: '日勤_休憩時間', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6', cell: 'O66', code: '夜勤_休憩時間', kind: 'NUMBER', transform: asNumber },
-    // 4.所定労働時間数（週/月/年 × 時/分）
-    { sheetName: '1-6', cell: 'E68', code: '_4_3_1_1_時間', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6', cell: 'H68', code: '_4_3_1_2_分', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6', cell: 'M68', code: '_4_3_2_1_時間', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6', cell: 'P68', code: '_4_3_2_2_分', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6', cell: 'U68', code: '_4_3_3_1_時間', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6', cell: 'X68', code: '_4_3_3_2_分', kind: 'NUMBER', transform: asNumber },
-    // 5.所定労働日数（週/月/年）
-    { sheetName: '1-6', cell: 'I69', code: '_4_4_1_週所定労働日数', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6', cell: 'P69', code: '_4_4_2_月所定労働日数', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6', cell: 'W69', code: '_4_4_3_年所定労働日数', kind: 'NUMBER', transform: asNumber },
+    // 4.所定労働時間数(週月年)・5.所定労働日数(週月年) は事業所(OFID)ルックアップの自動供給＝書込ロックのため除外。
     // 6.所定時間外労働の有無
     { sheetName: '1-6', cell: 'I70', code: '_4_5_1_所定時間外労働有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'L70', code: '_4_5_2_所定時間外労働無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
@@ -249,7 +226,7 @@ export const APP55_MAPPING: AppMapping = {
     // 定例日: 毎週定休曜日（F74）＋その他（M74）。⚠️祝日/曜日/その他の結合はせず個別格納・要確認。
     { sheetName: '1-6', cell: 'F74', code: '_5_1_定例日', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'M74', code: '_5_2_その他休日', kind: 'TEXT', transform: asText },
-    { sheetName: '1-6', cell: 'X74', code: '_5_3_年間合計休日日数', kind: 'NUMBER', transform: asNumber },
+    // _5_3_年間合計休日日数 は事業所(OFID)ルックアップの自動供給＝書込ロックのため除外。
     // 非定例日: 週/月チェック＋日数＋その他（⚠️その他の定例/非定例割当は要確認）
     { sheetName: '1-6', cell: 'E76', code: '_5_2_1_1_週あたり', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'H76', code: '_5_2_1_2_月あたり', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
@@ -267,16 +244,11 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'I82', code: '_6_2_1_有給休暇', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'S82', code: '_6_2_2_無給休暇', kind: 'TEXT', transform: asText },
 
-    // ── Ⅷ退職に関する事項（1-6 行108：自己都合退職の届出）──
-    { sheetName: '1-6', cell: 'J108', code: '届出に関する日数', kind: 'TEXT', transform: asText },
+    // ── Ⅷ退職に関する事項（1-6 行108：自己都合退職の届出先。届出日数はOFID自動コピーのため除外）──
     { sheetName: '1-6', cell: 'O108', code: '退職の届出先', kind: 'TEXT', transform: asText },
-    // ── 雇用管理の改善等に関する相談窓口（1-6 行118）──
-    { sheetName: '1-6', cell: 'E118', code: '相談_部署', kind: 'TEXT', transform: asText },
-    { sheetName: '1-6', cell: 'M118', code: '相談_担当者氏名', kind: 'TEXT', transform: asText },
-    { sheetName: '1-6', cell: 'W118', code: '相談_連絡先', kind: 'TEXT', transform: asText },
-    // ── 労働保険番号・雇用保険適用事業所番号（はじめに④⑤ → app55へ非正規化転記）──
-    { sheetName: 'はじめに', cell: 'E16', code: '労働保険番号', kind: 'TEXT', transform: asText },
-    { sheetName: 'はじめに', cell: 'E17', code: '雇用保険番号', kind: 'TEXT', transform: asText },
+    // 相談窓口(相談_部署/担当者氏名/連絡先)・労働保険番号・雇用保険番号は、app55の
+    // 事業所(OFID)/相談担当者ルックアップがapp36/マスタから自動供給する項目＝書込ロックのため
+    // マッピングしない（Excelから転記しても無視される）。
 
     // ── 【介護分野】事業所概要1（app36対象外化に伴い app55 へ振替）──
     { sheetName: '【介護分野】事業所概要1', cell: 'A19', code: '_2その他特記事項', kind: 'TEXT', transform: asText },
