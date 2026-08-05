@@ -1,12 +1,9 @@
 export type InviteRole = 'owner' | 'admin' | 'member' | 'guest' | 'supporter'
 
 export function validateInviteOffices(
-  role: InviteRole,
-  officeIds: string[] | undefined | null,
+  _role: InviteRole,
+  _officeIds: string[] | undefined | null,
 ): { ok: true } | { ok: false; error: string } {
-  const needsOffice = role === 'member' || role === 'guest'
-  if (needsOffice && (!officeIds || officeIds.length === 0)) {
-    return { ok: false, error: 'officeIds required for member/guest' }
-  }
+  // 所属先未選択は user_tenant_offices 0件のまま「全所属先」として扱う。
   return { ok: true }
 }
