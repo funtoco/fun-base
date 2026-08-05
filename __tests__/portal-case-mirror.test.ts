@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { mapKintoneRecordToCaseRow } from '@/lib/portal/kintone-sync/case-mirror'
+import {
+  mapKintoneRecordToCaseRow,
+  resolveTenantOfficesByNames,
+} from '@/lib/portal/kintone-sync/case-mirror'
 import type { KintoneWebhookEvent } from '@/lib/portal/kintone-sync/webhook'
 
 function event(
@@ -18,7 +21,11 @@ describe('mapKintoneRecordToCaseRow', () => {
         apply_type: { value: '新規' },
         bunya: { value: '介護' },
         company_ref: { value: '20951' },
-        office_name_disp: { value: '近江舞子しょうぶ苑' },
+        office_details: {
+          value: [
+            { id: '1', value: { office_ref: { value: '66' }, office_name_disp: { value: '近江舞子しょうぶ苑' } } },
+          ],
+        },
         drive_folder_url: { value: 'https://drive.google.com/drive/folders/ABC' },
         koyou_details: {
           value: [
@@ -50,7 +57,7 @@ describe('mapKintoneRecordToCaseRow', () => {
       entityType: 'corporate',
       driveFolderUrl: 'https://drive.google.com/drive/folders/ABC',
       coid: '20951',
-      officeName: '近江舞子しょうぶ苑',
+      officeNames: ['近江舞子しょうぶ苑'],
       koyouTargets: [
         { hrid: '1', applicantName: 'グエン', app55RecordId: '4102' },
         { hrid: '2', applicantName: 'タン', app55RecordId: '4103' },
@@ -94,18 +101,119 @@ describe('mapKintoneRecordToCaseRow', () => {
     expect(f()).toBe('other')
   })
 
-  it('空・未設定フィールドは null（crosswalk 素材含む）', () => {
+  it('空・未設定フィールドは null / 空配列（crosswalk 素材含む）', () => {
     const mapped = mapKintoneRecordToCaseRow(
-      event({ case_title: { value: '' }, company_ref: { value: null }, office_name_disp: { value: '' } })
+      event({ case_title: { value: '' }, company_ref: { value: null }, office_details: { value: [] } })
     )
     expect(mapped.title).toBeNull()
     expect(mapped.coid).toBeNull()
-    expect(mapped.officeName).toBeNull()
+    expect(mapped.officeNames).toEqual([])
     expect(mapped.koyouTargets).toEqual([])
     expect(mapped.driveFolderUrl).toBeNull()
   })
 
+  it('office_details: 配列順を保ち、空行はスキップ・同名重複は先勝ちで畳む', () => {
+    const mapped = mapKintoneRecordToCaseRow(
+      event({
+        office_details: {
+          value: [
+            { id: '1', value: { office_name_disp: { value: '慈誠会前野病院' } } },
+            { id: '2', value: { office_name_disp: { value: '' } } }, // 空 → スキップ
+            { id: '3', value: {} }, // 未設定 → スキップ
+            { id: '4', value: { office_name_disp: { value: 'メロディハウス' } } },
+            { id: '5', value: { office_name_disp: { value: ' 慈誠会前野病院 ' } } }, // 重複 → 畳む
+          ],
+        },
+      })
+    )
+    expect(mapped.officeNames).toEqual(['慈誠会前野病院', 'メロディハウス'])
+  })
+
+  it('office_details が配列でない/未設定なら空配列', () => {
+    expect(mapKintoneRecordToCaseRow(event({})).officeNames).toEqual([])
+    expect(
+      mapKintoneRecordToCaseRow(event({ office_details: { value: 'not-an-array' } })).officeNames
+    ).toEqual([])
+  })
+
   it('recordId は event から取る（レコード番号＝案件キー）', () => {
     expect(mapKintoneRecordToCaseRow(event({}, 'UPDATE_RECORD', '42')).kintoneRecordId).toBe('42')
+  })
+})
+
+/** tenant_offices の select(.eq) だけを返す最小モック。 */
+function mockOfficeService(offices: Array<{ id: string; name: string }>) {
+  return {
+    from: () => ({
+      select: () => ({
+        eq: async () => ({ data: offices }),
+      }),
+    }),
+  }
+}
+
+describe('resolveTenantOfficesByNames', () => {
+  const offices = [
+    { id: 'off-1', name: '慈誠会前野病院' },
+    { id: 'off-2', name: 'メロディハウス' },
+    { id: 'off-3', name: '近江舞子しょうぶ苑' },
+  ]
+
+  it('入力順を保って tenant_office_id に解決する（＝sort_order）', async () => {
+    const res = await resolveTenantOfficesByNames(
+      mockOfficeService(offices) as never,
+      'ten-1',
+      ['メロディハウス', '慈誠会前野病院']
+    )
+    expect(res).toEqual({ resolved: ['off-2', 'off-1'], unresolvedNames: [] })
+  })
+
+  it('大小文字・前後空白のドリフトを吸収する', async () => {
+    const res = await resolveTenantOfficesByNames(
+      mockOfficeService(offices) as never,
+      'ten-1',
+      ['  メロディハウス  ']
+    )
+    expect(res.resolved).toEqual(['off-2'])
+  })
+
+  it('解決できた分だけ採用し、未解決の名前は別に返す（部分スキップ）', async () => {
+    const res = await resolveTenantOfficesByNames(
+      mockOfficeService(offices) as never,
+      'ten-1',
+      ['慈誠会前野病院', '存在しない事業所', '近江舞子しょうぶ苑']
+    )
+    expect(res).toEqual({
+      resolved: ['off-1', 'off-3'],
+      unresolvedNames: ['存在しない事業所'],
+    })
+  })
+
+  it('同一事業所に解決する重複入力は畳む（uq_vaco 違反回避）', async () => {
+    const res = await resolveTenantOfficesByNames(
+      mockOfficeService(offices) as never,
+      'ten-1',
+      ['慈誠会前野病院', ' 慈誠会前野病院']
+    )
+    expect(res.resolved).toEqual(['off-1'])
+  })
+
+  it('入力が空なら DB を引かずに空を返す', async () => {
+    const res = await resolveTenantOfficesByNames(
+      { from: () => { throw new Error('DBを引いてはいけない') } } as never,
+      'ten-1',
+      []
+    )
+    expect(res).toEqual({ resolved: [], unresolvedNames: [] })
+  })
+
+  it('全件未解決なら resolved は空（呼び出し側が案件ごとスキップする）', async () => {
+    const res = await resolveTenantOfficesByNames(
+      mockOfficeService(offices) as never,
+      'ten-1',
+      ['どこかの事業所']
+    )
+    expect(res.resolved).toEqual([])
+    expect(res.unresolvedNames).toEqual(['どこかの事業所'])
   })
 })

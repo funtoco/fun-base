@@ -118,21 +118,20 @@ export async function addComment(params: {
 
   const { data: caseRow, error: caseError } = await supabase
     .from('visa_application_cases')
-    .select('id, tenant_id, tenant_office_id')
+    .select('id, tenant_id')
     .eq('id', params.caseId)
     .maybeSingle()
 
   if (caseError || !caseRow) {
     return { ok: false, status: 404, error: '案件が見つかりません' }
   }
-  const c = caseRow as { id: string; tenant_id: string; tenant_office_id: string }
+  const c = caseRow as { id: string; tenant_id: string }
 
   const { data: inserted, error: insertError } = await supabase
     .from('case_comments')
     .insert({
       case_id: c.id,
       tenant_id: c.tenant_id,
-      tenant_office_id: c.tenant_office_id,
       requirement_id: params.requirementId ?? null,
       author: user.id,
       body,

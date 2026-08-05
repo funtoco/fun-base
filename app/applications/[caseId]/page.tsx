@@ -41,12 +41,14 @@ export default async function ApplicationDetailPage({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">
-              {detail.title || detail.officeName || '無題の案件'}
+              {detail.title || detail.offices[0]?.name || '無題の案件'}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {detail.officeName && (
-                <Badge variant="outline">{detail.officeName}</Badge>
-              )}
+              {detail.offices.map((office) => (
+                <Badge key={office.id} variant="outline">
+                  {office.name ?? '（名称未取得）'}
+                </Badge>
+              ))}
               <Badge variant="secondary">{FIELD_LABELS[detail.field]}</Badge>
               <Badge variant="secondary">
                 {ENTITY_TYPE_LABELS[detail.entityType]}
@@ -81,7 +83,11 @@ export default async function ApplicationDetailPage({
 
       <CaseProgressHeader status={detail.status} />
 
-      <ChecklistTable caseId={detail.id} requirements={requirements} />
+      <ChecklistTable
+        caseId={detail.id}
+        requirements={requirements}
+        officeCount={detail.offices.length}
+      />
 
       <CommentThread caseId={detail.id} comments={comments} />
     </div>
