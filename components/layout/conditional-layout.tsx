@@ -44,11 +44,15 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   // ログイン済みの場合、サイドバーとヘッダーを表示
   // ミドルウェアで認証チェック済みなので、ここに来る場合は必ずログイン済み
   return (
-    <div className="flex h-screen bg-background">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-auto bg-background">
+    <div className="flex h-screen bg-background print:block print:h-auto print:overflow-visible">
+      <div className="print:hidden">
+        <Sidebar />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:block print:overflow-visible">
+        <div className="print:hidden">
+          <Header />
+        </div>
+        <main className="flex-1 overflow-auto bg-background print:block print:overflow-visible">
           {children}
         </main>
       </div>
