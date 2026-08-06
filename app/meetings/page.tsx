@@ -321,6 +321,12 @@ export default function MeetingsPage() {
     return { thisMonth }
   }, [filteredInterviews])
 
+  const printQuery = buildInterviewListQueryString({
+    search: searchTerm,
+    multi: { quarter: quarterFilter, company: companyFilter, staff: staffFilter, method: methodFilter },
+    single: { date: dateFilter },
+  })
+
   return (
     <AuthGuard>
       <div className="p-6 space-y-6">
@@ -331,7 +337,7 @@ export default function MeetingsPage() {
             <p className="text-muted-foreground mt-2">定期面談の記録と定期面談レポートを管理</p>
           </div>
           <Button asChild variant="outline">
-            <Link href={`/meetings/print${searchParams.toString() ? `?${searchParams.toString()}` : ""}`}>
+            <Link href={`/meetings/print${printQuery ? `?${printQuery}` : ""}`}>
               <Printer className="h-4 w-4" />
               印刷
             </Link>

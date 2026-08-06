@@ -168,6 +168,16 @@ export default function MeetingsPrintPage() {
   const sortedInterviews = useMemo(() => sortPrintableInterviews(filteredInterviews, sortMode), [filteredInterviews, sortMode])
   const groupedInterviews = useMemo(() => groupPrintableInterviewsByPerson(filteredInterviews), [filteredInterviews])
   const printedAt = useMemo(() => new Date().toLocaleDateString("ja-JP"), [])
+  const meetingsListQuery = buildInterviewListQueryString({
+    search: searchTerm,
+    multi: {
+      quarter: quarterFilter,
+      company: companyFilter,
+      staff: staffFilter,
+      method: methodFilter,
+    },
+    single: { date: dateFilter },
+  })
 
   return (
     <AuthGuard>
@@ -175,7 +185,7 @@ export default function MeetingsPrintPage() {
         <div className="mx-auto max-w-5xl space-y-6 print:max-w-none print:space-y-4">
           <div className="print:hidden">
             <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
-              <Link href={`/meetings${searchParams.toString() ? `?${searchParams.toString()}` : ""}`}>
+              <Link href={`/meetings${meetingsListQuery ? `?${meetingsListQuery}` : ""}`}>
                 <ArrowLeft className="h-4 w-4" />
                 面談一覧へ戻る
               </Link>
