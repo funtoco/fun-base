@@ -158,8 +158,22 @@ describe('selectGuidance: 取得書類', () => {
     }
   )
 
-  it.each(CONDITIONS)('$entityType × $category で書類番号が重複しない', (c) => {
-    const nos = selectGuidance(c).documents.map((d) => d.no)
-    expect(new Set(nos).size).toBe(nos.length)
+  it.each([
+    { entityType: 'corporate', category: 'initial', field: 'care', nos: [1, 2, 3, 4, 5, 6, 8] },
+    {
+      entityType: 'corporate',
+      category: 'initial',
+      field: 'food_service',
+      nos: [1, 2, 3, 4, 5, 6, 7, 8],
+    },
+    {
+      entityType: 'sole_proprietor',
+      category: 'initial',
+      field: 'care',
+      nos: [1, 2, 3, 4, 5, 6, 8],
+    },
+    { entityType: 'corporate', category: 'renewal', field: 'care', nos: [1, 2] },
+  ] as const)('$entityType × $category × $field は原典の書類番号を保持する（欠番あり）', (c) => {
+    expect(selectGuidance(c).documents.map((d) => d.no)).toEqual([...c.nos])
   })
 })

@@ -178,6 +178,10 @@ const RENEWAL: RequiredDocument[] = [
   },
 ]
 
+// 初回2リストは BUSINESS_PERMIT / COUNCIL_CERTIFICATE を、更新は RENEWAL 配列そのものを
+// 複数キーで共有している。selectDocuments は返り値の配列を毎回コピーするが要素は共有のままなので、
+// 参照側は読み取り専用として扱うこと。entityType ごとに更新書類を分ける場合は、
+// 共有配列を書き換えず別配列に分けること。
 export const DOCUMENTS: Record<
   `${EntityType}:${ApplicationCategory}`,
   RequiredDocument[]
