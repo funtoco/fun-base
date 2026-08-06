@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, Building2, Clock, FilterIcon, Printer } from "lucide-react"
@@ -105,12 +105,19 @@ export default function MeetingsPrintPage() {
   const searchParams = useSearchParams()
   const [interviews, setInterviews] = useState<RegularInterview[]>([])
   const [loading, setLoading] = useState(true)
+  const autoPrintTriggeredRef = useRef(false)
 
   const [searchTerm, setSearchTerm] = useState(() => searchParams.get("search") ?? "")
   const [quarterFilter, setQuarterFilter] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "quarter"))
   const [companyFilter, setCompanyFilter] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "company"))
   const [staffFilter, setStaffFilter] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "staff"))
   const [methodFilter, setMethodFilter] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "method"))
+  const [recordIds] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "record"))
+  const source = searchParams.get("source")
+  const personId = searchParams.get("person") ?? ""
+  const isPersonPreview = source === "person" && Boolean(personId) && recordIds.length > 0
+  const isDirectPreview = recordIds.length > 0
+  const [showFilters, setShowFilters] = useState(() => !isDirectPreview)
   const [quarterInput, setQuarterInput] = useState(() => getQueryCsv(getQueryMultiValues(new URLSearchParams(searchParams.toString()), "quarter")))
   const [companyInput, setCompanyInput] = useState(() => getQueryCsv(getQueryMultiValues(new URLSearchParams(searchParams.toString()), "company")))
   const [staffInput, setStaffInput] = useState(() => getQueryCsv(getQueryMultiValues(new URLSearchParams(searchParams.toString()), "staff")))
@@ -166,6 +173,11 @@ export default function MeetingsPrintPage() {
     const nextSort = next.sort ?? sortMode
     const nextPageBreak = next.pageBreak ?? pageBreakByPerson
 
+    if (isPersonPreview) {
+      params.set("source", "person")
+      params.set("person", personId)
+    }
+    if (recordIds.length > 0) params.set("record", recordIds.join(","))
     if (nextFrom) params.set("from", nextFrom)
     if (nextTo) params.set("to", nextTo)
     if (nextSort !== "person") params.set("sort", nextSort)
@@ -176,6 +188,7 @@ export default function MeetingsPrintPage() {
 
   const filteredInterviews = useMemo(
     () => filterPrintableInterviews(interviews, {
+      recordIds,
       search: searchTerm,
       quarter: quarterFilter,
       company: companyFilter,
@@ -185,7 +198,7 @@ export default function MeetingsPrintPage() {
       from: fromDate,
       to: toDate,
     }),
-    [interviews, searchTerm, quarterFilter, companyFilter, staffFilter, methodFilter, dateFilter, fromDate, toDate]
+    [interviews, recordIds, searchTerm, quarterFilter, companyFilter, staffFilter, methodFilter, dateFilter, fromDate, toDate]
   )
 
   const sortedInterviews = useMemo(() => sortPrintableInterviews(filteredInterviews, sortMode), [filteredInterviews, sortMode])
@@ -201,6 +214,14 @@ export default function MeetingsPrintPage() {
     },
     single: { date: dateFilter },
   })
+
+  useEffect(() => {
+    if (!isDirectPreview || loading || filteredInterviews.length === 0 || autoPrintTriggeredRef.current) return
+
+    autoPrintTriggeredRef.current = true
+    const timerId = window.setTimeout(() => window.print(), 300)
+    return () => window.clearTimeout(timerId)
+  }, [filteredInterviews.length, isDirectPreview, loading])
 
   return (
     <AuthGuard>
@@ -226,29 +247,42 @@ export default function MeetingsPrintPage() {
         <div className="mx-auto max-w-5xl space-y-6 print:max-w-none print:space-y-4">
           <div className="print:hidden">
             <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
-              <Link href={`/meetings${meetingsListQuery ? `?${meetingsListQuery}` : ""}`}>
+              <Link href={isPersonPreview ? `/people/${personId}` : `/meetings${meetingsListQuery ? `?${meetingsListQuery}` : ""}`}>
                 <ArrowLeft className="h-4 w-4" />
-                面談一覧へ戻る
+                {isPersonPreview ? "人材詳細へ戻る" : "面談一覧へ戻る"}
               </Link>
             </Button>
 
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-bold text-foreground">面談記録 印刷</h1>
-                <p className="mt-2 text-muted-foreground">条件を指定して、施設確認用に一括印刷できます</p>
+                <h1 className="text-3xl font-bold text-foreground">
+                  {isDirectPreview ? "面談記録 印刷プレビュー" : "面談記録 印刷"}
+                </h1>
+                <p className="mt-2 text-muted-foreground">
+                  {isDirectPreview
+                    ? "対象の面談記録を読み込み後、印刷プレビューを開きます"
+                    : "条件を指定して、施設確認用に一括印刷できます"}
+                </p>
               </div>
-              <Button onClick={() => window.print()} disabled={loading || filteredInterviews.length === 0}>
-                <Printer className="h-4 w-4" />
-                一括印刷
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {isDirectPreview && !showFilters && (
+                  <Button variant="outline" onClick={() => setShowFilters(true)}>
+                    条件を変更
+                  </Button>
+                )}
+                <Button onClick={() => window.print()} disabled={loading || filteredInterviews.length === 0}>
+                  <Printer className="h-4 w-4" />
+                  {isDirectPreview ? "印刷プレビューを開く" : "一括印刷"}
+                </Button>
+              </div>
             </div>
           </div>
 
-          <Card className="print:hidden">
+          {showFilters && <Card className="print:hidden">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <FilterIcon className="h-4 w-4" />
-                印刷条件
+                {isDirectPreview ? "印刷条件を変更" : "印刷条件"}
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -401,7 +435,7 @@ export default function MeetingsPrintPage() {
                 1面談ごとに改ページ
               </label>
             </CardContent>
-          </Card>
+          </Card>}
 
           {loading ? (
             <RecordListLoadingSkeleton />

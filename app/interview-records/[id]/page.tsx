@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import type { ComponentType } from "react"
-import { ArrowLeft, Building2, Calendar, Clock, FileText, MapPin, User } from "lucide-react"
+import { ArrowLeft, Building2, Calendar, Clock, FileText, MapPin, Printer, User } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -73,12 +73,22 @@ export default async function InterviewRecordDetailPage({ params }: InterviewRec
             </p>
           </div>
         </div>
-        <Button asChild variant="outline">
-          <Link href={`/people/${record.personId}`}>
-            <User className="h-4 w-4" />
-            人材詳細
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {isRegularInterview && (
+            <Button asChild variant="outline">
+              <Link href={`/meetings/print?record=${encodeURIComponent(record.id)}`}>
+                <Printer className="h-4 w-4" />
+                印刷
+              </Link>
+            </Button>
+          )}
+          <Button asChild variant="outline">
+            <Link href={`/people/${record.personId}`}>
+              <User className="h-4 w-4" />
+              人材詳細
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card>
