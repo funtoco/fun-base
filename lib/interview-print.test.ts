@@ -59,6 +59,14 @@ test("filterPrintableInterviews matches the meetings list exact cutoff for relat
   )
 
   assert.deepEqual(result.map((item) => item.id), [])
+
+  const earlyMorningResult = filterPrintableInterviews(
+    [interview({ id: "cutoff", interviewDate: "2026-07-07" })],
+    { date: "30" },
+    new Date("2026-08-06T08:00:00+09:00")
+  )
+
+  assert.deepEqual(earlyMorningResult.map((item) => item.id), ["cutoff"])
 })
 
 test("sortPrintableInterviews supports timeline order and person order", () => {

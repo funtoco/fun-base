@@ -393,7 +393,6 @@ export default function MeetingsPrintPage() {
                 <input
                   type="checkbox"
                   checked={pageBreakByPerson}
-                  disabled={sortMode !== "person"}
                   onChange={(event) => {
                     setPageBreakByPerson(event.target.checked)
                     updateUrl({ pageBreak: event.target.checked })
@@ -446,7 +445,7 @@ export default function MeetingsPrintPage() {
               ) : (
                 <div className="space-y-4 print:space-y-0">
                   {sortedInterviews.map((interview) => (
-                    <InterviewPrintSheet key={interview.id} interview={interview} breakAfter />
+                    <InterviewPrintSheet key={interview.id} interview={interview} breakAfter={pageBreakByPerson} />
                   ))}
                 </div>
               )}
