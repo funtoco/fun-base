@@ -5,7 +5,7 @@ import { getServiceClient } from './storage'
 import { createKintoneWriteClientFromEnv } from './kintone-sync/kintone-write-client'
 import {
   pushCommentToKintone,
-  resolveKintoneRecordId,
+  resolveKintoneCommentTarget,
 } from './kintone-sync/comment-sync'
 
 type CommentRow = {
@@ -149,18 +149,20 @@ export async function addComment(params: {
 
   // kintone（app296）へ push（紐付け＋認証があれば・ベストエフォート）。
   // 接頭辞 [FunBase] を付けて出すため、戻ってくる Webhook は取り込み側でループ除外される。
+  // 宛先は Webhook でキャッシュした作業者（app296 プロセス管理）。未同期なら宛先なしで投稿する。
   const insertedRow = inserted as CommentRow
   try {
     const client = createKintoneWriteClientFromEnv()
     if (client) {
       const service = getServiceClient()
-      const kintoneRecordId = await resolveKintoneRecordId(service, c.id)
-      if (kintoneRecordId) {
+      const target = await resolveKintoneCommentTarget(service, c.id)
+      if (target) {
         const { kintoneCommentId } = await pushCommentToKintone({
           client,
-          kintoneRecordId,
+          kintoneRecordId: target.kintoneRecordId,
           authorLabel,
           body,
+          assigneeCodes: target.assigneeCodes,
         })
         await service
           .from('case_comments')
