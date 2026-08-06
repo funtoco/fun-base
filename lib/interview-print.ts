@@ -54,7 +54,6 @@ function isWithinDateRange(interviewDateValue: string, filters: InterviewPrintFi
     const daysAgo = Number.parseInt(filters.date, 10)
     if (!Number.isNaN(daysAgo)) {
       const filterDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
-      filterDate.setHours(0, 0, 0, 0)
       if (interviewDate < filterDate) return false
     }
   }

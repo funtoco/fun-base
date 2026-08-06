@@ -48,7 +48,7 @@ test("filterPrintableInterviews applies search, list filters, relative period, a
   assert.deepEqual(result.map((item) => item.id), ["1"])
 })
 
-test("filterPrintableInterviews includes the whole cutoff day for relative periods", () => {
+test("filterPrintableInterviews matches the meetings list exact cutoff for relative periods", () => {
   const result = filterPrintableInterviews(
     [
       interview({ id: "cutoff", interviewDate: "2026-07-07" }),
@@ -58,7 +58,7 @@ test("filterPrintableInterviews includes the whole cutoff day for relative perio
     new Date("2026-08-06T12:00:00+09:00")
   )
 
-  assert.deepEqual(result.map((item) => item.id), ["cutoff"])
+  assert.deepEqual(result.map((item) => item.id), [])
 })
 
 test("sortPrintableInterviews supports timeline order and person order", () => {
