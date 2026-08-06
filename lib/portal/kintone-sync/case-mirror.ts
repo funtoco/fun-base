@@ -7,7 +7,8 @@ import type { KintoneWebhookEvent } from './webhook'
 // クロスウォーク（案件INSERTのjoinキー）:
 //  - 法人 COID(company_ref) → connector_app_filters(field_code='COID', filter_value=COID)
 //      → connectors.tenant_id
-//  - 事業所 (office_name_disp) → 同一 tenant 内の tenant_offices.name と完全一致 → tenant_office_id
+//  - 事業所 (office_details[].office_name_disp) → 同一 tenant 内の tenant_offices.name と
+//      完全一致（正規化後）→ visa_application_case_offices（複数可・配列順が sort_order）
 //  - 申請人 HRID(koyou_details[].koyou_hrid) → people.external_id（同一 tenant）→ people.id
 //      （雇用条件書サブテーブルの各行＝複数人分の案件メンバー）
 
@@ -47,7 +48,8 @@ export interface MappedCaseRow {
   driveFolderUrl: string | null
   /** crosswalk 素材 */
   coid: string | null
-  officeName: string | null
+  /** 事業所サブテーブル(office_details)の各行の事業所名（配列順＝表示順）。 */
+  officeNames: string[]
   /** 雇用条件書サブテーブルの各行（複数人分の申請人素材）。 */
   koyouTargets: KoyouMemberSource[]
 }
@@ -62,6 +64,36 @@ function fieldStr(record: Record<string, FieldValue>, code: string): string | nu
 
 /** SUBTABLE の1行（`{ id?, value: { subCode: { value } } }`）。 */
 type SubtableRow = { id?: string; value: Record<string, FieldValue> }
+
+/**
+ * office_details サブテーブル → 事業所名の配列（配列順を保つ）。
+ * 空行は無視し、同一名の重複行は先勝ちで1つに畳む（kintone 側の入力ミス吸収）。
+ */
+function readOfficeNames(r: Record<string, FieldValue>): string[] {
+  const raw = r['office_details']?.value
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const row of raw as SubtableRow[]) {
+    const v = row.value?.['office_name_disp']?.value
+    if (v === undefined || v === null || v === '') {
+      continue
+    }
+    const name = String(v).trim()
+    if (!name) {
+      continue
+    }
+    const key = name.toLocaleLowerCase('ja-JP')
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    out.push(name)
+  }
+  return out
+}
 
 /** koyou_details サブテーブル → 申請人素材の配列（koyou_ref/koyou_hrid が両方無い行は無視）。 */
 function readKoyouTargets(r: Record<string, FieldValue>): KoyouMemberSource[] {
@@ -109,7 +141,7 @@ export function mapKintoneRecordToCaseRow(event: KintoneWebhookEvent): MappedCas
     entityType: 'corporate',
     driveFolderUrl: fieldStr(r, 'drive_folder_url'),
     coid: fieldStr(r, 'company_ref'),
-    officeName: fieldStr(r, 'office_name_disp'),
+    officeNames: readOfficeNames(r),
     koyouTargets: readKoyouTargets(r),
   }
 }
@@ -145,26 +177,54 @@ export async function resolveTenantByCoid(
   return (conn as { tenant_id: string } | null)?.tenant_id ?? null
 }
 
-/** 事業所名 → tenant_office_id（同一 tenant 内で完全一致名寄せ）。未解決は null。 */
-export async function resolveTenantOfficeByName(
+// DB は UNIQUE(tenant_id, lower(name))、コードベースの正準キーは name.trim().toLocaleLowerCase('ja-JP')。
+// 完全一致(eq)だと大小文字・空白のドリフトで案件がサイレント欠落するため、正規化して照合する。
+function normalizeOfficeName(s: string): string {
+  return s.trim().toLocaleLowerCase('ja-JP')
+}
+
+/** 名寄せ結果。resolved は入力順を保つ（＝case_offices の sort_order）。 */
+export interface OfficeResolution {
+  resolved: string[]
+  unresolvedNames: string[]
+}
+
+/**
+ * 事業所名の配列 → tenant_office_id の配列（同一 tenant 内で正規化名寄せ）。
+ * 解決できなかった名前は unresolvedNames に集める（呼び出し側で警告に使う）。
+ */
+export async function resolveTenantOfficesByNames(
   service: ServiceClient,
   tenantId: string,
-  officeName: string | null
-): Promise<string | null> {
-  if (!officeName) {
-    return null
+  officeNames: string[]
+): Promise<OfficeResolution> {
+  if (officeNames.length === 0) {
+    return { resolved: [], unresolvedNames: [] }
   }
-  // DB は UNIQUE(tenant_id, lower(name))、コードベースの正準キーは name.trim().toLocaleLowerCase('ja-JP')。
-  // 完全一致(eq)だと大小文字・空白のドリフトで案件がサイレント欠落するため、正規化して照合する。
-  const normalize = (s: string) => s.trim().toLocaleLowerCase('ja-JP')
-  const target = normalize(officeName)
   const { data } = await service
     .from('tenant_offices')
     .select('id, name')
     .eq('tenant_id', tenantId)
   const rows = (data as { id: string; name: string }[] | null) ?? []
-  const match = rows.find((r) => normalize(r.name) === target)
-  return match?.id ?? null
+  const idByName = new Map(rows.map((r) => [normalizeOfficeName(r.name), r.id]))
+
+  const resolved: string[] = []
+  const unresolvedNames: string[] = []
+  const seenIds = new Set<string>()
+  for (const name of officeNames) {
+    const id = idByName.get(normalizeOfficeName(name))
+    if (!id) {
+      unresolvedNames.push(name)
+      continue
+    }
+    // 別名が同一事業所に解決した場合の重複を防ぐ（uq_vaco 違反回避）。
+    if (seenIds.has(id)) {
+      continue
+    }
+    seenIds.add(id)
+    resolved.push(id)
+  }
+  return { resolved, unresolvedNames }
 }
 
 /** HRID → people.id（同一 tenant の external_id 一致）。未解決は null。 */
@@ -203,6 +263,70 @@ export interface MirrorResult {
 }
 
 /**
+ * 案件の事業所を officeIds（配列順＝sort_order）に一致させる。
+ * kintone から消えた事業所は削除する。ただし office 書類の格納先（代表事業所）を
+ * 消すと既存書類が孤立するため、代表事業所だけは残す。
+ */
+async function syncCaseOffices(
+  service: ServiceClient,
+  params: { caseId: string; tenantId: string; officeIds: string[] }
+): Promise<void> {
+  const { caseId, tenantId, officeIds } = params
+
+  const { data: existingRows } = await service
+    .from('visa_application_case_offices')
+    .select('id, tenant_office_id, sort_order')
+    .eq('case_id', caseId)
+    .order('sort_order', { ascending: true })
+  const existing = (existingRows as
+    | { id: string; tenant_office_id: string; sort_order: number }[]
+    | null) ?? []
+  const primaryOfficeId = existing[0]?.tenant_office_id ?? null
+
+  const desired = new Set(officeIds)
+  const existingByOffice = new Map(existing.map((r) => [r.tenant_office_id, r]))
+
+  // 追加・並べ替え。sort_order は配列順で振り直す。
+  for (const [index, officeId] of officeIds.entries()) {
+    const current = existingByOffice.get(officeId)
+    if (!current) {
+      const { error } = await service.from('visa_application_case_offices').insert({
+        case_id: caseId,
+        tenant_id: tenantId,
+        tenant_office_id: officeId,
+        sort_order: index,
+      })
+      if (error) {
+        // 事業所の欠落はテンプレDLとアクセス境界に直結するため握り潰さない。
+        console.error('Error inserting case office:', error)
+      }
+      continue
+    }
+    if (current.sort_order !== index) {
+      await service
+        .from('visa_application_case_offices')
+        .update({ sort_order: index })
+        .eq('id', current.id)
+    }
+  }
+
+  // kintone から消えた事業所を除去（代表事業所は書類の格納先なので残す）。
+  for (const row of existing) {
+    if (desired.has(row.tenant_office_id)) {
+      continue
+    }
+    if (row.tenant_office_id === primaryOfficeId) {
+      console.warn(
+        `[case-mirror] 代表事業所 ${primaryOfficeId} が kintone の事業所一覧から外れましたが、` +
+          `office書類の格納先のため case ${caseId} に残します。`
+      )
+      continue
+    }
+    await service.from('visa_application_case_offices').delete().eq('id', row.id)
+  }
+}
+
+/**
  * app296 レコードを FunBase 案件へミラーする。
  * DELETE は案件を archived 化。ADD/UPDATE はクロスウォーク解決 → kintone_record_id で upsert →
  * 申請人メンバー付与 → 新規時は要件 materialize（ベストエフォート）。
@@ -231,12 +355,13 @@ export async function mirrorCaseFromKintone(
     )
     return { caseId: null, created: false, skipped: 'tenant_not_resolved' }
   }
-  const tenantOfficeId = await resolveTenantOfficeByName(
+  // 事業所は複数可。名寄せできた分だけ採用し、できなかった名前は警告に出す。
+  const { resolved: officeIds, unresolvedNames } = await resolveTenantOfficesByNames(
     service,
     tenantId,
-    mapped.officeName
+    mapped.officeNames
   )
-  if (!tenantOfficeId) {
+  if (unresolvedNames.length > 0) {
     // 事業所名が FunBase の tenant_offices と一致しない。OP が正しい名前を選べるよう候補を出す。
     const { data: offices } = await service
       .from('tenant_offices')
@@ -245,9 +370,16 @@ export async function mirrorCaseFromKintone(
       .eq('is_active', true)
     const names = ((offices as { name: string }[] | null) ?? []).map((o) => o.name)
     console.warn(
-      `[case-mirror] skipped=office_not_resolved kintoneRecord=${mapped.kintoneRecordId} ` +
-        `tenant=${tenantId} officeName=${JSON.stringify(mapped.officeName)} ` +
+      `[case-mirror] office_not_resolved kintoneRecord=${mapped.kintoneRecordId} ` +
+        `tenant=${tenantId} 未解決の事業所名=${JSON.stringify(unresolvedNames)} ` +
         `／FunBaseにあるこの法人の事業所名: ${JSON.stringify(names)}`
+    )
+  }
+  if (officeIds.length === 0) {
+    // 1件も解決できない案件は RLS 上だれにも見えないため作らない（fail-closed）。
+    console.warn(
+      `[case-mirror] skipped=office_not_resolved kintoneRecord=${mapped.kintoneRecordId} ` +
+        `tenant=${tenantId}（解決できた事業所が0件）`
     )
     return { caseId: null, created: false, skipped: 'office_not_resolved' }
   }
@@ -255,7 +387,6 @@ export async function mirrorCaseFromKintone(
   // 案件行（status は DB 既定 'draft'／Phase5 の UPDATE_STATUS で更新するためここでは触らない）。
   const row = {
     tenant_id: tenantId,
-    tenant_office_id: tenantOfficeId,
     entity_type: mapped.entityType,
     application_category: mapped.applicationCategory,
     field: mapped.field,
@@ -290,6 +421,10 @@ export async function mirrorCaseFromKintone(
     created = true
   }
 
+  // 案件の事業所を kintone の内容に合わせる（配列順＝sort_order）。
+  // kintone が発生源なので、そこから消えた事業所は FunBase 側からも外す。
+  await syncCaseOffices(service, { caseId, tenantId, officeIds })
+
   // 申請人メンバー（雇用条件書サブテーブルの各人）。重複回避で upsert。
   // 同一 person が複数行に現れても1回だけ付与する（同一イベント内の重複を吸収）。
   const seenPersonIds = new Set<string>()
@@ -309,14 +444,13 @@ export async function mirrorCaseFromKintone(
     if (member) {
       continue
     }
-    // tenant_id/tenant_office_id は NOT NULL＋複合FK(case_id,tenant_id,tenant_office_id)。
+    // tenant_id は NOT NULL＋複合FK(case_id,tenant_id)。
     // service-role でも列制約はバイパスされないため、案件と同一の値を必ず渡す。
     const { error: memberError } = await service
       .from('visa_application_case_members')
       .insert({
         case_id: caseId,
         tenant_id: tenantId,
-        tenant_office_id: tenantOfficeId,
         person_id: personId,
       })
     if (memberError) {
