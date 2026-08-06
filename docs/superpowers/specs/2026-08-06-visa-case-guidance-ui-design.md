@@ -316,11 +316,13 @@ No.7 は `fields: ['food_service', 'accommodation']`。
 
 1. 証明書の種類は「その３の２」（個人事業主用）を選択
 2. 基本の税目にチェック — 申告所得税及び復興特別所得税 / 消費税及び地方消費税
-3. 「その他」欄に追記 — 源泉所得税及び復興特別所得税（記載漏れが多い項目です）/ 該当する場合のみ: 相続税・贈与税
+3. 「その他」欄に追記 — 源泉所得税及び復興特別所得税（記載漏れが多い項目です）、該当する場合のみ相続税・贈与税
 4. 証明を受けようとする年度は直近のものを記入
 
 `warning`: 「法人税」の項目は個人事業主には関係ありません。チェック不要です。
-`caption`: 個人事業主の場合、「代表者氏名」欄は空欄のままで問題ありません。
+`caption`: 個人事業主の場合、「代表者氏名」欄は空欄のままで問題ありません。交付請求書の証明書の種類は「その３の２」（個人事業主用）を選択します。
+
+（PDF はこのスライドに ※ を2行持つ。`caption` は両方を含める。）
 
 法人向け PDF（PDFページ 8–13 = スライド P06–P11）:
 
@@ -329,14 +331,18 @@ No.7 は `fields: ['food_service', 'accommodation']`。
 | `corp-registry` | 8 | half-left | 1 | 履歴事項全部証明書 | |
 | `corp-residence-certificate` | 8 | half-right | 2 | 住民票の写し | 本籍地記載必須 |
 | `corp-labor-insurance-certificate` | 9 | full | 3 | 労働保険料等納付証明書 | |
-| `corp-tax-certificate-3` | 10 | half-left | 4 | 納税証明書その3 | |
-| `corp-tax-certificate-3-form` | 10 | half-right | 4 | 納税証明書その3の請求書記入例 | その他の（ ）内は追記でご記入ください。 |
+| `corp-tax-certificate-3` | 10 | half-left | 4 | 納税証明書（その３） | |
+| `corp-tax-certificate-3-form` | 10 | half-right | 4 | 納税証明書（その３）の請求書記入例 | その他の（ ）内は追記でご記入ください。 |
 | `social-insurance-inquiry` | 11 | half-left | 5-① | 社会保険料納入状況照会回答票 | |
 | `social-insurance-receipt` | 11 | half-right | 5-② | 健康保険 / 厚生年金保険料領収証書 | |
 | `corp-resident-tax-certificate` | 12 | full | 6 | 法人住民税 納税証明書 | |
 
 法人向け No.7（営業許可証）は個人事業主向け PDF のスライドと同一内容のため、`business-permit-food` / `business-permit-lodging` を共有し、法人向け PDF からは切り出さない。
 サンプル画像は合計14枚。
+
+サンプルの「タイトル」はダイアログの表示ラベルであり、PDF のスライド見出しではなく**対応する書類名に合わせて正規化する**。
+法人 No.4 のスライド見出しは `納税証明書その3` だが、書類名が `税務署発行の納税証明書（その３）`（逐語）なので、
+サンプル側も `納税証明書（その３）` に揃えている。書類の名称・備考・`points` / `warning` は逐語転記のまま。
 
 ## 画面仕様
 
