@@ -31,7 +31,7 @@ function selectFlow(
 }
 
 function selectCouncils(field: Field | null): CouncilGuide[] {
-  if (!field) return COUNCIL_GUIDES
+  if (!field) return [...COUNCIL_GUIDES]
   const matched = COUNCIL_GUIDES.filter((guide) => guide.fields.includes(field))
   const rest = COUNCIL_GUIDES.filter((guide) => !guide.fields.includes(field))
   return [...matched, ...rest]

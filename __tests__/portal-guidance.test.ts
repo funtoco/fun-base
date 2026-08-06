@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { selectGuidance } from '@/lib/portal/guidance'
+import { COUNCIL_GUIDES } from '@/lib/portal/guidance/council'
 import { FLOW_STEPS } from '@/lib/portal/guidance/flow'
+import { FIELD_LABELS, type Field } from '@/lib/portal/types'
 
 const CONDITIONS = [
   { entityType: 'corporate', category: 'initial' },
@@ -56,7 +58,7 @@ describe('selectGuidance: 申請の流れ', () => {
 describe('selectGuidance: 協議会', () => {
   it('分野が介護なら介護の協議会が先頭に来る', () => {
     const g = selectGuidance({ entityType: 'corporate', category: 'initial', field: 'care' })
-    expect(g.councils[0].id).toBe('care')
+    expect(g.councils.map((c) => c.id)).toEqual(['care', 'food', 'other'])
   })
 
   it('分野が外食業なら外食・飲食料品製造の協議会が先頭に来る', () => {
@@ -65,7 +67,7 @@ describe('selectGuidance: 協議会', () => {
       category: 'initial',
       field: 'food_service',
     })
-    expect(g.councils[0].id).toBe('food')
+    expect(g.councils.map((c) => c.id)).toEqual(['food', 'care', 'other'])
   })
 
   it('分野が宿泊なら「その他分野」が先頭に来る', () => {
@@ -74,11 +76,26 @@ describe('selectGuidance: 協議会', () => {
       category: 'initial',
       field: 'accommodation',
     })
-    expect(g.councils[0].id).toBe('other')
+    expect(g.councils.map((c) => c.id)).toEqual(['other', 'care', 'food'])
   })
 
   it('分野が未指定でも協議会は全件返る', () => {
     const g = selectGuidance({ entityType: 'corporate', category: 'initial' })
     expect(g.councils.map((c) => c.id)).toEqual(['care', 'food', 'other'])
+  })
+
+  it.each(Object.keys(FIELD_LABELS) as Field[])(
+    '分野 %s に対応する協議会が必ず先頭に来る',
+    (field) => {
+      const g = selectGuidance({ entityType: 'corporate', category: 'initial', field })
+      expect(g.councils[0].fields).toContain(field)
+      expect(g.councils).toHaveLength(3)
+    }
+  )
+
+  it('協議会は手順か説明のどちらかを必ず持つ', () => {
+    for (const guide of COUNCIL_GUIDES) {
+      expect(guide.steps.length > 0 || Boolean(guide.description)).toBe(true)
+    }
   })
 })
