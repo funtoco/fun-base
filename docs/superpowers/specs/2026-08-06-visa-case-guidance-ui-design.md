@@ -113,6 +113,9 @@ export interface DocumentSample {
   id: string
   title: string
   src: string
+  /** next/image に渡す実寸。切り出しプリセットで決まる（half = 982×1200 / full = 1200×733） */
+  width: number
+  height: number
   caption?: string
   /** 「交付請求時のポイント」のような手順 */
   points?: string[]
@@ -291,14 +294,16 @@ No.7 は `fields: ['food_service', 'accommodation']`。
 
 個人事業主向け PDF（PDFページ 8–11 = スライド P06–P09）:
 
-| sampleId | 対応 No | タイトル | 注釈 |
-|---|---|---|---|
-| `sp-residence-certificate` | 1 | 住民票の写し（個人事業主） | 本籍地記載必須 |
-| `labor-insurance-certificate` | 2 | 労働保険料等納付証明書 | |
-| `sp-tax-certificate-3` | 3 | 個人事業主の納税証明書（その３） | 下記「交付請求時のポイント」 |
-| `sp-resident-tax-certificate` | 6 | 直近2年度分の個人住民税の納税証明書 | 市区町村により様式は異なります。直近2年度分（2枚）が必要です。 |
-| `business-permit-food` | 7 | 営業許可証（外食） | |
-| `business-permit-lodging` | 7 | 営業許可証（宿泊） | |
+| sampleId | PDFページ | プリセット | 対応 No | タイトル | 注釈 |
+|---|---|---|---|---|---|
+| `sp-residence-certificate` | 8 | half-left | 1 | 住民票の写し（個人事業主） | 本籍地記載必須 |
+| `sp-labor-insurance-certificate` | 8 | half-right | 2 | 労働保険料等納付証明書 | |
+| `sp-tax-certificate-3` | 9 | half-left | 3 | 個人事業主の納税証明書（その３） | 下記「交付請求時のポイント」 |
+| `sp-resident-tax-certificate` | 10 | full | 6 | 直近2年度分の個人住民税の納税証明書 | 市区町村により様式は異なります。直近2年度分（2枚）が必要です。 |
+| `business-permit-food` | 11 | half-left | 7 | 営業許可証（外食） | |
+| `business-permit-lodging` | 11 | half-right | 7 | 営業許可証（宿泊） | |
+
+スライド P07（PDFページ 9）の右半分は「交付請求時のポイント」のテキストカードのため、画像として切り出さず `points` / `warning` に転記する。
 
 `sp-tax-certificate-3` の `points`:
 
@@ -312,18 +317,19 @@ No.7 は `fields: ['food_service', 'accommodation']`。
 
 法人向け PDF（PDFページ 8–13 = スライド P06–P11）:
 
-| sampleId | 対応 No | タイトル | 注釈 |
-|---|---|---|---|
-| `corp-registry` | 1 | 履歴事項全部証明書 | |
-| `corp-residence-certificate` | 2 | 住民票の写し | 本籍地記載必須 |
-| `labor-insurance-certificate` | 3 | 労働保険料等納付証明書 | 個人事業主向けと同一画像を共有 |
-| `corp-tax-certificate-3` | 4 | 納税証明書その3 | |
-| `corp-tax-certificate-3-form` | 4 | 納税証明書その3の請求書記入例 | その他の（ ）内は追記でご記入ください。 |
-| `social-insurance-inquiry` | 5-① | 社会保険料納入状況照会回答票 | |
-| `social-insurance-receipt` | 5-② | 健康保険 / 厚生年金保険料領収証書 | |
-| `corp-resident-tax-certificate` | 6 | 法人住民税 納税証明書 | |
-| `business-permit-food` | 7 | 営業許可証（外食） | 個人事業主向けと同一画像を共有 |
-| `business-permit-lodging` | 7 | 営業許可証（宿泊） | 個人事業主向けと同一画像を共有 |
+| sampleId | PDFページ | プリセット | 対応 No | タイトル | 注釈 |
+|---|---|---|---|---|---|
+| `corp-registry` | 8 | half-left | 1 | 履歴事項全部証明書 | |
+| `corp-residence-certificate` | 8 | half-right | 2 | 住民票の写し | 本籍地記載必須 |
+| `corp-labor-insurance-certificate` | 9 | full | 3 | 労働保険料等納付証明書 | |
+| `corp-tax-certificate-3` | 10 | half-left | 4 | 納税証明書その3 | |
+| `corp-tax-certificate-3-form` | 10 | half-right | 4 | 納税証明書その3の請求書記入例 | その他の（ ）内は追記でご記入ください。 |
+| `social-insurance-inquiry` | 11 | half-left | 5-① | 社会保険料納入状況照会回答票 | |
+| `social-insurance-receipt` | 11 | half-right | 5-② | 健康保険 / 厚生年金保険料領収証書 | |
+| `corp-resident-tax-certificate` | 12 | full | 6 | 法人住民税 納税証明書 | |
+
+法人向け No.7（営業許可証）は個人事業主向け PDF のスライドと同一内容のため、`business-permit-food` / `business-permit-lodging` を共有し、法人向け PDF からは切り出さない。
+サンプル画像は合計14枚。
 
 ## 画面仕様
 
@@ -373,12 +379,23 @@ No.7 は `fields: ['food_service', 'accommodation']`。
 `scripts/extract-guidance-samples.sh` を追加する。
 
 - 入力: ローカルの PDF 2 本（パスは引数、既定は `~/Downloads/`）
-- 実装: `pdftoppm -r 150 -x -y -W -H -png` で各スライドから書類部分だけを切り出し、`sips -s format ...` で WebP 化・長辺 1200px にリサイズ
-- 出力: `public/guidance/samples/<sampleId>.webp`
-- PDF はコミットしない。生成された WebP のみコミットする
-- スクリプト冒頭に各 `sampleId` と切り出し矩形（ページ番号・x・y・幅・高さ）を表で持ち、再生成できるようにする
+- 実装: `pdftoppm -r 150 -x -y -W -H -png` で各スライドから書類部分を切り出し、`sips -s format jpeg -s formatOptions 70 -Z 1200` で JPEG 化・長辺 1200px にリサイズ
+- 出力: `public/guidance/samples/<sampleId>.jpg`
+- PDF はコミットしない。生成された JPEG のみコミットする（1枚あたり約 180KB、全14枚で約 2.5MB）
 
-`pdftoppm` の領域指定オプションが動作することは実機で確認済み。
+切り出しは 150dpi のページ（1754 × 1241 px）に対する3プリセットで表現する。スライドはすべて 2-up か中央1点のため、これで全サンプルを賄える。
+
+| プリセット | x | y | W | H | 出力実寸 |
+|---|---|---|---|---|---|
+| `half-left` | 0 | 170 | 877 | 1071 | 982 × 1200 |
+| `half-right` | 877 | 170 | 877 | 1071 | 982 × 1200 |
+| `full` | 0 | 170 | 1754 | 1071 | 1200 × 733 |
+
+`y = 170` はスライド見出し「取得書類一覧サンプル」を落とし、書類名と No. を残す位置。
+`pdftoppm` の領域指定と各プリセットの出力は実機で確認済み。
+
+**`sips` は WebP を出力できない**（macOS 26 で `-s format webp` が失敗、`cwebp` も未インストール）ため JPEG を採用する。
+`next.config.mjs` で `images.unoptimized: true` のため、`next/image` は実寸の `width` / `height` を渡して素の `img` として描画される。
 
 前提: これらは元資料の時点でマスキング済みで、既にメール配布している内容のため `public/`（未認証アクセス可）に置いてよいものとする。認証を必須にする場合は API ルート経由の配信に変更する。
 
