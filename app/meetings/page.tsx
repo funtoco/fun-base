@@ -33,7 +33,8 @@ import {
   MapPin,
   FileText,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Printer
 } from "lucide-react"
 
 const MEETING_DATE_FILTER_OPTIONS = [
@@ -324,9 +325,17 @@ export default function MeetingsPage() {
     <AuthGuard>
       <div className="p-6 space-y-6">
         {/* Page Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">面談一覧</h1>
-          <p className="text-muted-foreground mt-2">定期面談の記録と定期面談レポートを管理</p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">面談一覧</h1>
+            <p className="text-muted-foreground mt-2">定期面談の記録と定期面談レポートを管理</p>
+          </div>
+          <Button asChild variant="outline">
+            <Link href={`/meetings/print${searchParams.toString() ? `?${searchParams.toString()}` : ""}`}>
+              <Printer className="h-4 w-4" />
+              印刷
+            </Link>
+          </Button>
         </div>
 
         {loading ? (
