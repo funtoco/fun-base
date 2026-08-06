@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import {
   COUNCIL_INTRO,
@@ -277,6 +279,13 @@ describe('selectGuidance: 書類サンプル', () => {
     for (const [key, docs] of Object.entries(DOCUMENTS)) {
       const ids = docs.flatMap((d) => d.sampleIds ?? [])
       expect(new Set(ids).size, `${key} で sampleId が重複`).toBe(ids.length)
+    }
+  })
+
+  it('すべてのサンプル画像が public/ に存在する', () => {
+    for (const sample of Object.values(DOCUMENT_SAMPLES)) {
+      const path = join(process.cwd(), 'public', sample.src)
+      expect(existsSync(path), `画像がありません: ${sample.src}`).toBe(true)
     }
   })
 })
