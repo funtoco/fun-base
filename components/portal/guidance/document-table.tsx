@@ -30,14 +30,14 @@ export function DocumentTable({ documents, samples, category }: DocumentTablePro
         {category === 'initial' ? DOCUMENTS_INTRO_INITIAL : DOCUMENTS_INTRO_RENEWAL}
       </p>
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <Table className="min-w-[880px]">
+        <Table className="min-w-[772px]">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[48px]">No</TableHead>
-              <TableHead className="min-w-[260px]">必要書類</TableHead>
-              <TableHead className="w-[120px]">区分</TableHead>
-              <TableHead className="w-[160px]">請求先</TableHead>
-              <TableHead className="min-w-[280px]">備考</TableHead>
+              <TableHead className="w-[44px]">No</TableHead>
+              <TableHead className="min-w-[240px]">必要書類</TableHead>
+              <TableHead className="w-[112px]">区分</TableHead>
+              <TableHead className="w-[136px]">請求先</TableHead>
+              <TableHead className="min-w-[240px]">備考</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -66,8 +66,10 @@ export function DocumentTable({ documents, samples, category }: DocumentTablePro
                   <TableCell className="align-top whitespace-pre-line text-sm">
                     {doc.copyType}
                   </TableCell>
-                  <TableCell className="align-top text-sm">{doc.issuer ?? '—'}</TableCell>
-                  <TableCell className="align-top">
+                  <TableCell className="align-top whitespace-normal text-sm">
+                    {doc.issuer ?? '—'}
+                  </TableCell>
+                  <TableCell className="align-top whitespace-normal">
                     {doc.notes.length === 0 ? (
                       <span className="text-sm text-muted-foreground">—</span>
                     ) : (
