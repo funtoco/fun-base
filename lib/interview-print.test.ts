@@ -48,6 +48,18 @@ test("filterPrintableInterviews applies search, list filters, relative period, a
   assert.deepEqual(result.map((item) => item.id), ["1"])
 })
 
+test("filterPrintableInterviews can target a single record for detail print links", () => {
+  const interviews = [
+    interview({ id: "target", personId: "p1", personName: "Aさん" }),
+    interview({ id: "other-same-person", personId: "p1", personName: "Aさん", interviewDate: "2026-07-15" }),
+    interview({ id: "other-person", personId: "p2", personName: "Bさん" }),
+  ]
+
+  const result = filterPrintableInterviews(interviews, { recordIds: ["target"] })
+
+  assert.deepEqual(result.map((item) => item.id), ["target"])
+})
+
 test("filterPrintableInterviews matches the meetings list exact cutoff for relative periods", () => {
   const result = filterPrintableInterviews(
     [

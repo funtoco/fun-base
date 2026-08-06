@@ -3,6 +3,7 @@ import type { RegularInterview } from "@/lib/models"
 export type InterviewPrintSortMode = "person" | "timeline"
 
 export type InterviewPrintFilters = {
+  recordIds?: string[]
   search?: string
   quarter?: string[]
   company?: string[]
@@ -70,6 +71,8 @@ export function filterPrintableInterviews(
   const search = normalizeText(filters.search)
 
   return interviews.filter((interview) => {
+    if (!isInValues(interview.id, filters.recordIds)) return false
+
     if (search) {
       const haystack = [
         interview.personName,

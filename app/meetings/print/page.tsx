@@ -111,6 +111,7 @@ export default function MeetingsPrintPage() {
   const [companyFilter, setCompanyFilter] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "company"))
   const [staffFilter, setStaffFilter] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "staff"))
   const [methodFilter, setMethodFilter] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "method"))
+  const [recordIds] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "record"))
   const [quarterInput, setQuarterInput] = useState(() => getQueryCsv(getQueryMultiValues(new URLSearchParams(searchParams.toString()), "quarter")))
   const [companyInput, setCompanyInput] = useState(() => getQueryCsv(getQueryMultiValues(new URLSearchParams(searchParams.toString()), "company")))
   const [staffInput, setStaffInput] = useState(() => getQueryCsv(getQueryMultiValues(new URLSearchParams(searchParams.toString()), "staff")))
@@ -166,6 +167,7 @@ export default function MeetingsPrintPage() {
     const nextSort = next.sort ?? sortMode
     const nextPageBreak = next.pageBreak ?? pageBreakByPerson
 
+    if (recordIds.length > 0) params.set("record", recordIds.join(","))
     if (nextFrom) params.set("from", nextFrom)
     if (nextTo) params.set("to", nextTo)
     if (nextSort !== "person") params.set("sort", nextSort)
@@ -176,6 +178,7 @@ export default function MeetingsPrintPage() {
 
   const filteredInterviews = useMemo(
     () => filterPrintableInterviews(interviews, {
+      recordIds,
       search: searchTerm,
       quarter: quarterFilter,
       company: companyFilter,
@@ -185,7 +188,7 @@ export default function MeetingsPrintPage() {
       from: fromDate,
       to: toDate,
     }),
-    [interviews, searchTerm, quarterFilter, companyFilter, staffFilter, methodFilter, dateFilter, fromDate, toDate]
+    [interviews, recordIds, searchTerm, quarterFilter, companyFilter, staffFilter, methodFilter, dateFilter, fromDate, toDate]
   )
 
   const sortedInterviews = useMemo(() => sortPrintableInterviews(filteredInterviews, sortMode), [filteredInterviews, sortMode])
@@ -235,11 +238,13 @@ export default function MeetingsPrintPage() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-foreground">面談記録 印刷</h1>
-                <p className="mt-2 text-muted-foreground">条件を指定して、施設確認用に一括印刷できます</p>
+                <p className="mt-2 text-muted-foreground">
+                  {recordIds.length > 0 ? "選択した面談記録を個別印刷できます" : "条件を指定して、施設確認用に一括印刷できます"}
+                </p>
               </div>
               <Button onClick={() => window.print()} disabled={loading || filteredInterviews.length === 0}>
                 <Printer className="h-4 w-4" />
-                一括印刷
+                {recordIds.length > 0 ? "個別印刷" : "一括印刷"}
               </Button>
             </div>
           </div>
@@ -248,7 +253,7 @@ export default function MeetingsPrintPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <FilterIcon className="h-4 w-4" />
-                印刷条件
+                {recordIds.length > 0 ? "個別印刷対象" : "印刷条件"}
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
