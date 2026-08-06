@@ -112,6 +112,10 @@ export default function MeetingsPrintPage() {
   const [staffFilter, setStaffFilter] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "staff"))
   const [methodFilter, setMethodFilter] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "method"))
   const [recordIds] = useState<string[]>(() => getQueryMultiValues(new URLSearchParams(searchParams.toString()), "record"))
+  const source = searchParams.get("source")
+  const personId = searchParams.get("person") ?? ""
+  const isPersonPreview = source === "person" && Boolean(personId) && recordIds.length > 0
+  const [showFilters, setShowFilters] = useState(() => !isPersonPreview)
   const [quarterInput, setQuarterInput] = useState(() => getQueryCsv(getQueryMultiValues(new URLSearchParams(searchParams.toString()), "quarter")))
   const [companyInput, setCompanyInput] = useState(() => getQueryCsv(getQueryMultiValues(new URLSearchParams(searchParams.toString()), "company")))
   const [staffInput, setStaffInput] = useState(() => getQueryCsv(getQueryMultiValues(new URLSearchParams(searchParams.toString()), "staff")))
@@ -167,6 +171,10 @@ export default function MeetingsPrintPage() {
     const nextSort = next.sort ?? sortMode
     const nextPageBreak = next.pageBreak ?? pageBreakByPerson
 
+    if (isPersonPreview) {
+      params.set("source", "person")
+      params.set("person", personId)
+    }
     if (recordIds.length > 0) params.set("record", recordIds.join(","))
     if (nextFrom) params.set("from", nextFrom)
     if (nextTo) params.set("to", nextTo)
@@ -229,31 +237,44 @@ export default function MeetingsPrintPage() {
         <div className="mx-auto max-w-5xl space-y-6 print:max-w-none print:space-y-4">
           <div className="print:hidden">
             <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
-              <Link href={`/meetings${meetingsListQuery ? `?${meetingsListQuery}` : ""}`}>
+              <Link href={isPersonPreview ? `/people/${personId}` : `/meetings${meetingsListQuery ? `?${meetingsListQuery}` : ""}`}>
                 <ArrowLeft className="h-4 w-4" />
-                面談一覧へ戻る
+                {isPersonPreview ? "人材詳細へ戻る" : "面談一覧へ戻る"}
               </Link>
             </Button>
 
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-bold text-foreground">面談記録 印刷</h1>
+                <h1 className="text-3xl font-bold text-foreground">
+                  {isPersonPreview ? "面談記録 印刷プレビュー" : "面談記録 印刷"}
+                </h1>
                 <p className="mt-2 text-muted-foreground">
-                  {recordIds.length > 0 ? "選択した面談記録を個別印刷できます" : "条件を指定して、施設確認用に一括印刷できます"}
+                  {isPersonPreview
+                    ? "人材詳細の面談記録だけをプレビューしています"
+                    : recordIds.length > 0
+                      ? "選択した面談記録を個別印刷できます"
+                      : "条件を指定して、施設確認用に一括印刷できます"}
                 </p>
               </div>
-              <Button onClick={() => window.print()} disabled={loading || filteredInterviews.length === 0}>
-                <Printer className="h-4 w-4" />
-                {recordIds.length > 0 ? "個別印刷" : "一括印刷"}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {isPersonPreview && !showFilters && (
+                  <Button variant="outline" onClick={() => setShowFilters(true)}>
+                    条件を変更
+                  </Button>
+                )}
+                <Button onClick={() => window.print()} disabled={loading || filteredInterviews.length === 0}>
+                  <Printer className="h-4 w-4" />
+                  {isPersonPreview ? "印刷する" : recordIds.length > 0 ? "個別印刷" : "一括印刷"}
+                </Button>
+              </div>
             </div>
           </div>
 
-          <Card className="print:hidden">
+          {showFilters && <Card className="print:hidden">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <FilterIcon className="h-4 w-4" />
-                {recordIds.length > 0 ? "個別印刷対象" : "印刷条件"}
+                {isPersonPreview ? "印刷条件を変更" : recordIds.length > 0 ? "個別印刷対象" : "印刷条件"}
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -406,7 +427,7 @@ export default function MeetingsPrintPage() {
                 1面談ごとに改ページ
               </label>
             </CardContent>
-          </Card>
+          </Card>}
 
           {loading ? (
             <RecordListLoadingSkeleton />

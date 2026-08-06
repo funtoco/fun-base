@@ -51,7 +51,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
       <div className="flex flex-wrap items-center justify-end gap-2">
         {personPrintQuery && (
           <Button asChild variant="outline" className="gap-2">
-            <Link href={`/meetings/print?record=${personPrintQuery}`}>
+            <Link href={`/meetings/print?source=person&person=${encodeURIComponent(params.id)}&record=${personPrintQuery}`}>
               <Printer className="h-4 w-4" />
               印刷
             </Link>
