@@ -15,14 +15,37 @@ import {
 } from '@/lib/portal/kintone-sync/office-doc-sync'
 import { listFilledOfficeDocCodes } from '@/lib/portal/kintone-sync/office-doc-status'
 import { createKintoneWriteClientFromEnv } from '@/lib/portal/kintone-sync/kintone-write-client'
+import {
+  extractKintoneAssigneeCodes,
+  applyKintoneAssigneesToCase,
+} from '@/lib/portal/kintone-sync/assignee-sync'
 import { getServiceClient } from '@/lib/portal/storage'
+import type { KintoneWebhookEvent } from '@/lib/portal/kintone-sync/webhook'
+
+/**
+ * app296 プロセス管理の作業者を案件行へキャッシュする（kintone コメントのメンション宛先）。
+ * payload に作業者フィールドが無いイベントでは何もしない（宛先を黙って消さない）。
+ * 失敗しても Webhook 全体は落とさない。
+ */
+async function cacheAssignees(event: KintoneWebhookEvent): Promise<void> {
+  const codes = extractKintoneAssigneeCodes(event.record)
+  if (codes === null) {
+    return
+  }
+  try {
+    await applyKintoneAssigneesToCase(getServiceClient(), event.recordId, codes)
+  } catch (error) {
+    console.error('kintone assignee cache failed:', error)
+  }
+}
 
 export const runtime = 'nodejs'
 
 // POST /api/kintone/webhook?secret=...
 // kintone「就労_ビザ案件管理」(app296) の Webhook 受信口。
 // 共有シークレット(?secret=)を検証し、レコード追加/更新/削除を FunBase 案件へミラーする。
-// ステータス変更(UPDATE_STATUS)・コメント(ADD_RECORD_COMMENT)は Phase5/6 で処理（当面は受けて no-op）。
+// ステータス変更(UPDATE_STATUS)・コメント(ADD_RECORD_COMMENT)は Phase5/6 で処理する。
+// あわせて、削除以外のイベントで作業者(プロセス管理)を案件行へキャッシュする（コメントのメンション宛先）。
 // kintone Webhook はリトライが弱く30sタイムアウトのため、極力軽く 200 を返す。
 export async function POST(request: NextRequest) {
   // 共有シークレット検証（URL クエリ）。
@@ -50,9 +73,12 @@ export async function POST(request: NextRequest) {
       case 'UPDATE_RECORD':
       case 'DELETE_RECORD': {
         const result = await mirrorCaseFromKintone(event)
+        // DELETE と未解決（tenant/office 不明）は案件行が無いのでここで終わり。
         if (!result.caseId) {
           return NextResponse.json({ ok: true, event: event.type, ...result })
         }
+        // 案件行が出来た後にキャッシュする（ADD_RECORD は upsert 前だと 0 件更新になる）。
+        await cacheAssignees(event)
         // 事業所書類ステータス（doc_status_*）: kintone が正。
         // まず OP の変更を FunBase へ反映し、次に kintone 側が空欄の書類だけ初期化する。
         // 初期化で発火する Webhook は2周目に空欄が無くなるため停止する。
@@ -76,6 +102,8 @@ export async function POST(request: NextRequest) {
       }
       // Phase5: ステータス変更を Supabase に反映（kintone へは再送しない＝ループ防止）。
       case 'UPDATE_STATUS': {
+        // 作業者が変わるのはプロセス管理の操作時＝このイベント。ステータス不明でも先に拾う。
+        await cacheAssignees(event)
         const label = extractKintoneStatusLabel(event.record)
         if (!label) {
           return NextResponse.json({ ok: true, event: 'UPDATE_STATUS', skipped: 'no_status' })
