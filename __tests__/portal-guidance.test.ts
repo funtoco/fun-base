@@ -1,11 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { guidanceDefaultsFromCases, selectGuidance } from '@/lib/portal/guidance'
+import {
+  COUNCIL_INTRO,
+  DOCUMENTS_INTRO_INITIAL,
+  DOCUMENTS_INTRO_RENEWAL,
+  guidanceDefaultsFromCases,
+  selectGuidance,
+} from '@/lib/portal/guidance'
 import { COUNCIL_GUIDES } from '@/lib/portal/guidance/council'
 import { DOCUMENTS } from '@/lib/portal/guidance/documents'
 import { FLOW_STEPS } from '@/lib/portal/guidance/flow'
 import { DOCUMENT_SAMPLES } from '@/lib/portal/guidance/samples'
-import { FIELD_LABELS, type Field } from '@/lib/portal/types'
-import type { VisaApplicationCase } from '@/lib/portal/types'
+import { FIELD_LABELS, type Field, type VisaApplicationCase } from '@/lib/portal/types'
 
 const CONDITIONS = [
   { entityType: 'corporate', category: 'initial' },
@@ -69,6 +74,12 @@ describe('selectGuidance: 申請の流れ', () => {
       'company-interview',
     ])
   })
+
+  it('貴社レーンの全ステップが shortTitle を持つ', () => {
+    for (const step of FLOW_STEPS.filter((s) => s.lane === 'company')) {
+      expect(step.shortTitle, `${step.id} に shortTitle がない`).toBeTruthy()
+    }
+  })
 })
 
 describe('selectGuidance: 協議会', () => {
@@ -113,6 +124,17 @@ describe('selectGuidance: 協議会', () => {
     for (const guide of COUNCIL_GUIDES) {
       expect(guide.steps.length > 0 || Boolean(guide.description)).toBe(true)
     }
+  })
+
+  it.each([
+    ['care', 4, 1],
+    ['food', 4, 2],
+    ['other', 0, 0],
+  ] as const)('協議会 %s は手順 %i 件・必要書類グループ %i 件', (id, steps, groups) => {
+    const guide = COUNCIL_GUIDES.find((c) => c.id === id)
+    expect(guide).toBeDefined()
+    expect(guide!.steps).toHaveLength(steps)
+    expect(guide!.requiredDocuments).toHaveLength(groups)
   })
 })
 
@@ -259,28 +281,39 @@ describe('selectGuidance: 書類サンプル', () => {
   })
 })
 
+describe('バレルから export される説明文', () => {
+  it('画面に出す説明文が空でない', () => {
+    for (const text of [COUNCIL_INTRO, DOCUMENTS_INTRO_INITIAL, DOCUMENTS_INTRO_RENEWAL]) {
+      expect(text.length).toBeGreaterThan(10)
+    }
+  })
+})
+
 describe('guidanceDefaultsFromCases', () => {
-  const makeCase = (over: Partial<VisaApplicationCase>): VisaApplicationCase =>
-    ({
-      id: 'c1',
-      tenantId: 't1',
-      tenantOfficeId: 'o1',
-      officeName: null,
-      entityType: 'corporate',
-      applicationCategory: 'initial',
-      field: 'other',
-      applicationType: null,
-      managementNumber: null,
-      status: 'collecting',
-      title: null,
-      note: null,
-      kintoneRecordId: null,
-      kintoneSyncStatus: null,
-      kintoneLastSyncedAt: null,
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
-      ...over,
-    }) as VisaApplicationCase
+  const BASE_CASE: VisaApplicationCase = {
+    id: 'c1',
+    tenantId: 't1',
+    tenantOfficeId: 'o1',
+    officeName: null,
+    entityType: 'corporate',
+    applicationCategory: 'initial',
+    field: 'other',
+    applicationType: null,
+    managementNumber: null,
+    status: 'collecting',
+    title: null,
+    note: null,
+    kintoneRecordId: null,
+    kintoneSyncStatus: null,
+    kintoneLastSyncedAt: null,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  }
+
+  const makeCase = (over: Partial<VisaApplicationCase>): VisaApplicationCase => ({
+    ...BASE_CASE,
+    ...over,
+  })
 
   it('案件がなければ 法人 × 初回 × 分野なし', () => {
     expect(guidanceDefaultsFromCases([])).toEqual({

@@ -70,6 +70,7 @@ function collectSamples(documents: RequiredDocument[]): DocumentSample[] {
     for (const id of doc.sampleIds ?? []) {
       // 同一リスト内で複数の書類が同じ sampleId を参照すると React の key が重複するためガードする。
       // 現在のデータでは到達しないが、documents.ts の編集で起こり得るため残している。
+      // 対になるデータ不変条件は __tests__ の「同一リスト内で同じ sampleId を2つの書類が参照しない」。
       if (seen.has(id)) continue
       const sample = DOCUMENT_SAMPLES[id]
       if (!sample) {
@@ -105,9 +106,9 @@ export function selectGuidance(input: {
  * listCases() は created_at の降順なので、先頭 = 最新の案件を採用する。
  */
 export function guidanceDefaultsFromCases(
-  cases: VisaApplicationCase[]
+  casesNewestFirst: VisaApplicationCase[]
 ): GuidanceCondition {
-  const latest = cases[0]
+  const latest = casesNewestFirst[0]
   return {
     entityType: latest?.entityType ?? 'corporate',
     category: latest?.applicationCategory ?? 'initial',
