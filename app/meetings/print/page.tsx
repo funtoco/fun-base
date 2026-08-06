@@ -54,7 +54,7 @@ function PrintMetaItem({ label, value }: { label: string; value?: string }) {
 
 function InterviewPrintCard({ interview }: { interview: RegularInterview }) {
   return (
-    <article className="rounded-lg border bg-card p-4 print:border-gray-300 print:p-0 print:shadow-none">
+    <article className="rounded-lg border bg-card p-4 print:border-gray-300 print:px-4 print:py-3 print:shadow-none">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -70,7 +70,7 @@ function InterviewPrintCard({ interview }: { interview: RegularInterview }) {
         </div>
       </div>
 
-      <div className="mt-4 rounded-lg bg-muted/30 p-4 text-sm leading-7 whitespace-pre-wrap print:mt-3 print:bg-transparent print:p-0 print:text-[11px] print:leading-5">
+      <div className="mt-4 rounded-lg bg-muted/30 p-4 text-sm leading-7 whitespace-pre-wrap print:mt-3 print:bg-transparent print:px-1 print:py-0 print:text-[11px] print:leading-5">
         {interview.companyReport || "定期面談レポートはありません"}
       </div>
     </article>
