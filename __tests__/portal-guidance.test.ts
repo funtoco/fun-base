@@ -3,6 +3,7 @@ import { selectGuidance } from '@/lib/portal/guidance'
 import { COUNCIL_GUIDES } from '@/lib/portal/guidance/council'
 import { DOCUMENTS } from '@/lib/portal/guidance/documents'
 import { FLOW_STEPS } from '@/lib/portal/guidance/flow'
+import { DOCUMENT_SAMPLES } from '@/lib/portal/guidance/samples'
 import { FIELD_LABELS, type Field } from '@/lib/portal/types'
 
 const CONDITIONS = [
@@ -161,19 +162,77 @@ describe('selectGuidance: 取得書類', () => {
   it.each([
     { entityType: 'corporate', category: 'initial', field: 'care', nos: [1, 2, 3, 4, 5, 6, 8] },
     {
+      entityType: 'sole_proprietor',
+      category: 'initial',
+      field: 'food_manufacturing',
+      nos: [1, 2, 3, 4, 5, 6, 8],
+    },
+    {
+      entityType: 'corporate',
+      category: 'initial',
+      field: 'accommodation',
+      nos: [1, 2, 3, 4, 5, 6, 7, 8],
+    },
+    {
       entityType: 'corporate',
       category: 'initial',
       field: 'food_service',
       nos: [1, 2, 3, 4, 5, 6, 7, 8],
     },
-    {
-      entityType: 'sole_proprietor',
-      category: 'initial',
-      field: 'care',
-      nos: [1, 2, 3, 4, 5, 6, 8],
-    },
     { entityType: 'corporate', category: 'renewal', field: 'care', nos: [1, 2] },
   ] as const)('$entityType × $category × $field は原典の書類番号を保持する（欠番あり）', (c) => {
     expect(selectGuidance(c).documents.map((d) => d.no)).toEqual([...c.nos])
+  })
+})
+
+describe('selectGuidance: 書類サンプル', () => {
+  it('書類が参照する sampleId はすべて samples に存在する', () => {
+    const referenced = Object.values(DOCUMENTS)
+      .flat()
+      .flatMap((doc) => doc.sampleIds ?? [])
+    expect(referenced.length).toBeGreaterThan(0)
+    for (const id of referenced) {
+      expect(DOCUMENT_SAMPLES[id], `未定義の sampleId: ${id}`).toBeDefined()
+    }
+  })
+
+  it('samples はすべていずれかの書類から参照されている', () => {
+    const referenced = new Set(
+      Object.values(DOCUMENTS)
+        .flat()
+        .flatMap((doc) => doc.sampleIds ?? [])
+    )
+    const orphans = Object.keys(DOCUMENT_SAMPLES).filter((id) => !referenced.has(id))
+    expect(orphans).toEqual([])
+  })
+
+  it('サンプルは14件で、id とキーが一致している', () => {
+    expect(Object.keys(DOCUMENT_SAMPLES)).toHaveLength(14)
+    for (const [key, sample] of Object.entries(DOCUMENT_SAMPLES)) {
+      expect(sample.id).toBe(key)
+    }
+  })
+
+  it('サンプルの src は id から導出されている', () => {
+    for (const sample of Object.values(DOCUMENT_SAMPLES)) {
+      expect(sample.src).toBe(`/guidance/samples/${sample.id}.jpg`)
+    }
+  })
+
+  it('個人事業主 × 初回のサンプルに住民票が含まれる', () => {
+    const g = selectGuidance({ entityType: 'sole_proprietor', category: 'initial' })
+    expect(g.samples.map((s) => s.id)).toContain('sp-residence-certificate')
+  })
+
+  it('介護分野では営業許可証のサンプルが出ない', () => {
+    const g = selectGuidance({ entityType: 'corporate', category: 'initial', field: 'care' })
+    expect(g.samples.map((s) => s.id)).not.toContain('business-permit-food')
+    expect(g.samples.map((s) => s.id)).not.toContain('business-permit-lodging')
+  })
+
+  it('同じサンプルが重複して返らない', () => {
+    const g = selectGuidance({ entityType: 'corporate', category: 'initial' })
+    const ids = g.samples.map((s) => s.id)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 })

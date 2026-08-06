@@ -2,7 +2,15 @@ import type { ApplicationCategory, EntityType, Field } from '@/lib/portal/types'
 import { COUNCIL_GUIDES } from './council'
 import { DOCUMENTS } from './documents'
 import { FLOW_STEPS } from './flow'
-import type { CouncilGuide, FlowLane, FlowStep, Guidance, RequiredDocument } from './types'
+import { DOCUMENT_SAMPLES } from './samples'
+import type {
+  CouncilGuide,
+  DocumentSample,
+  FlowLane,
+  FlowStep,
+  Guidance,
+  RequiredDocument,
+} from './types'
 
 export * from './types'
 export { FLOW_LANE_LABELS } from './flow'
@@ -49,19 +57,37 @@ function selectDocuments(
   return list.filter((doc) => !doc.fields || doc.fields.includes(field))
 }
 
+function collectSamples(documents: RequiredDocument[]): DocumentSample[] {
+  const seen = new Set<string>()
+  const samples: DocumentSample[] = []
+  for (const doc of documents) {
+    for (const id of doc.sampleIds ?? []) {
+      if (seen.has(id)) continue
+      const sample = DOCUMENT_SAMPLES[id]
+      if (!sample) {
+        throw new Error(`Unknown document sample id: ${id}`)
+      }
+      seen.add(id)
+      samples.push(sample)
+    }
+  }
+  return samples
+}
+
 export function selectGuidance(input: {
   entityType: EntityType
   category: ApplicationCategory
   field?: Field | null
 }): Guidance {
   const field = input.field ?? null
+  const documents = selectDocuments(input.entityType, input.category, field)
   return {
     entityType: input.entityType,
     category: input.category,
     field,
     flow: selectFlow(input.entityType, input.category),
     councils: selectCouncils(field),
-    documents: selectDocuments(input.entityType, input.category, field),
-    samples: [],
+    documents,
+    samples: collectSamples(documents),
   }
 }

@@ -9,6 +9,7 @@ export const DOCUMENTS_INTRO_INITIAL =
 export const DOCUMENTS_INTRO_RENEWAL =
   '申請後、入管より追加で書類を提出するよう指示がある場合がございます。予めご了承ください。'
 
+// 初回2リストで共有。詳細は DOCUMENTS 直前のコメント参照。
 const BUSINESS_PERMIT: RequiredDocument = {
   no: 7,
   name: '[外食] 保健所長の営業許可証 / [宿泊] 旅館業許可証',
