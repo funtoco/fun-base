@@ -25,10 +25,10 @@ export function FlowSummary({ steps, guideHref }: FlowSummaryProps) {
       </div>
       <ol className="flex flex-wrap items-stretch gap-2">
         {steps.map((step, index) => (
-          <li key={step.id} className="flex items-stretch gap-2">
-            <div className="flex min-w-[120px] flex-col rounded-lg bg-muted/60 px-3 py-2">
+          <li key={step.id} className="flex flex-1 items-stretch gap-1">
+            <div className="flex min-w-0 flex-1 flex-col rounded-lg bg-muted/60 px-2 py-2">
               <span className="text-xs text-muted-foreground">STEP {index + 1}</span>
-              <span className="mt-0.5 text-sm font-medium text-foreground">
+              <span className="mt-0.5 whitespace-nowrap text-sm font-medium text-foreground">
                 {step.shortTitle ?? step.title}
               </span>
             </div>
