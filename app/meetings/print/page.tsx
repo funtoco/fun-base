@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowLeft, Building2, Calendar, Clock, FilterIcon, Printer } from "lucide-react"
+import { ArrowLeft, Building2, Clock, FilterIcon, Printer } from "lucide-react"
 
 import { AuthGuard } from "@/components/auth-guard"
 import { Badge } from "@/components/ui/badge"
@@ -54,13 +54,13 @@ function PrintMetaItem({ label, value }: { label: string; value?: string }) {
 
 function InterviewPrintCard({ interview }: { interview: RegularInterview }) {
   return (
-    <article className="break-inside-avoid rounded-lg border bg-card p-4 print:border-gray-300 print:shadow-none">
+    <article className="rounded-lg border bg-card p-4 print:border-gray-300 print:p-0 print:shadow-none">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold">{interview.targetQuarter ?? "定期面談"}</h3>
+            <h3 className="text-base font-semibold print:text-sm">{interview.targetQuarter ?? "定期面談"}</h3>
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground print:text-[11px]">
             <PrintMetaItem label="面談日" value={formatDate(interview.interviewDate)} />
             <PrintMetaItem label="方法" value={interview.interviewMethod} />
             <PrintMetaItem label="支援担当" value={interview.supportStaffName} />
@@ -70,10 +70,33 @@ function InterviewPrintCard({ interview }: { interview: RegularInterview }) {
         </div>
       </div>
 
-      <div className="mt-4 rounded-lg bg-muted/30 p-4 text-sm leading-7 whitespace-pre-wrap print:bg-transparent print:p-0">
+      <div className="mt-4 rounded-lg bg-muted/30 p-4 text-sm leading-7 whitespace-pre-wrap print:mt-3 print:bg-transparent print:p-0 print:text-[11px] print:leading-5">
         {interview.companyReport || "定期面談レポートはありません"}
       </div>
     </article>
+  )
+}
+
+function InterviewPrintSheet({
+  interview,
+  breakAfter,
+}: {
+  interview: RegularInterview
+  breakAfter: boolean
+}) {
+  return (
+    <section className={breakAfter ? "interview-print-sheet space-y-3" : "space-y-3"}>
+      <div className="rounded-lg border-l-4 border-primary bg-muted/30 p-4 print:border-gray-500 print:bg-transparent print:p-0">
+        <h2 className="text-xl font-bold print:text-base">
+          {interview.personName}{interview.nickName ? ` (${interview.nickName})` : ""}
+        </h2>
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground print:text-[11px]">
+          {interview.companyName && <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5 print:h-3 print:w-3" />{interview.companyName}</span>}
+          <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5 print:h-3 print:w-3" />{formatDate(interview.interviewDate)}</span>
+        </div>
+      </div>
+      <InterviewPrintCard interview={interview} />
+    </section>
   )
 }
 
@@ -181,6 +204,24 @@ export default function MeetingsPrintPage() {
 
   return (
     <AuthGuard>
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
+          .interview-print-sheet {
+            break-after: page;
+            page-break-after: always;
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+          .interview-print-sheet:last-child {
+            break-after: auto;
+            page-break-after: auto;
+          }
+        }
+      `}</style>
       <div className="min-h-screen bg-muted/20 p-6 print:bg-white print:p-0">
         <div className="mx-auto max-w-5xl space-y-6 print:max-w-none print:space-y-4">
           <div className="print:hidden">
@@ -358,7 +399,7 @@ export default function MeetingsPrintPage() {
                     updateUrl({ pageBreak: event.target.checked })
                   }}
                 />
-                人ごとに改ページ
+                1面談ごとに改ページ
               </label>
             </CardContent>
           </Card>
@@ -367,7 +408,7 @@ export default function MeetingsPrintPage() {
             <RecordListLoadingSkeleton />
           ) : (
             <div className="rounded-lg bg-white p-8 shadow-sm print:p-0 print:shadow-none">
-              <header className="mb-6 border-b pb-4 print:mb-4">
+              <header className="mb-6 border-b pb-4 print:hidden">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="text-2xl font-bold">定期面談記録</h2>
@@ -391,38 +432,21 @@ export default function MeetingsPrintPage() {
               {filteredInterviews.length === 0 ? (
                 <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">該当する面談記録がありません</p>
               ) : sortMode === "person" ? (
-                <div className="space-y-8">
-                  {groupedInterviews.map((group) => (
-                    <section
-                      key={group.personId}
-                      className={pageBreakByPerson ? "break-after-page space-y-4 last:break-after-auto" : "space-y-4"}
-                    >
-                      <div className="rounded-lg border-l-4 border-primary bg-muted/30 p-4 print:border-gray-500 print:bg-transparent">
-                        <h2 className="text-xl font-bold">
-                          {group.personName}{group.nickName ? ` (${group.nickName})` : ""}
-                        </h2>
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                          {group.companyName && <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5" />{group.companyName}</span>}
-                          <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />{group.interviews.length}件</span>
-                        </div>
-                      </div>
-                      <div className="space-y-4">
-                        {group.interviews.map((interview) => <InterviewPrintCard key={interview.id} interview={interview} />)}
-                      </div>
-                    </section>
-                  ))}
+                <div className="space-y-8 print:space-y-0">
+                  {groupedInterviews.flatMap((group) =>
+                    group.interviews.map((interview) => (
+                      <InterviewPrintSheet
+                        key={interview.id}
+                        interview={interview}
+                        breakAfter={pageBreakByPerson}
+                      />
+                    ))
+                  )}
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-4 print:space-y-0">
                   {sortedInterviews.map((interview) => (
-                    <section key={interview.id} className="break-inside-avoid space-y-3">
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-muted/30 p-3 print:bg-transparent print:p-0">
-                        <h2 className="text-lg font-bold">{interview.personName}{interview.nickName ? ` (${interview.nickName})` : ""}</h2>
-                        {interview.companyName && <span className="flex items-center gap-1 text-sm text-muted-foreground"><Building2 className="h-3.5 w-3.5" />{interview.companyName}</span>}
-                        <span className="flex items-center gap-1 text-sm text-muted-foreground"><Clock className="h-3.5 w-3.5" />{formatDate(interview.interviewDate)}</span>
-                      </div>
-                      <InterviewPrintCard interview={interview} />
-                    </section>
+                    <InterviewPrintSheet key={interview.id} interview={interview} breakAfter />
                   ))}
                 </div>
               )}
