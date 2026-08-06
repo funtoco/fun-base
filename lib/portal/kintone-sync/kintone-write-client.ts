@@ -16,6 +16,29 @@ export interface KintoneReadRecord {
   [fieldCode: string]: { value: unknown }
 }
 
+/**
+ * kintone API がエラーを返したことを表す例外。HTTP ステータスで分岐したい呼び出し側
+ * （revision 競合=409 のリトライなど）のために status を保持する。
+ */
+export class KintoneApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string
+  ) {
+    super(`kintone API error: ${status} ${message}`)
+    this.name = 'KintoneApiError'
+  }
+}
+
+/** レコード添付ファイルフィールドの1要素（GET したときの形）。 */
+export interface KintoneFileValue {
+  fileKey: string
+  name: string
+  contentType: string
+  /** kintone は文字列で返す。 */
+  size: string
+}
+
 /** kintone レコードコメント1件（GET /k/v1/record/comments.json）。 */
 export interface KintoneRecordComment {
   id: string
@@ -37,11 +60,24 @@ export interface KintoneWriteClient {
     appId: string,
     record: KintoneRecordPayload
   ): Promise<{ id: string; revision: string }>
+  /**
+   * レコードを更新する。opts.revision を渡すと楽観ロックになり、
+   * 他者が先に更新していれば 409（KintoneApiError）になる。
+   */
   updateRecord(
     appId: string,
     id: string,
-    record: KintoneRecordPayload
+    record: KintoneRecordPayload,
+    opts?: { revision?: string }
   ): Promise<{ revision: string }>
+  /** ファイルをアップロードして fileKey を得る（POST /k/v1/file.json）。 */
+  uploadFile(params: {
+    fileName: string
+    contentType: string
+    body: Buffer
+  }): Promise<{ fileKey: string }>
+  /** fileKey でファイル本体を取得する（GET /k/v1/file.json）。 */
+  downloadFile(fileKey: string): Promise<{ body: Buffer; contentType: string }>
   /** プロセス管理のステータスを「アクション名」で進める（PUT /k/v1/record/status.json）。 */
   updateRecordStatus(
     appId: string,
@@ -131,7 +167,7 @@ export class RestKintoneWriteClient implements KintoneWriteClient {
     })
     if (!response.ok) {
       const text = await response.text()
-      throw new Error(`kintone API error: ${response.status} ${text}`)
+      throw new KintoneApiError(response.status, text)
     }
     return (await response.json()) as T
   }
@@ -161,12 +197,58 @@ export class RestKintoneWriteClient implements KintoneWriteClient {
   async updateRecord(
     appId: string,
     id: string,
-    record: KintoneRecordPayload
+    record: KintoneRecordPayload,
+    opts?: { revision?: string }
   ): Promise<{ revision: string }> {
+    const body: Record<string, unknown> = { app: appId, id, record }
+    if (opts?.revision) {
+      body.revision = opts.revision
+    }
     return this.request<{ revision: string }>('/k/v1/record.json', {
       method: 'PUT',
-      body: { app: appId, id, record },
+      body,
     })
+  }
+
+  async uploadFile(params: {
+    fileName: string
+    contentType: string
+    body: Buffer
+  }): Promise<{ fileKey: string }> {
+    // multipart の組み立ては FormData に任せる。Content-Type を自前で付けると boundary が壊れる。
+    const form = new FormData()
+    form.append(
+      'file',
+      new Blob([new Uint8Array(params.body)], { type: params.contentType }),
+      params.fileName
+    )
+    const response = await fetch(`${this.baseUrl}/k/v1/file.json`, {
+      method: 'POST',
+      headers: { ...this.authHeaders },
+      body: form,
+    })
+    if (!response.ok) {
+      throw new KintoneApiError(response.status, await response.text())
+    }
+    return (await response.json()) as { fileKey: string }
+  }
+
+  async downloadFile(
+    fileKey: string
+  ): Promise<{ body: Buffer; contentType: string }> {
+    const params = new URLSearchParams({ fileKey })
+    const response = await fetch(
+      `${this.baseUrl}/k/v1/file.json?${params.toString()}`,
+      { method: 'GET', headers: { ...this.authHeaders } }
+    )
+    if (!response.ok) {
+      throw new KintoneApiError(response.status, await response.text())
+    }
+    return {
+      body: Buffer.from(await response.arrayBuffer()),
+      contentType:
+        response.headers.get('content-type') ?? 'application/octet-stream',
+    }
   }
 
   async updateRecordStatus(

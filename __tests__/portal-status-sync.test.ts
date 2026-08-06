@@ -16,6 +16,10 @@ function mockClient(overrides: Partial<KintoneWriteClient> = {}): KintoneWriteCl
     updateRecordStatus: vi.fn().mockResolvedValue({ revision: '1' }),
     getRecordComments: vi.fn().mockResolvedValue([]),
     postRecordComment: vi.fn().mockResolvedValue({ id: '1' }),
+    uploadFile: vi.fn().mockResolvedValue({ fileKey: 'fk1' }),
+    downloadFile: vi
+      .fn()
+      .mockResolvedValue({ body: Buffer.from(''), contentType: 'application/pdf' }),
     ...overrides,
   }
 }

@@ -6,7 +6,9 @@ import { Badge } from '@/components/ui/badge'
 import { CaseProgressHeader } from '@/components/portal/case-progress-header'
 import { ChecklistTable } from '@/components/portal/checklist-table'
 import { CommentThread } from '@/components/portal/comment-thread'
+import { OtherFilesCard } from '@/components/portal/other-files-card'
 import { getCaseWithRequirements } from '@/lib/portal/applications'
+import { getCaseFilesState } from '@/lib/portal/case-files'
 import { listComments } from '@/lib/portal/comments'
 import {
   APPLICATION_CATEGORY_LABELS,
@@ -27,7 +29,10 @@ export default async function ApplicationDetailPage({
   }
 
   const { case: detail, requirements } = data
-  const comments = await listComments(detail.id)
+  const [comments, otherFiles] = await Promise.all([
+    listComments(detail.id),
+    getCaseFilesState(detail.id),
+  ])
 
   return (
     <div className="space-y-6 p-6">
@@ -87,6 +92,13 @@ export default async function ApplicationDetailPage({
         caseId={detail.id}
         requirements={requirements}
         officeCount={detail.offices.length}
+      />
+
+      <OtherFilesCard
+        caseId={detail.id}
+        files={otherFiles.files}
+        canUpload={otherFiles.canUpload}
+        blockedReason={otherFiles.blockedReason}
       />
 
       <CommentThread caseId={detail.id} comments={comments} />
