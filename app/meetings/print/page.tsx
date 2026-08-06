@@ -86,7 +86,7 @@ function InterviewPrintSheet({
 }) {
   return (
     <section className={breakAfter ? "interview-print-sheet space-y-3" : "space-y-3"}>
-      <div className="rounded-lg border-l-4 border-primary bg-muted/30 p-4 print:border-gray-500 print:bg-transparent print:p-0">
+      <div className="rounded-lg border-l-4 border-primary bg-muted/30 p-4 print:border-gray-500 print:bg-transparent print:py-0 print:pl-3 print:pr-0">
         <h2 className="text-xl font-bold print:text-base">
           {interview.personName}{interview.nickName ? ` (${interview.nickName})` : ""}
         </h2>
