@@ -5,8 +5,6 @@ import type { FlowLane, FlowStep, Guidance } from './types'
 export * from './types'
 export { FLOW_LANE_LABELS } from './flow'
 
-const LANES: FlowLane[] = ['company', 'funtoco', 'candidate']
-
 function matchesStep(
   step: FlowStep,
   entityType: EntityType,
@@ -22,13 +20,12 @@ function selectFlow(
   category: ApplicationCategory
 ): Record<FlowLane, FlowStep[]> {
   const matched = FLOW_STEPS.filter((step) => matchesStep(step, entityType, category))
-  return LANES.reduce(
-    (acc, lane) => {
-      acc[lane] = matched.filter((step) => step.lane === lane)
-      return acc
-    },
-    {} as Record<FlowLane, FlowStep[]>
-  )
+  const byLane = (lane: FlowLane) => matched.filter((step) => step.lane === lane)
+  return {
+    company: byLane('company'),
+    funtoco: byLane('funtoco'),
+    candidate: byLane('candidate'),
+  }
 }
 
 export function selectGuidance(input: {

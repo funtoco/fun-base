@@ -1,4 +1,4 @@
-import type { FlowStep } from './types'
+import type { FlowLane, FlowStep } from './types'
 
 // 「在留資格申請手続きの流れ」（ご案内資料 P01）をデータ化したもの。
 // 配列の順序がそのまま表示順になる。
@@ -138,7 +138,7 @@ export const FLOW_STEPS: FlowStep[] = [
   },
 ]
 
-export const FLOW_LANE_LABELS: Record<FlowStep['lane'], string> = {
+export const FLOW_LANE_LABELS: Record<FlowLane, string> = {
   company: '貴社にご対応いただくこと',
   funtoco: 'Funtoco が行うこと',
   candidate: '内定者ご本人が行うこと',

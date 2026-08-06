@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { selectGuidance } from '@/lib/portal/guidance'
+import { FLOW_STEPS } from '@/lib/portal/guidance/flow'
+
+const CONDITIONS = [
+  { entityType: 'corporate', category: 'initial' },
+  { entityType: 'corporate', category: 'renewal' },
+  { entityType: 'sole_proprietor', category: 'initial' },
+  { entityType: 'sole_proprietor', category: 'renewal' },
+] as const
 
 describe('selectGuidance: 申請の流れ', () => {
   it('法人では押印ステップの注記が「法人印」になる', () => {
@@ -30,5 +38,17 @@ describe('selectGuidance: 申請の流れ', () => {
     const b = selectGuidance({ entityType: 'sole_proprietor', category: 'renewal' })
     expect(a.flow.funtoco.map((s) => s.id)).toEqual(b.flow.funtoco.map((s) => s.id))
     expect(a.flow.candidate.map((s) => s.id)).toEqual(b.flow.candidate.map((s) => s.id))
+    expect(a.flow.funtoco).toHaveLength(6)
+    expect(a.flow.candidate).toHaveLength(3)
+  })
+
+  it.each(CONDITIONS)('$entityType × $category で貴社レーンに同じ見出しが二重に出ない', (c) => {
+    const titles = selectGuidance(c).flow.company.map((s) => s.title)
+    expect(new Set(titles).size).toBe(titles.length)
+    expect(titles).toHaveLength(5)
+  })
+
+  it('FLOW_STEPS の id は重複しない', () => {
+    expect(new Set(FLOW_STEPS.map((s) => s.id)).size).toBe(FLOW_STEPS.length)
   })
 })
