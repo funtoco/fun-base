@@ -52,3 +52,33 @@ describe('selectGuidance: 申請の流れ', () => {
     expect(new Set(FLOW_STEPS.map((s) => s.id)).size).toBe(FLOW_STEPS.length)
   })
 })
+
+describe('selectGuidance: 協議会', () => {
+  it('分野が介護なら介護の協議会が先頭に来る', () => {
+    const g = selectGuidance({ entityType: 'corporate', category: 'initial', field: 'care' })
+    expect(g.councils[0].id).toBe('care')
+  })
+
+  it('分野が外食業なら外食・飲食料品製造の協議会が先頭に来る', () => {
+    const g = selectGuidance({
+      entityType: 'corporate',
+      category: 'initial',
+      field: 'food_service',
+    })
+    expect(g.councils[0].id).toBe('food')
+  })
+
+  it('分野が宿泊なら「その他分野」が先頭に来る', () => {
+    const g = selectGuidance({
+      entityType: 'corporate',
+      category: 'initial',
+      field: 'accommodation',
+    })
+    expect(g.councils[0].id).toBe('other')
+  })
+
+  it('分野が未指定でも協議会は全件返る', () => {
+    const g = selectGuidance({ entityType: 'corporate', category: 'initial' })
+    expect(g.councils.map((c) => c.id)).toEqual(['care', 'food', 'other'])
+  })
+})

@@ -1,9 +1,11 @@
 import type { ApplicationCategory, EntityType, Field } from '@/lib/portal/types'
+import { COUNCIL_GUIDES } from './council'
 import { FLOW_STEPS } from './flow'
-import type { FlowLane, FlowStep, Guidance } from './types'
+import type { CouncilGuide, FlowLane, FlowStep, Guidance } from './types'
 
 export * from './types'
 export { FLOW_LANE_LABELS } from './flow'
+export { COUNCIL_INTRO } from './council'
 
 function matchesStep(
   step: FlowStep,
@@ -28,6 +30,13 @@ function selectFlow(
   }
 }
 
+function selectCouncils(field: Field | null): CouncilGuide[] {
+  if (!field) return COUNCIL_GUIDES
+  const matched = COUNCIL_GUIDES.filter((guide) => guide.fields.includes(field))
+  const rest = COUNCIL_GUIDES.filter((guide) => !guide.fields.includes(field))
+  return [...matched, ...rest]
+}
+
 export function selectGuidance(input: {
   entityType: EntityType
   category: ApplicationCategory
@@ -39,7 +48,7 @@ export function selectGuidance(input: {
     category: input.category,
     field,
     flow: selectFlow(input.entityType, input.category),
-    councils: [],
+    councils: selectCouncils(field),
     documents: [],
     samples: [],
   }
