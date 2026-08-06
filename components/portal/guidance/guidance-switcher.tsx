@@ -1,5 +1,6 @@
 'use client'
 
+import { useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import type { GuidanceCondition } from '@/lib/portal/guidance'
@@ -22,6 +23,8 @@ const CATEGORY_OPTIONS: { value: ApplicationCategory; label: string }[] = [
 export function GuidanceSwitcher({ condition }: GuidanceSwitcherProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  // force-dynamic なページへの遷移はサーバー往復を伴うため、待っている間の状態を出す。
+  const [isPending, startTransition] = useTransition()
 
   const update = (key: 'entity' | 'category', value: string) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -30,22 +33,26 @@ export function GuidanceSwitcher({ condition }: GuidanceSwitcherProps) {
     if (condition.field && !params.has('field')) {
       params.set('field', condition.field)
     }
-    router.replace(`/applications/guide?${params.toString()}`, { scroll: false })
+    startTransition(() => {
+      router.replace(`/applications/guide?${params.toString()}`, { scroll: false })
+    })
   }
 
   return (
-    <div className="flex flex-wrap gap-6">
+    <div className="flex flex-wrap items-start gap-6">
       <ToggleGroup
         label="事業形態"
         options={ENTITY_OPTIONS}
         selected={condition.entityType}
         onSelect={(value) => update('entity', value)}
+        isPending={isPending}
       />
       <ToggleGroup
         label="受け入れ状況"
         options={CATEGORY_OPTIONS}
         selected={condition.category}
         onSelect={(value) => update('category', value)}
+        isPending={isPending}
       />
     </div>
   )
@@ -56,11 +63,13 @@ function ToggleGroup({
   options,
   selected,
   onSelect,
+  isPending,
 }: {
   label: string
   options: readonly { value: string; label: string }[]
   selected: string
   onSelect: (value: string) => void
+  isPending: boolean
 }) {
   return (
     <div>
@@ -68,7 +77,11 @@ function ToggleGroup({
       <div
         role="group"
         aria-label={label}
-        className="mt-1 flex gap-1 rounded-lg bg-muted p-1"
+        aria-busy={isPending}
+        className={cn(
+          'mt-1 flex gap-1 rounded-lg bg-muted p-1 transition-opacity',
+          isPending && 'opacity-70'
+        )}
       >
         {options.map((option) => (
           <button

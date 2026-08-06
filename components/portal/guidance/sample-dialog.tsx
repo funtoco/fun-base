@@ -30,7 +30,13 @@ export function SampleDialog({ sample }: SampleDialogProps) {
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{sample.title}</DialogTitle>
-          {sample.caption && <DialogDescription>{sample.caption}</DialogDescription>}
+          {/*
+            DialogContent は常に aria-describedby を出すため、caption が無くても
+            DialogDescription を必ずマウントして ARIA 参照切れを防ぐ。
+          */}
+          <DialogDescription>
+            {sample.caption ?? `${sample.title}のサンプル画像です。`}
+          </DialogDescription>
         </DialogHeader>
 
         <Image

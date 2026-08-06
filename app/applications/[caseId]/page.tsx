@@ -8,6 +8,7 @@ import { ChecklistTable } from '@/components/portal/checklist-table'
 import { CommentThread } from '@/components/portal/comment-thread'
 import { getCaseWithRequirements } from '@/lib/portal/applications'
 import { listComments } from '@/lib/portal/comments'
+import { buildGuideHref } from '@/lib/portal/guidance'
 import {
   APPLICATION_CATEGORY_LABELS,
   ENTITY_TYPE_LABELS,
@@ -83,7 +84,11 @@ export default async function ApplicationDetailPage({
 
       <Button asChild variant="outline" size="sm" className="gap-1">
         <Link
-          href={`/applications/guide?entity=${detail.entityType}&category=${detail.applicationCategory}&field=${detail.field}`}
+          href={buildGuideHref({
+            entityType: detail.entityType,
+            category: detail.applicationCategory,
+            field: detail.field,
+          })}
         >
           <BookOpen className="h-4 w-4" />
           この案件のご案内を見る

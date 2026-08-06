@@ -16,9 +16,9 @@ import { GuideEntryCards } from '@/components/portal/guidance/guide-entry-cards'
 import { SubmissionRules } from '@/components/portal/guidance/submission-rules'
 import { listCases } from '@/lib/portal/applications'
 import {
+  buildGuideHref,
   guidanceDefaultsFromCases,
   selectGuidance,
-  type GuidanceCondition,
 } from '@/lib/portal/guidance'
 import {
   APPLICATION_CATEGORY_LABELS,
@@ -28,17 +28,6 @@ import {
 } from '@/lib/portal/types'
 
 export const dynamic = 'force-dynamic'
-
-function buildGuideHref(condition: GuidanceCondition): string {
-  const params = new URLSearchParams({
-    entity: condition.entityType,
-    category: condition.category,
-  })
-  if (condition.field) {
-    params.set('field', condition.field)
-  }
-  return `/applications/guide?${params.toString()}`
-}
 
 export default async function ApplicationsPage() {
   const cases = await listCases()

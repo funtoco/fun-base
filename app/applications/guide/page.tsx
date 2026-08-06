@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CouncilSection } from '@/components/portal/guidance/council-section'
 import { DocumentTable } from '@/components/portal/guidance/document-table'
@@ -8,42 +9,12 @@ import { GuidanceSwitcher } from '@/components/portal/guidance/guidance-switcher
 import { listCases } from '@/lib/portal/applications'
 import {
   guidanceDefaultsFromCases,
+  resolveGuidanceCondition,
   selectGuidance,
-  type GuidanceCondition,
 } from '@/lib/portal/guidance'
-import type { ApplicationCategory, EntityType, Field } from '@/lib/portal/types'
+import { FIELD_LABELS } from '@/lib/portal/types'
 
 export const dynamic = 'force-dynamic'
-
-const ENTITY_TYPES: EntityType[] = ['corporate', 'sole_proprietor']
-const CATEGORIES: ApplicationCategory[] = ['initial', 'renewal']
-const FIELDS: Field[] = [
-  'care',
-  'food_service',
-  'accommodation',
-  'food_manufacturing',
-  'other',
-]
-
-function pick<T extends string>(
-  value: string | string[] | undefined,
-  allowed: T[]
-): T | null {
-  if (typeof value !== 'string') return null
-  return allowed.includes(value as T) ? (value as T) : null
-}
-
-/** クエリ > 最新案件 > 既定値 の順で表示条件を決める。不正なクエリは無視する。 */
-function resolveCondition(
-  searchParams: Record<string, string | string[] | undefined>,
-  fallback: GuidanceCondition
-): GuidanceCondition {
-  return {
-    entityType: pick(searchParams.entity, ENTITY_TYPES) ?? fallback.entityType,
-    category: pick(searchParams.category, CATEGORIES) ?? fallback.category,
-    field: pick(searchParams.field, FIELDS) ?? fallback.field,
-  }
-}
 
 export default async function ApplicationGuidePage({
   searchParams,
@@ -51,8 +22,16 @@ export default async function ApplicationGuidePage({
   searchParams: Record<string, string | string[] | undefined>
 }) {
   const cases = await listCases()
-  const condition = resolveCondition(searchParams, guidanceDefaultsFromCases(cases))
+  // クエリ > 最新案件 > 既定値 の順で表示条件が決まる。
+  const condition = resolveGuidanceCondition(
+    searchParams,
+    guidanceDefaultsFromCases(cases)
+  )
   const guidance = selectGuidance(condition)
+  // 分野で実際に件数が絞られたときだけ、書類一覧の欠番の理由を添える。
+  const unfilteredDocumentCount = selectGuidance({ ...condition, field: null }).documents
+    .length
+  const isDocumentListFiltered = guidance.documents.length < unfilteredDocumentCount
 
   return (
     <div className="space-y-8 p-6">
@@ -69,8 +48,17 @@ export default async function ApplicationGuidePage({
         <p className="mt-2 text-muted-foreground">
           事業形態と受け入れ状況に合わせて、手続きの流れと必要な書類をご案内します。
         </p>
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap items-start gap-6">
           <GuidanceSwitcher condition={condition} />
+          {/* 分野は案件由来なので、トグルではなく読み取り専用のチップで示す。 */}
+          {condition.field && (
+            <div>
+              <span className="text-xs text-muted-foreground">分野</span>
+              <div className="mt-1 flex h-10 items-center">
+                <Badge variant="secondary">{FIELD_LABELS[condition.field]}</Badge>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -90,6 +78,12 @@ export default async function ApplicationGuidePage({
             ? `3. 取得書類一覧（全${guidance.documents.length}種類）`
             : `3. 準備書類一覧（全${guidance.documents.length}種類）`}
         </h2>
+        {condition.field && isDocumentListFiltered && (
+          <p className="text-xs text-muted-foreground">
+            {FIELD_LABELS[condition.field]}
+            分野に必要な書類のみを表示しています。番号は資料の原典に合わせているため、欠番が出ることがあります。
+          </p>
+        )}
         <DocumentTable
           documents={guidance.documents}
           samples={guidance.samples}

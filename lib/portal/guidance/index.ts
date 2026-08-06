@@ -1,8 +1,11 @@
-import type {
-  ApplicationCategory,
-  EntityType,
-  Field,
-  VisaApplicationCase,
+import {
+  APPLICATION_CATEGORY_LABELS,
+  ENTITY_TYPE_LABELS,
+  FIELD_LABELS,
+  type ApplicationCategory,
+  type EntityType,
+  type Field,
+  type VisaApplicationCase,
 } from '@/lib/portal/types'
 import { COUNCIL_GUIDES } from './council'
 import { DOCUMENTS } from './documents'
@@ -114,4 +117,41 @@ export function guidanceDefaultsFromCases(
     category: latest?.applicationCategory ?? 'initial',
     field: latest?.field ?? null,
   }
+}
+
+// ラベル定義（Record<K, string>）から導出するので、union に値を足せば自動で追随する。
+const ENTITY_TYPES = Object.keys(ENTITY_TYPE_LABELS) as EntityType[]
+const CATEGORIES = Object.keys(APPLICATION_CATEGORY_LABELS) as ApplicationCategory[]
+const FIELDS = Object.keys(FIELD_LABELS) as Field[]
+
+function pick<T extends string>(
+  value: string | string[] | undefined,
+  allowed: T[]
+): T | null {
+  if (typeof value !== 'string') return null
+  return allowed.includes(value as T) ? (value as T) : null
+}
+
+/** クエリ > 呼び出し側の既定値 の順で表示条件を決める。不正なクエリは無視する。 */
+export function resolveGuidanceCondition(
+  searchParams: Record<string, string | string[] | undefined>,
+  fallback: GuidanceCondition
+): GuidanceCondition {
+  return {
+    entityType: pick(searchParams.entity, ENTITY_TYPES) ?? fallback.entityType,
+    category: pick(searchParams.category, CATEGORIES) ?? fallback.category,
+    field: pick(searchParams.field, FIELDS) ?? fallback.field,
+  }
+}
+
+/** ご案内ページへのリンク。resolveGuidanceCondition と対になる URL 契約。 */
+export function buildGuideHref(condition: GuidanceCondition): string {
+  const params = new URLSearchParams({
+    entity: condition.entityType,
+    category: condition.category,
+  })
+  if (condition.field) {
+    params.set('field', condition.field)
+  }
+  return `/applications/guide?${params.toString()}`
 }

@@ -2,10 +2,12 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import {
+  buildGuideHref,
   COUNCIL_INTRO,
   DOCUMENTS_INTRO_INITIAL,
   DOCUMENTS_INTRO_RENEWAL,
   guidanceDefaultsFromCases,
+  resolveGuidanceCondition,
   selectGuidance,
 } from '@/lib/portal/guidance'
 import { COUNCIL_GUIDES } from '@/lib/portal/guidance/council'
@@ -342,5 +344,49 @@ describe('guidanceDefaultsFromCases', () => {
       category: 'renewal',
       field: 'care',
     })
+  })
+})
+
+describe('ガイドページのクエリ', () => {
+  it('不正な値は既定値にフォールバックする', () => {
+    const fallback = { entityType: 'corporate', category: 'initial', field: null } as const
+    expect(resolveGuidanceCondition({ entity: 'zzz', category: 'zzz', field: 'zzz' }, fallback))
+      .toEqual(fallback)
+  })
+
+  it('配列で渡された値は無視する', () => {
+    const fallback = { entityType: 'corporate', category: 'initial', field: null } as const
+    expect(resolveGuidanceCondition({ entity: ['corporate', 'sole_proprietor'] }, fallback))
+      .toEqual(fallback)
+  })
+
+  it('空文字は無視する', () => {
+    const fallback = { entityType: 'corporate', category: 'initial', field: 'care' } as const
+    expect(resolveGuidanceCondition({ field: '' }, fallback)).toEqual(fallback)
+  })
+
+  it('クエリに分野が無ければ既定値の分野を保つ', () => {
+    const fallback = { entityType: 'corporate', category: 'initial', field: 'care' } as const
+    expect(resolveGuidanceCondition({ entity: 'sole_proprietor' }, fallback).field).toBe('care')
+  })
+
+  it('buildGuideHref と resolveGuidanceCondition が往復する', () => {
+    const conditions = [
+      { entityType: 'corporate', category: 'initial', field: null },
+      { entityType: 'sole_proprietor', category: 'renewal', field: 'care' },
+      { entityType: 'corporate', category: 'renewal', field: 'accommodation' },
+    ] as const
+    for (const c of conditions) {
+      const query = Object.fromEntries(
+        new URLSearchParams(buildGuideHref(c).split('?')[1])
+      )
+      expect(resolveGuidanceCondition(query, { entityType: 'corporate', category: 'initial', field: null }))
+        .toEqual(c)
+    }
+  })
+
+  it.each(Object.keys(FIELD_LABELS) as Field[])('分野 %s はクエリとして受理される', (field) => {
+    const fallback = { entityType: 'corporate', category: 'initial', field: null } as const
+    expect(resolveGuidanceCondition({ field }, fallback).field).toBe(field)
   })
 })
