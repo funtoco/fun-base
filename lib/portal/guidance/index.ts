@@ -1,4 +1,9 @@
-import type { ApplicationCategory, EntityType, Field } from '@/lib/portal/types'
+import type {
+  ApplicationCategory,
+  EntityType,
+  Field,
+  VisaApplicationCase,
+} from '@/lib/portal/types'
 import { COUNCIL_GUIDES } from './council'
 import { DOCUMENTS } from './documents'
 import { FLOW_STEPS } from './flow'
@@ -9,6 +14,7 @@ import type {
   FlowLane,
   FlowStep,
   Guidance,
+  GuidanceCondition,
   RequiredDocument,
 } from './types'
 
@@ -62,6 +68,8 @@ function collectSamples(documents: RequiredDocument[]): DocumentSample[] {
   const samples: DocumentSample[] = []
   for (const doc of documents) {
     for (const id of doc.sampleIds ?? []) {
+      // 同一リスト内で複数の書類が同じ sampleId を参照すると React の key が重複するためガードする。
+      // 現在のデータでは到達しないが、documents.ts の編集で起こり得るため残している。
       if (seen.has(id)) continue
       const sample = DOCUMENT_SAMPLES[id]
       if (!sample) {
@@ -89,5 +97,20 @@ export function selectGuidance(input: {
     councils: selectCouncils(field),
     documents,
     samples: collectSamples(documents),
+  }
+}
+
+/**
+ * 案件一覧からご案内の初期表示条件を決める。
+ * listCases() は created_at の降順なので、先頭 = 最新の案件を採用する。
+ */
+export function guidanceDefaultsFromCases(
+  cases: VisaApplicationCase[]
+): GuidanceCondition {
+  const latest = cases[0]
+  return {
+    entityType: latest?.entityType ?? 'corporate',
+    category: latest?.applicationCategory ?? 'initial',
+    field: latest?.field ?? null,
   }
 }

@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { selectGuidance } from '@/lib/portal/guidance'
+import { guidanceDefaultsFromCases, selectGuidance } from '@/lib/portal/guidance'
 import { COUNCIL_GUIDES } from '@/lib/portal/guidance/council'
 import { DOCUMENTS } from '@/lib/portal/guidance/documents'
 import { FLOW_STEPS } from '@/lib/portal/guidance/flow'
 import { DOCUMENT_SAMPLES } from '@/lib/portal/guidance/samples'
 import { FIELD_LABELS, type Field } from '@/lib/portal/types'
+import type { VisaApplicationCase } from '@/lib/portal/types'
 
 const CONDITIONS = [
   { entityType: 'corporate', category: 'initial' },
@@ -54,6 +55,19 @@ describe('selectGuidance: 申請の流れ', () => {
 
   it('FLOW_STEPS の id は重複しない', () => {
     expect(new Set(FLOW_STEPS.map((s) => s.id)).size).toBe(FLOW_STEPS.length)
+  })
+
+  it('貴社レーンのステップは資料どおりの順序で並ぶ', () => {
+    const ids = selectGuidance({ entityType: 'corporate', category: 'initial' }).flow.company.map(
+      (s) => s.id
+    )
+    expect(ids).toEqual([
+      'company-prepare-initial-corporate',
+      'company-council-join',
+      'company-review',
+      'company-seal-corporate',
+      'company-interview',
+    ])
   })
 })
 
@@ -180,6 +194,7 @@ describe('selectGuidance: 取得書類', () => {
       nos: [1, 2, 3, 4, 5, 6, 7, 8],
     },
     { entityType: 'corporate', category: 'renewal', field: 'care', nos: [1, 2] },
+    { entityType: 'corporate', category: 'initial', field: 'other', nos: [1, 2, 3, 4, 5, 6, 8] },
   ] as const)('$entityType × $category × $field は原典の書類番号を保持する（欠番あり）', (c) => {
     expect(selectGuidance(c).documents.map((d) => d.no)).toEqual([...c.nos])
   })
@@ -234,5 +249,56 @@ describe('selectGuidance: 書類サンプル', () => {
     const g = selectGuidance({ entityType: 'corporate', category: 'initial' })
     const ids = g.samples.map((s) => s.id)
     expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('同一リスト内で同じ sampleId を2つの書類が参照しない', () => {
+    for (const [key, docs] of Object.entries(DOCUMENTS)) {
+      const ids = docs.flatMap((d) => d.sampleIds ?? [])
+      expect(new Set(ids).size, `${key} で sampleId が重複`).toBe(ids.length)
+    }
+  })
+})
+
+describe('guidanceDefaultsFromCases', () => {
+  const makeCase = (over: Partial<VisaApplicationCase>): VisaApplicationCase =>
+    ({
+      id: 'c1',
+      tenantId: 't1',
+      tenantOfficeId: 'o1',
+      officeName: null,
+      entityType: 'corporate',
+      applicationCategory: 'initial',
+      field: 'other',
+      applicationType: null,
+      managementNumber: null,
+      status: 'collecting',
+      title: null,
+      note: null,
+      kintoneRecordId: null,
+      kintoneSyncStatus: null,
+      kintoneLastSyncedAt: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      ...over,
+    }) as VisaApplicationCase
+
+  it('案件がなければ 法人 × 初回 × 分野なし', () => {
+    expect(guidanceDefaultsFromCases([])).toEqual({
+      entityType: 'corporate',
+      category: 'initial',
+      field: null,
+    })
+  })
+
+  it('先頭の案件の属性を使う', () => {
+    const cases = [
+      makeCase({ entityType: 'sole_proprietor', applicationCategory: 'renewal', field: 'care' }),
+      makeCase({ id: 'c2', entityType: 'corporate' }),
+    ]
+    expect(guidanceDefaultsFromCases(cases)).toEqual({
+      entityType: 'sole_proprietor',
+      category: 'renewal',
+      field: 'care',
+    })
   })
 })
