@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { selectGuidance } from '@/lib/portal/guidance'
 import { COUNCIL_GUIDES } from '@/lib/portal/guidance/council'
+import { DOCUMENTS } from '@/lib/portal/guidance/documents'
 import { FLOW_STEPS } from '@/lib/portal/guidance/flow'
 import { FIELD_LABELS, type Field } from '@/lib/portal/types'
 
@@ -56,12 +57,12 @@ describe('selectGuidance: 申請の流れ', () => {
 })
 
 describe('selectGuidance: 協議会', () => {
-  it('分野が介護なら介護の協議会が先頭に来る', () => {
+  it('分野が介護なら介護の協議会が先頭に来て、残りは定義順で続く', () => {
     const g = selectGuidance({ entityType: 'corporate', category: 'initial', field: 'care' })
     expect(g.councils.map((c) => c.id)).toEqual(['care', 'food', 'other'])
   })
 
-  it('分野が外食業なら外食・飲食料品製造の協議会が先頭に来る', () => {
+  it('分野が外食業なら外食・飲食料品製造の協議会が先頭に来て、残りは定義順で続く', () => {
     const g = selectGuidance({
       entityType: 'corporate',
       category: 'initial',
@@ -70,7 +71,7 @@ describe('selectGuidance: 協議会', () => {
     expect(g.councils.map((c) => c.id)).toEqual(['food', 'care', 'other'])
   })
 
-  it('分野が宿泊なら「その他分野」が先頭に来る', () => {
+  it('分野が宿泊なら「その他分野」の協議会が先頭に来て、残りは定義順で続く', () => {
     const g = selectGuidance({
       entityType: 'corporate',
       category: 'initial',
@@ -97,5 +98,68 @@ describe('selectGuidance: 協議会', () => {
     for (const guide of COUNCIL_GUIDES) {
       expect(guide.steps.length > 0 || Boolean(guide.description)).toBe(true)
     }
+  })
+})
+
+describe('selectGuidance: 取得書類', () => {
+  it('個人事業主 × 初回は8件', () => {
+    const g = selectGuidance({ entityType: 'sole_proprietor', category: 'initial' })
+    expect(g.documents).toHaveLength(8)
+    expect(g.documents[0].name).toContain('住民票')
+  })
+
+  it('法人 × 初回は8件で、1件目が履歴事項全部証明書', () => {
+    const g = selectGuidance({ entityType: 'corporate', category: 'initial' })
+    expect(g.documents).toHaveLength(8)
+    expect(g.documents[0].name).toBe('履歴事項全部証明書')
+  })
+
+  it('更新は entityType によらず3件', () => {
+    const corp = selectGuidance({ entityType: 'corporate', category: 'renewal' })
+    const sole = selectGuidance({ entityType: 'sole_proprietor', category: 'renewal' })
+    expect(corp.documents).toHaveLength(3)
+    expect(sole.documents).toHaveLength(3)
+  })
+
+  it('介護分野では営業許可証が落ちる', () => {
+    const g = selectGuidance({ entityType: 'corporate', category: 'initial', field: 'care' })
+    expect(g.documents).toHaveLength(7)
+    expect(g.documents.some((d) => d.name.includes('営業許可証'))).toBe(false)
+  })
+
+  it('外食業分野では営業許可証が残る', () => {
+    const g = selectGuidance({
+      entityType: 'corporate',
+      category: 'initial',
+      field: 'food_service',
+    })
+    expect(g.documents).toHaveLength(8)
+    expect(g.documents.some((d) => d.name.includes('営業許可証'))).toBe(true)
+  })
+
+  it('分野が未指定なら営業許可証を落とさない', () => {
+    const g = selectGuidance({ entityType: 'corporate', category: 'initial' })
+    expect(g.documents.some((d) => d.name.includes('営業許可証'))).toBe(true)
+  })
+
+  it('返り値を破壊してもモジュール定数が汚染されない', () => {
+    const g = selectGuidance({ entityType: 'corporate', category: 'initial' })
+    g.councils.length = 0
+    g.documents.length = 0
+    expect(COUNCIL_GUIDES).toHaveLength(3)
+    expect(DOCUMENTS['corporate:initial']).toHaveLength(8)
+  })
+
+  it.each(Object.keys(DOCUMENTS) as (keyof typeof DOCUMENTS)[])(
+    '%s の書類番号は1から連番になっている',
+    (key) => {
+      const nos = DOCUMENTS[key].map((d) => d.no)
+      expect(nos).toEqual(nos.map((_, i) => i + 1))
+    }
+  )
+
+  it.each(CONDITIONS)('$entityType × $category で書類番号が重複しない', (c) => {
+    const nos = selectGuidance(c).documents.map((d) => d.no)
+    expect(new Set(nos).size).toBe(nos.length)
   })
 })
