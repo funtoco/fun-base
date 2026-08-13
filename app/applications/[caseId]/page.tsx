@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CaseProgressHeader } from '@/components/portal/case-progress-header'
@@ -10,6 +10,7 @@ import { OtherFilesCard } from '@/components/portal/other-files-card'
 import { getCaseWithRequirements } from '@/lib/portal/applications'
 import { getCaseFilesState } from '@/lib/portal/case-files'
 import { listComments } from '@/lib/portal/comments'
+import { buildGuideHref } from '@/lib/portal/guidance'
 import {
   APPLICATION_CATEGORY_LABELS,
   ENTITY_TYPE_LABELS,
@@ -87,6 +88,19 @@ export default async function ApplicationDetailPage({
       </div>
 
       <CaseProgressHeader status={detail.status} />
+
+      <Button asChild variant="outline" size="sm" className="gap-1">
+        <Link
+          href={buildGuideHref({
+            entityType: detail.entityType,
+            category: detail.applicationCategory,
+            field: detail.field,
+          })}
+        >
+          <BookOpen className="h-4 w-4" />
+          この案件のご案内を見る
+        </Link>
+      </Button>
 
       <ChecklistTable
         caseId={detail.id}
