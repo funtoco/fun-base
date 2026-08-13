@@ -4,6 +4,7 @@ import {
   asText,
   checkboxAlways,
   checkboxFromText,
+  checkboxOffWhenNoted,
   checkboxOn,
   combineYmdDate,
   constantText,
@@ -26,8 +27,8 @@ import type { AppMapping } from '../types'
  * - 規定の有無[CHECK_BOX]: ['無','有'] / 提供する宿泊施設[CHECK_BOX]: ['自己所有物件','借上物件']
  *
  * 値仕様（v4決定・厳守）:
- * - 賃金区分: 1-4:E13(月給金額)ありで `月給`ON、1-4:K13(時間給金額)ありで `時間給`ON（金額有無から自動判定）。
- *   加えて 1-6別紙 C5/K5/T5 の明示チェックも読む（CHECK_BOX は OR 合成、金額は先勝ちで dedupe）。
+ * - 賃金区分: 出所は 1-6別紙「１．基本賃金」のみ。F5/N5/W5 に金額があれば `月給`/`日給`/`時間給` を自動 ON し、
+ *   1-6別紙 C5/K5/T5 の明示チェックとも OR 合成する。1-4:E13/K13（④報酬＝支払概算額）は転記しない。
  * - (b)社会保険料（1-6別紙:S22）→ `厚生年金保険料` に合計を格納（`健康保険料` は設定しない）。
  * - 締切日/支払日の「毎月」CHECK_BOX（毎月4種）は常に ON（固定）。
  * - _4_f_控除額_備考 は固定文字『水道光熱費』。
@@ -65,12 +66,12 @@ export const APP55_MAPPING: AppMapping = {
     // E12 申請人_年齢 は CALC（生年月日から自動算出）→ 転記しない。
     { sheetName: '1-4', cell: 'H12', code: '性別', kind: 'RADIO_BUTTON', transform: radioFromText(性別_RADIO) },
     { sheetName: '1-4', cell: 'K12', code: '申請人_経験年数', kind: 'NUMBER', transform: asNumber },
-    // ④報酬(月給): 金額を格納しつつ、金額の有無で 月給 CHECK_BOX を自動 ON。
-    { sheetName: '1-4', cell: 'E13', code: '月給金額', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-4', cell: 'E13', code: '月給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    // ④報酬(時間給): 同上。
-    { sheetName: '1-4', cell: 'K13', code: '時間給金額', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-4', cell: 'K13', code: '時間給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    // ④申請人に対する報酬(1-4:E13/K13) は転記しない【2026-08-13 修正】。
+    // kintone の `月給金額`/`時間給金額` は 参考様式1-6別紙「１．基本賃金」の格納先で、1-4 の④報酬とは
+    // 共用フィールド。企業は 1-4:E13 に「1か月あたりの支払概算額（基本賃金＋諸手当）」を書くため、
+    // 先勝ちで E13 が採用されると 基本賃金 に概算額が入り、そこから CALC される
+    // `_3_支払概算額`/`_5_支給概算額` まで連鎖して誤った額になる。
+    // → 基本賃金の出所は 1-6別紙（賃金の支払）の F5/N5/W5 のみに一本化する（後述）。
     { sheetName: '1-4', cell: 'D14', code: '申請人_その他', kind: 'TEXT', transform: asText },
 
     // 比較対象日本人
@@ -104,13 +105,17 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-4', cell: 'E74', code: '書類に反映する_作成日_署名日', kind: 'DATE', transform: asDate },
 
     // ── 1-6別紙（賃金区分・時給換算・控除）───────────────────
-    // 賃金区分の明示チェック（金額有無からの自動判定と OR 合成）。
+    // 「１．基本賃金」＝ kintone の 月給金額/日給金額/時間給金額 の唯一の出所。
+    // 賃金区分の CHECK_BOX は「明示チェック(C5/K5/T5)」と「金額の有無(F5/N5/W5)」の OR 合成。
     { sheetName: '1-6別紙', cell: 'C5', code: '月給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6別紙', cell: 'F5', code: '月給金額', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6別紙', cell: 'F5', code: '月給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6別紙', cell: 'K5', code: '日給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6別紙', cell: 'N5', code: '日給金額', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6別紙', cell: 'N5', code: '日給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6別紙', cell: 'T5', code: '時間給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6別紙', cell: 'W5', code: '時間給金額', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-6別紙', cell: 'W5', code: '時間給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6別紙', cell: 'R6', code: '_1_4_1_1時間あたりの金額', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6別紙', cell: 'R7', code: '_1_4_2_１ヶ月あたりの金額', kind: 'NUMBER', transform: asNumber },
 
@@ -148,14 +153,19 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'O102', code: '_7_7_1_控除無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'Q102', code: '_7_7_2_控除有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
 
+    // 8.昇給 / 9.賞与 / 10.退職金（行103〜105）【2026-08-13 修正】
+    // 「有」チェック=E列、「無」チェック=X列、「時期，金額等」=J列（J103:V105 の結合枠）。
+    // ①『無』は Y103（"無" というラベル文字が入った定型セル）を読んでいたため常に ON になっていた
+    //   → X103 に修正。②企業は有無のチェックを付けず「時期，金額等」だけ書くことが多いので、
+    //   記載があれば『有』を ON にする（E列チェックと OR 合成）。『無』は下の derived で抑止する。
     { sheetName: '1-6', cell: 'E103', code: '_7_8_1_昇給有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'Y103', code: '_7_8_2_昇給無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'J103', code: '_7_8_1_昇給有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'J103', code: '_7_8_3_昇給有の時期金額等', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'E104', code: '_7_9_1_賞与有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'X104', code: '_7_9_2_賞与無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'J104', code: '_7_9_1_賞与有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'J104', code: '_7_9_1_賞与有の時期金額等', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'E105', code: '_7_10_1_退職金有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'X105', code: '_7_10_2_退職金無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'J105', code: '_7_10_1_退職金有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'J105', code: '_7_10_3_退職金有の時期金額等', kind: 'TEXT', transform: asText },
     // 11. 休業手当・健康診断関連（行106/115/116）は企業入力対象外 → 実装しない。
 
@@ -217,7 +227,11 @@ export const APP55_MAPPING: AppMapping = {
     // 3.休憩時間（日勤/夜勤の分数）
     { sheetName: '1-6', cell: 'G66', code: '日勤_休憩時間', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6', cell: 'O66', code: '夜勤_休憩時間', kind: 'NUMBER', transform: asNumber },
-    // 4.所定労働時間数(週月年)・5.所定労働日数(週月年) は事業所(OFID)ルックアップの自動供給＝書込ロックのため除外。
+    // 3.所定労働時間数(1-6:E68/H68/M68/P68/U68/X68 → `_4_3_1_1_時間`〜`_4_3_3_2_分`)と
+    // 4.所定労働日数(`_4_4_1_週所定労働日数`〜`_4_4_3_年所定労働日数`)は、app55 の事業所(OFID)
+    // ルックアップが app36「事業所マスタ」から自動供給するコピー先＝**書込ロック**（2026-08-13 再確認）。
+    // Excel の値を送っても kintone 側で無視される（updateRecord は成功するが値が入らない）ため除外。
+    // Excel を優先させるには kintone 側で OFID ルックアップのコピー設定から外す必要がある。
     // 6.所定時間外労働の有無
     { sheetName: '1-6', cell: 'I70', code: '_4_5_1_所定時間外労働有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'L70', code: '_4_5_2_所定時間外労働無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
@@ -258,6 +272,11 @@ export const APP55_MAPPING: AppMapping = {
   derived: [
     { sheetName: '1-6', cells: ['B17', 'E17', 'G17'], code: '_1_1_1_契約期間開始日', kind: 'DATE', combine: combineYmdDate },
     { sheetName: '1-6', cells: ['J17', 'M17', 'O17'], code: '_1_1_2_契約期間終了日', kind: 'DATE', combine: combineYmdDate },
+    // 8.昇給/9.賞与/10.退職金の『無』: [無チェック(X列), 時期金額等(J列)]。
+    // 時期・金額等に記載があれば『有』側を ON にするので、『無』は立てない（両方 ON の書類を作らない）。
+    { sheetName: '1-6', cells: ['X103', 'J103'], code: '_7_8_2_昇給無', kind: 'CHECK_BOX', combine: checkboxOffWhenNoted(CHECK_ON) },
+    { sheetName: '1-6', cells: ['X104', 'J104'], code: '_7_9_2_賞与無', kind: 'CHECK_BOX', combine: checkboxOffWhenNoted(CHECK_ON) },
+    { sheetName: '1-6', cells: ['X105', 'J105'], code: '_7_10_2_退職金無', kind: 'CHECK_BOX', combine: checkboxOffWhenNoted(CHECK_ON) },
   ],
   subtables: [
     // 諸手当(a)〜(h): 1-6別紙 行9〜16。手当名(D列)が空の行はスキップ。
@@ -285,14 +304,17 @@ export const APP55_MAPPING: AppMapping = {
         { subCode: 'その他の控除額', col: 'S', kind: 'NUMBER', transform: asNumber },
       ],
     },
-    // 交代制の勤務時間: 1-6 行54〜62（Ⅳ労働時間 2.交代制）。適用日(P列)が空の行はスキップ。
+    // 交代制の勤務時間: 1-6 行54〜62（Ⅳ労働時間 2.交代制）。
     // 各行: 始業(時D/分F)・終業(時J/分L)・適用日(P)・1日の所定労働時間(時W/分Z)。
+    // keyCol は指定しない【2026-08-13 修正】: 以前は適用日(P列)を主キー扱いにしていたが、
+    // 適用日は任意記入で空のまま提出されることがほとんどで、シフトを書いていても全行スキップされ
+    // サブテーブルが payload に載らなかった（＝kintone に何も反映されない）。
+    // 1セルでも記入があれば1行として送る（全列空の行は build-records 側でスキップされる）。
     {
       code: '交代制の勤務時間等',
       sheetName: '1-6',
       rowStart: 54,
       rowEnd: 62,
-      keyCol: 'P',
       columns: [
         { subCode: '始業時間_時', col: 'D', kind: 'NUMBER', transform: asNumber },
         { subCode: '始業時間_分', col: 'F', kind: 'NUMBER', transform: asNumber },

@@ -282,11 +282,12 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
       '居住費の詳細': { M3: 25000, H4: '借上物件', H5: '按分計算', H7: 3, J2: '有' },
       '1-4': {
         D10: 'グエン', H12: '男', K12: 2,
-        E13: 200000, // 月給金額あり → 月給 CHECK_BOX 自動ON
+        E13: 210000, // ④報酬（＝支払概算額）。基本賃金ではないので 月給金額 には入れない
         E74: new Date(Date.UTC(2026, 6, 29)),
         E75: '株式会社Funtoco', E77: '代表取締役', I77: '山田太郎',
       },
       '1-6別紙': {
+        F5: 200000, // １．基本賃金（月給）あり → 月給 CHECK_BOX 自動ON
         S22: 30000, // (b)社会保険料 → 厚生年金保険料へ
         C26: '(f) その他 （水道光熱費）',
         D9: '通勤手当', K9: 10000, S9: '実費',
@@ -300,7 +301,8 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     })
     const record = buildRecord(getCell, APP55_MAPPING)
 
-    // 賃金区分: 金額の有無で 月給 CHECK_BOX を自動ON
+    // 賃金区分: 1-6別紙「１．基本賃金」の金額の有無で 月給 CHECK_BOX を自動ON。
+    // 1-4:E13（④報酬＝支払概算額）は 月給金額 に混入させない。
     expect(record.月給金額).toEqual({ value: 200000 })
     expect(record.月給).toEqual({ value: ['■'] })
     // 性別は RADIO_BUTTON（選択肢文字列そのもの）
@@ -346,6 +348,79 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     const record = buildRecord(getCell, APP55_MAPPING)
     expect(record.月給).toEqual({ value: ['■'] })
     expect(record.月給金額).toEqual({ value: 180000 })
+  })
+
+  it('月給金額/時間給金額は 1-6別紙(基本賃金)のみを出所にし、1-4の④報酬は混入しない', () => {
+    const getCell = cellsReader({
+      // 企業は 1-4:E13 に「支払概算額（基本賃金＋諸手当）」を書くことが多い。
+      '1-4': { E13: 250000, K13: 1500 },
+      '1-6別紙': { F5: 180000 },
+    })
+    const record = buildRecord(getCell, APP55_MAPPING)
+    expect(record.月給金額).toEqual({ value: 180000 })
+    expect(record.月給).toEqual({ value: ['■'] })
+    // 1-4:K13 だけでは 時間給/時間給金額 は立たない（基本賃金の区分ではないため）。
+    expect('時間給金額' in record).toBe(false)
+    expect('時間給' in record).toBe(false)
+  })
+
+  it('昇給/賞与/退職金: 有無が未チェックでも「時期，金額等」に記載があれば 有 ON・無 OFF', () => {
+    const getCell = cellsReader({
+      '1-6': {
+        E103: false, X103: false, J103: '毎年4月、1,000円〜',
+        E104: false, X104: false, J104: '年2回、計3.4ヶ月分',
+        E105: false, X105: false, J105: '勤続3年以上の場合支給',
+      },
+    })
+    const record = buildRecord(getCell, APP55_MAPPING)
+    expect(record._7_8_1_昇給有).toEqual({ value: ['■'] })
+    expect(record._7_9_1_賞与有).toEqual({ value: ['■'] })
+    expect(record._7_10_1_退職金有).toEqual({ value: ['■'] })
+    expect('_7_8_2_昇給無' in record).toBe(false)
+    expect('_7_9_2_賞与無' in record).toBe(false)
+    expect('_7_10_2_退職金無' in record).toBe(false)
+  })
+
+  it('昇給/賞与/退職金: 無チェックのみ（時期金額等が空）なら 無 ON・有 OFF', () => {
+    const getCell = cellsReader({
+      '1-6': { E103: false, X103: true, E104: false, X104: true, E105: false, X105: true },
+    })
+    const record = buildRecord(getCell, APP55_MAPPING)
+    expect(record._7_8_2_昇給無).toEqual({ value: ['■'] })
+    expect(record._7_9_2_賞与無).toEqual({ value: ['■'] })
+    expect(record._7_10_2_退職金無).toEqual({ value: ['■'] })
+    expect('_7_8_1_昇給有' in record).toBe(false)
+  })
+
+  it('昇給/賞与/退職金: 何も書かれていなければ 有・無 とも出さない（Y103のラベル誤読の回帰）', () => {
+    const record = buildRecord(cellsReader({ '1-6': {} }), APP55_MAPPING)
+    expect('_7_8_2_昇給無' in record).toBe(false)
+    expect('_7_9_2_賞与無' in record).toBe(false)
+    expect('_7_10_2_退職金無' in record).toBe(false)
+  })
+
+  it('交代制の勤務時間等: 適用日が空でもシフト行を転記する', () => {
+    const getCell = cellsReader({
+      '1-6': {
+        // 適用日(P列)は未記入。始業/終業/1日の所定労働時間だけ記入されるケース。
+        D54: 5, F54: 0, J54: 14, L54: 0, W54: 7, Z54: 30,
+        D55: 9, F55: 0, J55: 18, L55: 0, W55: 7, Z55: 30,
+        P56: '4月〜9月', D56: 13, F56: 0, J56: 22, L56: 0, W56: 7, Z56: 30,
+      },
+    })
+    const record = buildRecord(getCell, APP55_MAPPING)
+    expect(record.交代制の勤務時間等).toEqual({
+      value: [
+        { value: { 始業時間_時: { value: 5 }, 始業時間_分: { value: 0 }, 終業時間_時: { value: 14 }, 終業時間_分: { value: 0 }, _1日の所定労働時間_時間: { value: 7 }, _1日の所定労働時間_分: { value: 30 } } },
+        { value: { 始業時間_時: { value: 9 }, 始業時間_分: { value: 0 }, 終業時間_時: { value: 18 }, 終業時間_分: { value: 0 }, _1日の所定労働時間_時間: { value: 7 }, _1日の所定労働時間_分: { value: 30 } } },
+        { value: { 始業時間_時: { value: 13 }, 始業時間_分: { value: 0 }, 終業時間_時: { value: 22 }, 終業時間_分: { value: 0 }, 交代制の勤務時間_適用日: { value: '4月〜9月' }, _1日の所定労働時間_時間: { value: 7 }, _1日の所定労働時間_分: { value: 30 } } },
+      ],
+    })
+  })
+
+  it('交代制の勤務時間等: 1行も記入が無ければ payload に含めない（既存行を消さない）', () => {
+    const record = buildRecord(cellsReader({ '1-6': {} }), APP55_MAPPING)
+    expect('交代制の勤務時間等' in record).toBe(false)
   })
 })
 
@@ -500,7 +575,8 @@ describe('transcribeWorkbook: targets（app296 事前紐付け・Aモデル）',
 describe('buildApp55Record（複数人・共通payload）', () => {
   it('人固有項目（氏名/性別/経験年数）は除外し、共通項目は残す', () => {
     const getCell = cellsReader({
-      '1-4': { D10: 'グエン', H12: '男', K12: 2, E13: 200000 },
+      '1-4': { D10: 'グエン', H12: '男', K12: 2 },
+      '1-6別紙': { F5: 200000 },
     })
     const record = buildApp55Record(getCell)
     // 人固有（HRIDルックアップが人材マスタから補完する項目）は payload に出さない。
