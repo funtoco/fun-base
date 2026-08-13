@@ -58,25 +58,27 @@ export async function resolveKintoneRecordId(
 export interface CaseKey {
   caseId: string
   tenantId: string
+  tenantOfficeId: string
 }
 
-/** app296 レコード番号 → 案件キー（case_comments 挿入に必要な2列）。 */
+/** app296 レコード番号 → 案件キー（case_comments 挿入に必要な3列）。 */
 export async function resolveCaseByKintoneRecord(
   service: ServiceClient,
   kintoneRecordId: string
 ): Promise<CaseKey | null> {
   const { data } = await service
     .from('visa_application_cases')
-    .select('id, tenant_id')
+    .select('id, tenant_id, tenant_office_id')
     .eq('kintone_record_id', kintoneRecordId)
     .maybeSingle()
   if (!data) {
     return null
   }
-  const row = data as { id: string; tenant_id: string }
+  const row = data as { id: string; tenant_id: string; tenant_office_id: string }
   return {
     caseId: row.id,
     tenantId: row.tenant_id,
+    tenantOfficeId: row.tenant_office_id,
   }
 }
 
@@ -110,6 +112,7 @@ export async function importKintoneComment(args: {
   await args.service.from('case_comments').insert({
     case_id: args.caseKey.caseId,
     tenant_id: args.caseKey.tenantId,
+    tenant_office_id: args.caseKey.tenantOfficeId,
     author: null,
     body: args.comment.text,
     source: 'kintone',

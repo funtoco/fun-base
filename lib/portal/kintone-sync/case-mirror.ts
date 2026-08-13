@@ -253,9 +253,9 @@ export async function mirrorCaseFromKintone(
   }
 
   // 案件行（status は DB 既定 'draft'／Phase5 の UPDATE_STATUS で更新するためここでは触らない）。
-  // 事業所は 20260806000000 で visa_application_case_offices へ切り出されたため、ここには持たない。
   const row = {
     tenant_id: tenantId,
+    tenant_office_id: tenantOfficeId,
     entity_type: mapped.entityType,
     application_category: mapped.applicationCategory,
     field: mapped.field,
@@ -290,20 +290,6 @@ export async function mirrorCaseFromKintone(
     created = true
   }
 
-  // 案件×事業所。kintone(app296) は現状1事業所しか送ってこないため代表事業所(sort_order=0)のみ。
-  // 事業所が1件も無い案件は RLS(portal_can_access_case) で誰にも見えず、
-  // materialize_case_requirements も 'case has no office' で落ちる。
-  // つまりここが失敗した案件は成立しないので、握り潰さず throw する。
-  const { error: officeError } = await service
-    .from('visa_application_case_offices')
-    .upsert(
-      { case_id: caseId, tenant_id: tenantId, tenant_office_id: tenantOfficeId, sort_order: 0 },
-      { onConflict: 'case_id,tenant_office_id' }
-    )
-  if (officeError) {
-    throw new Error(`案件の事業所紐付けに失敗: ${officeError.message}`)
-  }
-
   // 申請人メンバー（雇用条件書サブテーブルの各人）。重複回避で upsert。
   // 同一 person が複数行に現れても1回だけ付与する（同一イベント内の重複を吸収）。
   const seenPersonIds = new Set<string>()
@@ -323,13 +309,14 @@ export async function mirrorCaseFromKintone(
     if (member) {
       continue
     }
-    // tenant_id は NOT NULL＋複合FK(case_id,tenant_id)。
+    // tenant_id/tenant_office_id は NOT NULL＋複合FK(case_id,tenant_id,tenant_office_id)。
     // service-role でも列制約はバイパスされないため、案件と同一の値を必ず渡す。
     const { error: memberError } = await service
       .from('visa_application_case_members')
       .insert({
         case_id: caseId,
         tenant_id: tenantId,
+        tenant_office_id: tenantOfficeId,
         person_id: personId,
       })
     if (memberError) {

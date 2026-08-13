@@ -22,8 +22,7 @@ type RequirementContext = {
   id: string
   case_id: string
   tenant_id: string
-  /** office 書類(office_documents)の格納先事業所＝案件の代表事業所。アクセス境界ではない。 */
-  filing_tenant_office_id: string
+  tenant_office_id: string
   scope: 'office' | 'person'
   person_id: string | null
   document_code: string
@@ -34,8 +33,8 @@ type RequirementContext = {
 }
 
 /**
- * 案件+要件をユーザーセッション（RLS）で取得する。RLS（portal_can_access_case）が
- * 案件境界に絞るため、行が返れば「この要件へのアクセス権あり」と判断できる。
+ * 案件+要件をユーザーセッション（RLS）で取得する。RLS が office 境界に絞るため、
+ * 行が返れば「この要件へのアクセス権あり」と判断できる。
  */
 async function loadRequirementContext(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -45,7 +44,7 @@ async function loadRequirementContext(
   const { data, error } = await supabase
     .from('case_document_requirements')
     .select(
-      'id, case_id, tenant_id, filing_tenant_office_id, scope, person_id, document_code, name, status, office_document_id, person_document_id'
+      'id, case_id, tenant_id, tenant_office_id, scope, person_id, document_code, name, status, office_document_id, person_document_id'
     )
     .eq('id', requirementId)
     .eq('case_id', caseId)
@@ -94,7 +93,7 @@ export async function uploadRequirementDocument(params: {
   if (requirement.scope === 'office') {
     const objectKey = buildOfficeObjectKey({
       tenantId: requirement.tenant_id,
-      officeId: requirement.filing_tenant_office_id,
+      officeId: requirement.tenant_office_id,
       caseId: requirement.case_id,
       requirementId: requirement.id,
       fileName: file.name,
@@ -104,7 +103,7 @@ export async function uploadRequirementDocument(params: {
     const { data: existingDoc } = await service
       .from('office_documents')
       .select('id, storage_path')
-      .eq('tenant_office_id', requirement.filing_tenant_office_id)
+      .eq('tenant_office_id', requirement.tenant_office_id)
       .eq('document_code', requirement.document_code)
       .maybeSingle()
 
@@ -123,8 +122,7 @@ export async function uploadRequirementDocument(params: {
         {
           ...(existingDoc ? { id: (existingDoc as { id: string }).id } : {}),
           tenant_id: requirement.tenant_id,
-          // office_documents は UNIQUE(tenant_office_id, document_code) のまま（列名は据え置き）。
-          tenant_office_id: requirement.filing_tenant_office_id,
+          tenant_office_id: requirement.tenant_office_id,
           document_code: requirement.document_code,
           storage_path: objectKey,
           file_name: file.name,
@@ -198,8 +196,7 @@ export async function uploadRequirementDocument(params: {
     .insert({
       person_id: requirement.person_id,
       tenant_id: requirement.tenant_id,
-      // person_documents.tenant_office_id は変更なし。値だけ案件の代表事業所から取る。
-      tenant_office_id: requirement.filing_tenant_office_id,
+      tenant_office_id: requirement.tenant_office_id,
       document_type: 'other',
       storage_path: objectKey,
       title: requirement.name,
@@ -313,7 +310,7 @@ export async function createRequirementDocumentSignedUrl(params: {
   const linkColumn =
     kind === 'office' ? 'office_document_id' : 'person_document_id'
 
-  // ユーザーセッション（RLS=案件境界）で「この書類を参照する要件」を確認 → 認可
+  // ユーザーセッション（RLS=office境界）で「この書類を参照する要件」を確認 → 認可
   const { data: reqRow, error: reqError } = await supabase
     .from('case_document_requirements')
     .select('id')
