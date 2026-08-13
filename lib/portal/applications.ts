@@ -8,6 +8,7 @@ import type {
   CaseDetail,
   CaseDocumentRequirement,
   CaseMember,
+  CaseOffice,
   CaseStatus,
   GroupedRequirements,
   VisaApplicationCase,
@@ -18,7 +19,6 @@ const TENANT_WIDE_ROLES = new Set(['owner', 'admin', 'supporter'])
 type CaseRow = {
   id: string
   tenant_id: string
-  tenant_office_id: string
   entity_type: string
   application_category: string
   field: string
@@ -63,12 +63,13 @@ type MemberRow = {
   created_at: string
 }
 
-function mapCase(row: CaseRow, officeName: string | null): VisaApplicationCase {
+function mapCase(row: CaseRow, offices: CaseOffice[]): VisaApplicationCase {
   return {
     id: row.id,
     tenantId: row.tenant_id,
-    tenantOfficeId: row.tenant_office_id,
-    officeName,
+    offices,
+    // 代表事業所＝sort_order 昇順の先頭（portal_case_primary_office と同じ決め方）。
+    officeName: offices[0]?.name ?? null,
     entityType: row.entity_type as VisaApplicationCase['entityType'],
     applicationCategory:
       row.application_category as VisaApplicationCase['applicationCategory'],
@@ -226,8 +227,55 @@ async function resolveOfficeNames(
   return map
 }
 
+/** 案件IDごとの対象事業所を sort_order 昇順で返す。 */
+async function fetchCaseOffices(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  caseIds: string[]
+): Promise<Map<string, CaseOffice[]>> {
+  const byCase = new Map<string, CaseOffice[]>()
+  const unique = Array.from(new Set(caseIds)).filter(Boolean)
+  if (unique.length === 0) {
+    return byCase
+  }
+
+  // 並びは portal_case_primary_office と同じ sort_order → created_at → id。
+  // 先頭が代表事業所になるため、DB 関数と同じ決定的な順序である必要がある。
+  const { data, error } = await supabase
+    .from('visa_application_case_offices')
+    .select('case_id, tenant_office_id, sort_order, created_at, id')
+    .in('case_id', unique)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+
+  if (error) {
+    console.error('Error fetching case offices:', error)
+    return byCase
+  }
+
+  const rows = (data || []) as Array<{
+    case_id: string
+    tenant_office_id: string
+    sort_order: number
+  }>
+  const officeNames = await resolveOfficeNames(
+    supabase,
+    rows.map((r) => r.tenant_office_id)
+  )
+  for (const row of rows) {
+    const list = byCase.get(row.case_id) ?? []
+    list.push({
+      tenantOfficeId: row.tenant_office_id,
+      name: officeNames.get(row.tenant_office_id) ?? null,
+      sortOrder: row.sort_order,
+    })
+    byCase.set(row.case_id, list)
+  }
+  return byCase
+}
+
 /**
- * アクセス可能な案件の一覧（RLS が自動で office 境界に絞る）。
+ * アクセス可能な案件の一覧（RLS=portal_can_access_case が自動で案件境界に絞る）。
  */
 export async function listCases(): Promise<VisaApplicationCase[]> {
   const supabase = await createClient()
@@ -241,7 +289,7 @@ export async function listCases(): Promise<VisaApplicationCase[]> {
   const { data, error } = await supabase
     .from('visa_application_cases')
     .select(
-      'id, tenant_id, tenant_office_id, entity_type, application_category, field, application_type, management_number, status, title, note, kintone_record_id, kintone_sync_status, kintone_last_synced_at, created_at, updated_at'
+      'id, tenant_id, entity_type, application_category, field, application_type, management_number, status, title, note, kintone_record_id, kintone_sync_status, kintone_last_synced_at, created_at, updated_at'
     )
     .order('created_at', { ascending: false })
 
@@ -251,11 +299,12 @@ export async function listCases(): Promise<VisaApplicationCase[]> {
   }
 
   const rows = (data || []) as CaseRow[]
-  const officeNames = await resolveOfficeNames(
+  // 事業所は案件ごとに引かず1回でまとめて取得する（N+1 回避）。
+  const officesByCase = await fetchCaseOffices(
     supabase,
-    rows.map((r) => r.tenant_office_id)
+    rows.map((r) => r.id)
   )
-  return rows.map((r) => mapCase(r, officeNames.get(r.tenant_office_id) ?? null))
+  return rows.map((r) => mapCase(r, officesByCase.get(r.id) ?? []))
 }
 
 async function fetchMembersWithNames(
@@ -315,7 +364,7 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
   const { data, error } = await supabase
     .from('visa_application_cases')
     .select(
-      'id, tenant_id, tenant_office_id, entity_type, application_category, field, application_type, management_number, status, title, note, kintone_record_id, kintone_sync_status, kintone_last_synced_at, created_at, updated_at'
+      'id, tenant_id, entity_type, application_category, field, application_type, management_number, status, title, note, kintone_record_id, kintone_sync_status, kintone_last_synced_at, created_at, updated_at'
     )
     .eq('id', caseId)
     .maybeSingle()
@@ -329,11 +378,11 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
   }
 
   const row = data as CaseRow
-  const officeNames = await resolveOfficeNames(supabase, [row.tenant_office_id])
+  const officesByCase = await fetchCaseOffices(supabase, [row.id])
   const members = await fetchMembersWithNames(supabase, caseId)
 
   return {
-    ...mapCase(row, officeNames.get(row.tenant_office_id) ?? null),
+    ...mapCase(row, officesByCase.get(row.id) ?? []),
     members,
   }
 }

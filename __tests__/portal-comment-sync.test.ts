@@ -40,7 +40,7 @@ function mockService(opts: { existing?: unknown } = {}) {
   return service
 }
 
-const caseKey = { caseId: 'case-1', tenantId: 'ten-1', tenantOfficeId: 'off-1' }
+const caseKey = { caseId: 'case-1', tenantId: 'ten-1' }
 
 describe('comment-sync: 純粋ヘルパ', () => {
   it('buildKintoneCommentText: 接頭辞＋投稿者＋本文', () => {
@@ -103,7 +103,6 @@ describe('importKintoneComment: 三重ループ防止', () => {
     expect(service.inserts[0]).toEqual({
       case_id: 'case-1',
       tenant_id: 'ten-1',
-      tenant_office_id: 'off-1',
       author: null,
       body: 'kintoneからの新規',
       source: 'kintone',

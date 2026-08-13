@@ -32,6 +32,13 @@ export interface AccessibleOffice {
   name: string
 }
 
+/** 案件が対象とする事業所。sort_order 昇順で、先頭が代表事業所。 */
+export interface CaseOffice {
+  tenantOfficeId: string
+  name: string | null
+  sortOrder: number
+}
+
 // 案件に紐づく人材
 export interface CaseMember {
   id: string
@@ -46,7 +53,9 @@ export interface CaseMember {
 export interface VisaApplicationCase {
   id: string
   tenantId: string
-  tenantOfficeId: string
+  /** 対象事業所（sort_order 昇順）。先頭が代表事業所。 */
+  offices: CaseOffice[]
+  /** 代表事業所名。offices[0]?.name と一致する。既存の表示箇所のための便宜フィールド。 */
   officeName: string | null
   entityType: EntityType
   applicationCategory: ApplicationCategory
