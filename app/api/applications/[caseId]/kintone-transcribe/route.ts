@@ -5,13 +5,15 @@ import { createKintoneWriteClientFromEnv } from '@/lib/portal/kintone-sync/kinto
 import { runCaseTranscription } from '@/lib/portal/kintone-sync/run-transcription'
 
 // POST /api/applications/[caseId]/kintone-transcribe
-// 提出Excel（申請書類作成フォーム）を読み、kintone app34（マスタ_法人）と app55（雇用条件書）へ
-// 転記する（app36 は対象外）。
+// 提出Excel（申請書類作成フォーム）を読み、kintone app34（マスタ_法人）・app36（マスタ_事業所）・
+// app55（雇用条件書）へ転記する。
 //
 // Aモデル: 反映先は kintone「ビザ案件管理」(app296) の事前紐付けで確定。
 //   ?kintoneCaseId=<app296レコード番号>（無ければ案件の kintone_record_id）から反映先を解決し、
 //   照合せず直接 update する（重複ゼロ）。app55（雇用条件書）は koyou_details サブテーブルの
-//   各人へ同一payloadを fan-out。結果は app296 の sync_*_status / synced_at / sync_log に書き戻す。
+//   各人へ、app36（事業所マスタ）は office_details の各事業所へ同一payloadを fan-out。
+//   app36 には所定労働時間数など「app55 では OFID ルックアップのコピー先＝書込ロック」の項目を書く。
+//   結果は app296 の sync_*_status / synced_at / sync_log に書き戻す。
 //   実書き込みの中核・書き戻し・エラー処理は runCaseTranscription に集約している。
 //
 // 既定は dryRun（本番kintoneに書かない）。実書き込みは以下がすべて揃うときのみ:
@@ -83,6 +85,8 @@ export async function POST(
       app34: result.app34,
       app55Record: result.app55Record,
       app55Writes: result.app55Writes,
+      app36Record: result.app36Record,
+      app36Writes: result.app36Writes,
     })
   } catch (error) {
     console.error('Error transcribing application workbook to kintone:', error)

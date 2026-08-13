@@ -14,6 +14,7 @@ import {
 } from '@/lib/portal/kintone-sync/transforms'
 import { buildRecord } from '@/lib/portal/kintone-sync/build-records'
 import { APP34_MAPPING } from '@/lib/portal/kintone-sync/mappings/app34'
+import { APP36_MAPPING } from '@/lib/portal/kintone-sync/mappings/app36'
 import { APP55_MAPPING } from '@/lib/portal/kintone-sync/mappings/app55'
 import {
   transcribeWorkbook,
@@ -26,7 +27,10 @@ import {
   loadCaseHubLinks,
   writeBackSyncStatus,
 } from '@/lib/portal/kintone-sync/case-hub'
-import { buildKoyouRowStatuses } from '@/lib/portal/kintone-sync/run-transcription'
+import {
+  buildKoyouRowStatuses,
+  loadApp55Ofids,
+} from '@/lib/portal/kintone-sync/run-transcription'
 import type {
   KintoneReadRecord,
   KintoneWriteClient,
@@ -424,6 +428,61 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
   })
 })
 
+// ── app36: 所定労働時間数など（app55では書込ロックのためマスタ側に書く）────────
+describe('APP36_MAPPING: 労働時間系を事業所マスタへ転記する', () => {
+  it('3.所定労働時間数 / 4.所定労働日数 / 年間合計休日日数 を payload にする', () => {
+    const getCell = cellsReader({
+      '1-6': {
+        E68: 40, H68: 0, // ①週 40時間0分
+        M68: 173, P68: 20, // ②月 173時間20分
+        U68: 2080, X68: 0, // ③年 2080時間0分
+        I69: 5, P69: 21, W69: 256, // 所定労働日数 週/月/年
+        X74: 109, // 年間合計休日日数
+      },
+    })
+    const record = buildRecord(getCell, APP36_MAPPING)
+    expect(record).toEqual({
+      所定労働時間_週_時間: { value: 40 },
+      所定労働時間_週_分: { value: 0 },
+      所定労働時間_月_時間: { value: 173 },
+      所定労働時間_月_分: { value: 20 },
+      所定労働時間_年_時間: { value: 2080 },
+      所定労働時間_年_分: { value: 0 },
+      所定労働日数_週: { value: 5 },
+      所定労働日数_月: { value: 21 },
+      所定労働日数_年: { value: 256 },
+      年間合計休日日数: { value: 109 },
+    })
+  })
+
+  it('記入が無ければ空 payload（事業所マスタの既存値を消さない）', () => {
+    expect(buildRecord(cellsReader({ '1-6': {} }), APP36_MAPPING)).toEqual({})
+  })
+
+  it('一部だけ記入されていれば、その項目だけ送る', () => {
+    const record = buildRecord(cellsReader({ '1-6': { E68: 40, H68: 0 } }), APP36_MAPPING)
+    expect(record).toEqual({
+      所定労働時間_週_時間: { value: 40 },
+      所定労働時間_週_分: { value: 0 },
+    })
+  })
+
+  it('app55 側には所定労働時間数系を出さない（書込ロックのため）', () => {
+    const record = buildRecord(
+      cellsReader({ '1-6': { E68: 40, H68: 0, I69: 5, X74: 109 } }),
+      APP55_MAPPING
+    )
+    for (const code of [
+      '_4_3_1_1_時間',
+      '_4_3_1_2_分',
+      '_4_4_1_週所定労働日数',
+      '_5_3_年間合計休日日数',
+    ]) {
+      expect(code in record).toBe(false)
+    }
+  })
+})
+
 // ── transcribeWorkbook（モッククライアントで upsert 判定・書込未呼出）──────
 async function makeWorkbookBuffer(
   sheets: Record<string, Record<string, unknown>>
@@ -644,9 +703,34 @@ describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
         { rowId: '2', app55RecordId: '56', hrid: 'HR-002', applicantName: 'タン' },
       ],
       koyouRowIds: ['1', '2'],
+      officeTargets: [],
       driveFolderUrl: null,
       companyName: null,
     })
+  })
+
+  it('loadCaseHubLinks: office_details を officeTargets（app36の反映先）に解決する', async () => {
+    const rec = hubRecord()
+    rec.office_details = {
+      value: [
+        {
+          id: '10',
+          value: {
+            office_ref: { value: '17351' },
+            office_name_disp: { value: '社会医療法人盛和会本田病院' },
+          },
+        },
+        // office_ref 空の行は反映先が無いのでスキップ。
+        { id: '11', value: { office_ref: { value: '' } } },
+        { id: '12', value: { office_ref: { value: '66' }, office_name_disp: { value: '' } } },
+      ],
+    } as unknown as { value: unknown }
+    const client = makeMockClient({ getRecords: vi.fn().mockResolvedValue([rec]) })
+    const links = await loadCaseHubLinks(client, '5')
+    expect(links?.officeTargets).toEqual([
+      { rowId: '10', app36RecordId: '17351', officeName: '社会医療法人盛和会本田病院' },
+      { rowId: '12', app36RecordId: '66', officeName: null },
+    ])
   })
 
   it('loadCaseHubLinks: company_name_disp を companyName として返す（Driveのファイル名に使う）', async () => {
@@ -689,6 +773,28 @@ describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
   it('loadCaseHubLinks: 見つからなければ null', async () => {
     const client = makeMockClient({ getRecords: vi.fn().mockResolvedValue([]) })
     expect(await loadCaseHubLinks(client, '999')).toBeNull()
+  })
+
+  it('loadApp55Ofids: 対象レコードの現在の OFID を引く（ルックアップ再取得用）', async () => {
+    const getRecords = vi.fn().mockResolvedValue([
+      { $id: { value: '55' }, OFID: { value: '17351' } },
+      { $id: { value: '56' }, OFID: { value: '' } }, // OFID 未設定は対象外
+    ])
+    const client = makeMockClient({ getRecords })
+    const ofids = await loadApp55Ofids(client, [
+      { rowId: '1', app55RecordId: '55', hrid: null, applicantName: null },
+      { rowId: '2', app55RecordId: '56', hrid: null, applicantName: null },
+    ])
+    expect(getRecords).toHaveBeenCalledWith('55', '$id in ("55", "56")')
+    expect(ofids.get('55')).toBe('17351')
+    expect(ofids.has('56')).toBe(false)
+  })
+
+  it('loadApp55Ofids: 対象0件なら問い合わせない', async () => {
+    const getRecords = vi.fn()
+    const client = makeMockClient({ getRecords })
+    expect((await loadApp55Ofids(client, [])).size).toBe(0)
+    expect(getRecords).not.toHaveBeenCalled()
   })
 
   it('writeBackSyncStatus: app296 へ status/synced_at/log を update', async () => {

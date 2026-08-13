@@ -18,6 +18,16 @@ export interface KoyouTarget {
   applicantName: string | null
 }
 
+/** 事業所サブテーブル(office_details)の1行＝1事業所の反映先。 */
+export interface OfficeTarget {
+  /** サブテーブルの行ID。 */
+  rowId: string | null
+  /** office_ref（= app36 マスタ_事業所 レコード番号 OFID）。 */
+  app36RecordId: string
+  /** office_name_disp（事業所ルックアップの自動コピー・表示用）。 */
+  officeName: string | null
+}
+
 /** 案件ハブ（app296）1レコードから解決した反映先リンク。 */
 export interface CaseHubLinks {
   /** app296 のレコード番号（案件キー）。 */
@@ -26,6 +36,12 @@ export interface CaseHubLinks {
   app34RecordId: string | null
   /** 雇用条件書サブテーブルの各行（複数人分の app55 反映先）。 */
   koyouTargets: KoyouTarget[]
+  /**
+   * 事業所サブテーブルの各行（複数事業所分の app36 反映先）。
+   * 所定労働時間数などは app55 側が書込ロック（OFIDルックアップのコピー先）のため、
+   * コピー元である app36 に書いて反映させる（mappings/app36.ts 参照）。
+   */
+  officeTargets: OfficeTarget[]
   /**
    * koyou_details の全行ID（フォーム上の並び順）。koyou_ref 未設定の行も含む。
    * サブテーブル更新は「送信した行で置換」なので、書き戻し時にここの全行を送り返す。
@@ -95,6 +111,25 @@ export async function loadCaseHubLinks(
     })
   }
 
+  // 事業所サブテーブル(office_details)を各行→OfficeTargetへ。office_ref が無い行は無視。
+  const officeRows =
+    (record['office_details'] as { value: SubtableRow[] } | undefined)?.value ?? []
+  const officeTargets: OfficeTarget[] = []
+  for (const row of officeRows) {
+    const cell = (code: string): unknown => row.value?.[code]?.value
+    const app36RecordId = asIdString(cell('office_ref'))
+    if (!app36RecordId) {
+      continue
+    }
+    const officeName = cell('office_name_disp')
+    officeTargets.push({
+      rowId: asIdString(row.id),
+      app36RecordId,
+      officeName:
+        officeName != null && officeName !== '' ? String(officeName) : null,
+    })
+  }
+
   const driveUrl = field('drive_folder_url')
   const companyName = field('company_name_disp')
   return {
@@ -102,6 +137,7 @@ export async function loadCaseHubLinks(
     app34RecordId: asIdString(field('company_ref')),
     koyouTargets,
     koyouRowIds,
+    officeTargets,
     driveFolderUrl:
       driveUrl === undefined || driveUrl === null || driveUrl === ''
         ? null

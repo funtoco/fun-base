@@ -227,11 +227,12 @@ export const APP55_MAPPING: AppMapping = {
     // 3.休憩時間（日勤/夜勤の分数）
     { sheetName: '1-6', cell: 'G66', code: '日勤_休憩時間', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6', cell: 'O66', code: '夜勤_休憩時間', kind: 'NUMBER', transform: asNumber },
-    // 3.所定労働時間数(1-6:E68/H68/M68/P68/U68/X68 → `_4_3_1_1_時間`〜`_4_3_3_2_分`)と
-    // 4.所定労働日数(`_4_4_1_週所定労働日数`〜`_4_4_3_年所定労働日数`)は、app55 の事業所(OFID)
-    // ルックアップが app36「事業所マスタ」から自動供給するコピー先＝**書込ロック**（2026-08-13 再確認）。
-    // Excel の値を送っても kintone 側で無視される（updateRecord は成功するが値が入らない）ため除外。
-    // Excel を優先させるには kintone 側で OFID ルックアップのコピー設定から外す必要がある。
+    // 3.所定労働時間数(`_4_3_1_1_時間`〜`_4_3_3_2_分`)と 4.所定労働日数(`_4_4_1_週所定労働日数`〜
+    // `_4_4_3_年所定労働日数`)は、app55 の事業所(OFID)ルックアップが app36「事業所マスタ」から
+    // 自動供給するコピー先＝**書込ロック**（2026-08-13 再確認）。Excel の値を送っても kintone 側で
+    // 無視される（updateRecord は成功するが値が入らない）ため、app55 では転記しない。
+    // → コピー元である app36 側に転記する（mappings/app36.ts）。app36 更新後に app55 を OFID 付きで
+    //   更新するとルックアップが再実行され、ここのコピー先も最新化される（run-transcription.ts）。
     // 6.所定時間外労働の有無
     { sheetName: '1-6', cell: 'I70', code: '_4_5_1_所定時間外労働有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'L70', code: '_4_5_2_所定時間外労働無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
@@ -240,7 +241,8 @@ export const APP55_MAPPING: AppMapping = {
     // 定例日: 毎週定休曜日（F74）＋その他（M74）。⚠️祝日/曜日/その他の結合はせず個別格納・要確認。
     { sheetName: '1-6', cell: 'F74', code: '_5_1_定例日', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'M74', code: '_5_2_その他休日', kind: 'TEXT', transform: asText },
-    // _5_3_年間合計休日日数 は事業所(OFID)ルックアップの自動供給＝書込ロックのため除外。
+    // _5_3_年間合計休日日数 は事業所(OFID)ルックアップの自動供給＝書込ロックのため、
+    // app36「事業所マスタ」の `年間合計休日日数` に転記する（mappings/app36.ts）。
     // 非定例日: 週/月チェック＋日数＋その他（⚠️その他の定例/非定例割当は要確認）
     { sheetName: '1-6', cell: 'E76', code: '_5_2_1_1_週あたり', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'H76', code: '_5_2_1_2_月あたり', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
