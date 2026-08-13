@@ -181,9 +181,11 @@ export function buildCompanyAccess(
         .map((id) => (typeof id === "string" ? id.trim() : null))
         .filter((id): id is string => Boolean(id))
       const explicitCompanyNames = COMPANY_ACCESS_KEYS.flatMap((key) => extractCompanyNames(membership[key]))
-      const companyNames = officeIds.length > 0
-        ? explicitCompanyNames
-        : [...officeNames, ...explicitCompanyNames]
+      // 所属先IDと所属先名は「どちらか一致すれば可視」とする。
+      // people.tenant_office_id は法人デフォルトofficeのまま止まっている行が多く、
+      // 逆にユーザー側が施設officeに割り当てられているケースもあるため、
+      // 片方だけを正とすると必ずどちらかのテナントが0件になる。
+      const companyNames = [...officeNames, ...explicitCompanyNames]
 
       if (companyNames.length === 0 && officeIds.length === 0) {
         access.fullTenantIds.add(tenantId)
@@ -299,12 +301,8 @@ export function canAccessPersonByCompany(
   if (access.fullTenantIds.has(person.tenant_id)) return true
 
   const allowedOfficeIds = access.restrictedTenantOfficeIds.get(person.tenant_id)
-  if (allowedOfficeIds && allowedOfficeIds.size > 0 && person.tenant_office_id && allowedOfficeIds.has(person.tenant_office_id)) {
+  if (allowedOfficeIds && person.tenant_office_id && allowedOfficeIds.has(person.tenant_office_id)) {
     return true
-  }
-
-  if (allowedOfficeIds && allowedOfficeIds.size > 0) {
-    return false
   }
 
   const allowedCompanies = access.restrictedTenantCompanies.get(person.tenant_id)
@@ -330,8 +328,6 @@ function buildPeopleAccessOrFilter(access: CompanyAccess): string | null {
 
   access.restrictedTenantCompanies.forEach((companies, tenantId) => {
     if (access.fullTenantIds.has(tenantId) || companies.size === 0) return
-    const officeIds = access.restrictedTenantOfficeIds.get(tenantId)
-    if (officeIds && officeIds.size > 0) return
 
     clauses.push(
       `and(tenant_id.eq.${tenantId},company.in.(${Array.from(companies).map(quotePostgrestValue).join(",")}))`
