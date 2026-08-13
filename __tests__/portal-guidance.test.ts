@@ -304,8 +304,7 @@ describe('guidanceDefaultsFromCases', () => {
   const BASE_CASE: VisaApplicationCase = {
     id: 'c1',
     tenantId: 't1',
-    tenantOfficeId: 'o1',
-    officeName: null,
+    offices: [],
     entityType: 'corporate',
     applicationCategory: 'initial',
     field: 'other',

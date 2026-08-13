@@ -81,11 +81,11 @@ export default async function ApplicationsPage() {
                             href={`/applications/${c.id}`}
                             className="block font-medium text-foreground hover:underline"
                           >
-                            {c.title || c.officeName || '無題の案件'}
+                            {c.title || c.offices[0]?.name || '無題の案件'}
                           </Link>
-                          {c.officeName && (
+                          {c.offices.length > 0 && (
                             <span className="text-xs text-muted-foreground">
-                              {c.officeName}
+                              {c.offices.map((o) => o.name ?? '（名称未取得）').join('／')}
                             </span>
                           )}
                         </TableCell>

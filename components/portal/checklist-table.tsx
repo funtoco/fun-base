@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, Eye, Loader2, Upload } from 'lucide-react'
+import { Building2, Download, Eye, Loader2, Upload } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -61,14 +61,36 @@ function requirementDoc(
   return null
 }
 
+// テンプレ「はじめに」Ⅲ. の事業所名欄は5行しかない（lib/portal/workbook-template.ts と揃える）。
+const MAX_TEMPLATE_OFFICES = 5
+
+/** Content-Disposition からファイル名を取り出す（RFC5987 形式を優先）。取れなければ null。 */
+function fileNameFromDisposition(disposition: string | null): string | null {
+  if (!disposition) {
+    return null
+  }
+  const utf8 = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8) {
+    try {
+      return decodeURIComponent(utf8[1])
+    } catch {
+      return null
+    }
+  }
+  const plain = disposition.match(/filename="?([^";]+)"?/i)
+  return plain ? plain[1] : null
+}
+
 function RequirementRow({
   caseId,
   item,
+  officeCount,
   busyIds,
   setBusyIds,
 }: {
   caseId: string
   item: CaseDocumentRequirement
+  officeCount: number
   busyIds: BusyIds
   setBusyIds: React.Dispatch<React.SetStateAction<BusyIds>>
 }) {
@@ -138,6 +160,60 @@ function RequirementRow({
       toast({
         variant: 'destructive',
         title: 'アップロードに失敗しました',
+        description: 'ネットワークエラーが発生しました。',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // 事業所名が入った状態のテンプレを取得して保存させる。
+  async function handleTemplateDownload() {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/applications/${caseId}/template`)
+      if (!res.ok) {
+        const result = await res.json().catch(() => ({}))
+        toast({
+          variant: 'destructive',
+          title: 'テンプレートを取得できませんでした',
+          description: result.error || '時間をおいて再度お試しください。',
+        })
+        return
+      }
+
+      const blob = await res.blob()
+      const fileName =
+        fileNameFromDisposition(res.headers.get('Content-Disposition')) ??
+        '申請書類作成フォーム.xlsx'
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+
+      const overflow = Number(res.headers.get('X-Office-Overflow-Count') ?? '0')
+      if (overflow > 0) {
+        toast({
+          title: 'ダウンロードしました（一部は手入力が必要です）',
+          description: `事業所名の記入欄は${MAX_TEMPLATE_OFFICES}件までです。残り${overflow}件はExcelに直接ご記入ください。`,
+        })
+      } else {
+        toast({
+          title: 'ダウンロードしました',
+          description:
+            officeCount > 0
+              ? `事業所名（${officeCount}件）を入力済みのテンプレートです。`
+              : 'テンプレートをダウンロードしました。',
+        })
+      }
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'テンプレートを取得できませんでした',
         description: 'ネットワークエラーが発生しました。',
       })
     } finally {
@@ -216,6 +292,18 @@ function RequirementRow({
               e.target.value = ''
             }}
           />
+          {isWorkbook && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              onClick={handleTemplateDownload}
+              className="gap-1"
+            >
+              <Download className="h-3.5 w-3.5" />
+              テンプレDL
+            </Button>
+          )}
           {canUpload && (
             <Button
               size="sm"
@@ -265,6 +353,7 @@ function ChecklistSection({
   icon,
   items,
   emptyLabel,
+  officeCount,
   busyIds,
   setBusyIds,
 }: {
@@ -273,6 +362,7 @@ function ChecklistSection({
   icon: React.ReactNode
   items: CaseDocumentRequirement[]
   emptyLabel: string
+  officeCount: number
   busyIds: BusyIds
   setBusyIds: React.Dispatch<React.SetStateAction<BusyIds>>
 }) {
@@ -303,6 +393,7 @@ function ChecklistSection({
                   key={item.id}
                   caseId={caseId}
                   item={item}
+                  officeCount={officeCount}
                   busyIds={busyIds}
                   setBusyIds={setBusyIds}
                 />
@@ -318,9 +409,12 @@ function ChecklistSection({
 export function ChecklistTable({
   caseId,
   requirements,
+  officeCount,
 }: {
   caseId: string
   requirements: GroupedRequirements
+  /** 案件の事業所数。テンプレDLの案内文に使う。 */
+  officeCount: number
 }) {
   const [busyIds, setBusyIds] = useState<BusyIds>(NO_BUSY)
 
@@ -332,6 +426,7 @@ export function ChecklistTable({
         icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
         items={requirements.office}
         emptyLabel="会社の必要書類はまだありません。"
+        officeCount={officeCount}
         busyIds={busyIds}
         setBusyIds={setBusyIds}
       />

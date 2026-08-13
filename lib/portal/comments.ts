@@ -5,7 +5,7 @@ import { getServiceClient } from './storage'
 import { createKintoneWriteClientFromEnv } from './kintone-sync/kintone-write-client'
 import {
   pushCommentToKintone,
-  resolveKintoneRecordId,
+  resolveKintoneCommentTarget,
 } from './kintone-sync/comment-sync'
 
 type CommentRow = {
@@ -118,21 +118,20 @@ export async function addComment(params: {
 
   const { data: caseRow, error: caseError } = await supabase
     .from('visa_application_cases')
-    .select('id, tenant_id, tenant_office_id')
+    .select('id, tenant_id')
     .eq('id', params.caseId)
     .maybeSingle()
 
   if (caseError || !caseRow) {
     return { ok: false, status: 404, error: '案件が見つかりません' }
   }
-  const c = caseRow as { id: string; tenant_id: string; tenant_office_id: string }
+  const c = caseRow as { id: string; tenant_id: string }
 
   const { data: inserted, error: insertError } = await supabase
     .from('case_comments')
     .insert({
       case_id: c.id,
       tenant_id: c.tenant_id,
-      tenant_office_id: c.tenant_office_id,
       requirement_id: params.requirementId ?? null,
       author: user.id,
       body,
@@ -150,18 +149,20 @@ export async function addComment(params: {
 
   // kintone（app296）へ push（紐付け＋認証があれば・ベストエフォート）。
   // 接頭辞 [FunBase] を付けて出すため、戻ってくる Webhook は取り込み側でループ除外される。
+  // 宛先は Webhook でキャッシュした作業者（app296 プロセス管理）。未同期なら宛先なしで投稿する。
   const insertedRow = inserted as CommentRow
   try {
     const client = createKintoneWriteClientFromEnv()
     if (client) {
       const service = getServiceClient()
-      const kintoneRecordId = await resolveKintoneRecordId(service, c.id)
-      if (kintoneRecordId) {
+      const target = await resolveKintoneCommentTarget(service, c.id)
+      if (target) {
         const { kintoneCommentId } = await pushCommentToKintone({
           client,
-          kintoneRecordId,
+          kintoneRecordId: target.kintoneRecordId,
           authorLabel,
           body,
+          assigneeCodes: target.assigneeCodes,
         })
         await service
           .from('case_comments')

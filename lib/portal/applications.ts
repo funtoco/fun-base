@@ -8,6 +8,7 @@ import type {
   CaseDetail,
   CaseDocumentRequirement,
   CaseMember,
+  CaseOffice,
   CaseStatus,
   GroupedRequirements,
   VisaApplicationCase,
@@ -18,7 +19,6 @@ const TENANT_WIDE_ROLES = new Set(['owner', 'admin', 'supporter'])
 type CaseRow = {
   id: string
   tenant_id: string
-  tenant_office_id: string
   entity_type: string
   application_category: string
   field: string
@@ -63,12 +63,11 @@ type MemberRow = {
   created_at: string
 }
 
-function mapCase(row: CaseRow, officeName: string | null): VisaApplicationCase {
+function mapCase(row: CaseRow, offices: CaseOffice[]): VisaApplicationCase {
   return {
     id: row.id,
     tenantId: row.tenant_id,
-    tenantOfficeId: row.tenant_office_id,
-    officeName,
+    offices,
     entityType: row.entity_type as VisaApplicationCase['entityType'],
     applicationCategory:
       row.application_category as VisaApplicationCase['applicationCategory'],
@@ -203,27 +202,65 @@ export async function getAccessibleOffices(): Promise<AccessibleOffice[]> {
   return accessible
 }
 
-async function resolveOfficeNames(
+/**
+ * 案件ID群 → 案件ごとの事業所リスト（sort_order 昇順、先頭が代表事業所）。
+ * 事業所名は tenant_offices から別引きして解決する。
+ */
+export async function fetchCaseOffices(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  officeIds: string[]
-): Promise<Map<string, string | null>> {
-  const map = new Map<string, string | null>()
-  const unique = Array.from(new Set(officeIds)).filter(Boolean)
+  caseIds: string[]
+): Promise<Map<string, CaseOffice[]>> {
+  const byCase = new Map<string, CaseOffice[]>()
+  const unique = Array.from(new Set(caseIds)).filter(Boolean)
   if (unique.length === 0) {
-    return map
+    return byCase
   }
+
   const { data, error } = await supabase
+    .from('visa_application_case_offices')
+    .select('id, case_id, tenant_office_id, sort_order')
+    .in('case_id', unique)
+    .order('sort_order', { ascending: true })
+
+  if (error) {
+    console.error('Error fetching case offices:', error)
+    return byCase
+  }
+  const rows = (data || []) as Array<{
+    id: string
+    case_id: string
+    tenant_office_id: string
+    sort_order: number
+  }>
+  if (rows.length === 0) {
+    return byCase
+  }
+
+  const nameByOffice = new Map<string, string | null>()
+  const { data: offices, error: officesError } = await supabase
     .from('tenant_offices')
     .select('id, name')
-    .in('id', unique)
-  if (error) {
-    console.error('Error resolving office names:', error)
-    return map
+    .in('id', Array.from(new Set(rows.map((r) => r.tenant_office_id))))
+  if (officesError) {
+    console.error('Error resolving office names:', officesError)
+  } else {
+    for (const o of (offices || []) as Array<{ id: string; name: string | null }>) {
+      nameByOffice.set(o.id, o.name ?? null)
+    }
   }
-  for (const o of (data || []) as Array<{ id: string; name: string | null }>) {
-    map.set(o.id, o.name ?? null)
+
+  for (const r of rows) {
+    const list = byCase.get(r.case_id) ?? []
+    list.push({
+      id: r.id,
+      caseId: r.case_id,
+      tenantOfficeId: r.tenant_office_id,
+      name: nameByOffice.get(r.tenant_office_id) ?? null,
+      sortOrder: r.sort_order,
+    })
+    byCase.set(r.case_id, list)
   }
-  return map
+  return byCase
 }
 
 /**
@@ -241,7 +278,7 @@ export async function listCases(): Promise<VisaApplicationCase[]> {
   const { data, error } = await supabase
     .from('visa_application_cases')
     .select(
-      'id, tenant_id, tenant_office_id, entity_type, application_category, field, application_type, management_number, status, title, note, kintone_record_id, kintone_sync_status, kintone_last_synced_at, created_at, updated_at'
+      'id, tenant_id, entity_type, application_category, field, application_type, management_number, status, title, note, kintone_record_id, kintone_sync_status, kintone_last_synced_at, created_at, updated_at'
     )
     .order('created_at', { ascending: false })
 
@@ -251,11 +288,11 @@ export async function listCases(): Promise<VisaApplicationCase[]> {
   }
 
   const rows = (data || []) as CaseRow[]
-  const officeNames = await resolveOfficeNames(
+  const officesByCase = await fetchCaseOffices(
     supabase,
-    rows.map((r) => r.tenant_office_id)
+    rows.map((r) => r.id)
   )
-  return rows.map((r) => mapCase(r, officeNames.get(r.tenant_office_id) ?? null))
+  return rows.map((r) => mapCase(r, officesByCase.get(r.id) ?? []))
 }
 
 async function fetchMembersWithNames(
@@ -315,7 +352,7 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
   const { data, error } = await supabase
     .from('visa_application_cases')
     .select(
-      'id, tenant_id, tenant_office_id, entity_type, application_category, field, application_type, management_number, status, title, note, kintone_record_id, kintone_sync_status, kintone_last_synced_at, created_at, updated_at'
+      'id, tenant_id, entity_type, application_category, field, application_type, management_number, status, title, note, kintone_record_id, kintone_sync_status, kintone_last_synced_at, created_at, updated_at'
     )
     .eq('id', caseId)
     .maybeSingle()
@@ -329,11 +366,11 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
   }
 
   const row = data as CaseRow
-  const officeNames = await resolveOfficeNames(supabase, [row.tenant_office_id])
+  const officesByCase = await fetchCaseOffices(supabase, [row.id])
   const members = await fetchMembersWithNames(supabase, caseId)
 
   return {
-    ...mapCase(row, officeNames.get(row.tenant_office_id) ?? null),
+    ...mapCase(row, officesByCase.get(row.id) ?? []),
     members,
   }
 }

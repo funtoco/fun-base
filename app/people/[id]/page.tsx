@@ -14,7 +14,7 @@ import { getRegularInterviewsByPersonId, getDailySupportRecordsByPersonId } from
 import { isManualPersonId } from "@/lib/person-source"
 import { canCreateRetirementNotice } from "@/lib/reports/retirement-notice-reports"
 import { formatDate, formatDateTime } from "@/lib/utils"
-import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase } from "lucide-react"
+import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase, Printer } from "lucide-react"
 
 interface PersonDetailPageProps {
   params: { id: string }
@@ -40,12 +40,23 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
     notFound()
   }
 
+  const personPrintQuery = personRegularInterviews.length > 0
+    ? personRegularInterviews.map((interview) => encodeURIComponent(interview.id)).join(",")
+    : ""
   // Generate timeline for this person
 
   return (
     <div className="p-6 space-y-6">
       {/* Header with Edit Button */}
-      <div className="flex items-center justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {personPrintQuery && (
+          <Button asChild variant="outline" className="gap-2">
+            <Link href={`/meetings/print?source=person&person=${encodeURIComponent(params.id)}&record=${personPrintQuery}`}>
+              <Printer className="h-4 w-4" />
+              印刷
+            </Link>
+          </Button>
+        )}
         <Link href={`/people/${params.id}/edit`}>
           <Button variant="outline" className="gap-2">
             <Edit className="h-4 w-4" />

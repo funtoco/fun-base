@@ -6,7 +6,9 @@ import { Badge } from '@/components/ui/badge'
 import { CaseProgressHeader } from '@/components/portal/case-progress-header'
 import { ChecklistTable } from '@/components/portal/checklist-table'
 import { CommentThread } from '@/components/portal/comment-thread'
+import { OtherFilesCard } from '@/components/portal/other-files-card'
 import { getCaseWithRequirements } from '@/lib/portal/applications'
+import { getCaseFilesState } from '@/lib/portal/case-files'
 import { listComments } from '@/lib/portal/comments'
 import { buildGuideHref } from '@/lib/portal/guidance'
 import {
@@ -28,7 +30,10 @@ export default async function ApplicationDetailPage({
   }
 
   const { case: detail, requirements } = data
-  const comments = await listComments(detail.id)
+  const [comments, otherFiles] = await Promise.all([
+    listComments(detail.id),
+    getCaseFilesState(detail.id),
+  ])
 
   return (
     <div className="space-y-6 p-6">
@@ -42,12 +47,14 @@ export default async function ApplicationDetailPage({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">
-              {detail.title || detail.officeName || '無題の案件'}
+              {detail.title || detail.offices[0]?.name || '無題の案件'}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {detail.officeName && (
-                <Badge variant="outline">{detail.officeName}</Badge>
-              )}
+              {detail.offices.map((office) => (
+                <Badge key={office.id} variant="outline">
+                  {office.name ?? '（名称未取得）'}
+                </Badge>
+              ))}
               <Badge variant="secondary">{FIELD_LABELS[detail.field]}</Badge>
               <Badge variant="secondary">
                 {ENTITY_TYPE_LABELS[detail.entityType]}
@@ -95,7 +102,18 @@ export default async function ApplicationDetailPage({
         </Link>
       </Button>
 
-      <ChecklistTable caseId={detail.id} requirements={requirements} />
+      <ChecklistTable
+        caseId={detail.id}
+        requirements={requirements}
+        officeCount={detail.offices.length}
+      />
+
+      <OtherFilesCard
+        caseId={detail.id}
+        files={otherFiles.files}
+        canUpload={otherFiles.canUpload}
+        blockedReason={otherFiles.blockedReason}
+      />
 
       <CommentThread caseId={detail.id} comments={comments} />
     </div>

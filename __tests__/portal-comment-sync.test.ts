@@ -5,6 +5,7 @@ import {
   isFunbaseOriginText,
   pushCommentToKintone,
   importKintoneComment,
+  resolveKintoneCommentTarget,
 } from '@/lib/portal/kintone-sync/comment-sync'
 import type { KintoneWriteClient } from '@/lib/portal/kintone-sync/kintone-write-client'
 
@@ -16,6 +17,10 @@ function mockClient(overrides: Partial<KintoneWriteClient> = {}): KintoneWriteCl
     updateRecordStatus: vi.fn().mockResolvedValue({ revision: '1' }),
     getRecordComments: vi.fn().mockResolvedValue([]),
     postRecordComment: vi.fn().mockResolvedValue({ id: 'kc99' }),
+    uploadFile: vi.fn().mockResolvedValue({ fileKey: 'fk1' }),
+    downloadFile: vi
+      .fn()
+      .mockResolvedValue({ body: Buffer.from(''), contentType: 'application/pdf' }),
     ...overrides,
   }
 }
@@ -40,7 +45,7 @@ function mockService(opts: { existing?: unknown } = {}) {
   return service
 }
 
-const caseKey = { caseId: 'case-1', tenantId: 'ten-1', tenantOfficeId: 'off-1' }
+const caseKey = { caseId: 'case-1', tenantId: 'ten-1' }
 
 describe('comment-sync: 純粋ヘルパ', () => {
   it('buildKintoneCommentText: 接頭辞＋投稿者＋本文', () => {
@@ -53,10 +58,17 @@ describe('comment-sync: 純粋ヘルパ', () => {
     expect(isFunbaseOriginText('   [FunBase]: hi')).toBe(true)
     expect(isFunbaseOriginText('普通のコメント')).toBe(false)
   })
+
+  it('isFunbaseOriginText: メンション付きで投稿した echo（宛先名が先頭行に入る）も true', () => {
+    // 取得APIは宛先つきコメントを「宛先名 + 改行 + 本文」で返す（@ は削除される）。
+    expect(isFunbaseOriginText('佐藤　昇 \n[FunBase] 山田: hi')).toBe(true)
+    expect(isFunbaseOriginText('佐藤　昇 \n\n[FunBase] 山田: hi')).toBe(true)
+    expect(isFunbaseOriginText('佐藤　昇 \nkintone から普通の返信')).toBe(false)
+  })
 })
 
 describe('pushCommentToKintone', () => {
-  it('接頭辞つき本文で postRecordComment を呼び id を返す', async () => {
+  it('接頭辞つき本文で postRecordComment を呼び id を返す（作業者なし＝宛先省略）', async () => {
     const client = mockClient()
     const res = await pushCommentToKintone({
       client,
@@ -64,8 +76,116 @@ describe('pushCommentToKintone', () => {
       authorLabel: '山田',
       body: 'hi',
     })
-    expect(client.postRecordComment).toHaveBeenCalledWith('296', '5', '[FunBase] 山田: hi')
+    expect(client.postRecordComment).toHaveBeenCalledWith(
+      '296',
+      '5',
+      '[FunBase] 山田: hi',
+      undefined
+    )
     expect(res).toEqual({ kintoneCommentId: 'kc99' })
+  })
+
+  it('作業者コードを USER 宛先に変換して postRecordComment に渡す', async () => {
+    const client = mockClient()
+    await pushCommentToKintone({
+      client,
+      kintoneRecordId: '5',
+      authorLabel: '山田',
+      body: 'hi',
+      assigneeCodes: ['sato', 'kato'],
+    })
+    expect(client.postRecordComment).toHaveBeenCalledWith('296', '5', '[FunBase] 山田: hi', [
+      { code: 'sato', type: 'USER' },
+      { code: 'kato', type: 'USER' },
+    ])
+  })
+
+  it('キャッシュありなら kintone を読まない', async () => {
+    const client = mockClient()
+    await pushCommentToKintone({
+      client,
+      kintoneRecordId: '5',
+      authorLabel: '山田',
+      body: 'hi',
+      assigneeCodes: ['sato'],
+    })
+    expect(client.getRecords).not.toHaveBeenCalled()
+  })
+
+  it('キャッシュ未同期（空）なら kintone を1回読んで作業者を宛先にする', async () => {
+    const client = mockClient({
+      getRecords: vi.fn().mockResolvedValue([
+        { $id: { value: '5' }, 作業者: { value: [{ code: 'sato', name: '佐藤　昇' }] } },
+      ]),
+    })
+    await pushCommentToKintone({
+      client,
+      kintoneRecordId: '5',
+      authorLabel: '山田',
+      body: 'hi',
+      assigneeCodes: [],
+    })
+    expect(client.getRecords).toHaveBeenCalledWith('296', '$id = "5"')
+    expect(client.postRecordComment).toHaveBeenCalledWith('296', '5', '[FunBase] 山田: hi', [
+      { code: 'sato', type: 'USER' },
+    ])
+  })
+
+  it('フォールバックの読み取りが失敗しても宛先なしで投稿する', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const client = mockClient({
+      getRecords: vi.fn().mockRejectedValue(new Error('boom')),
+    })
+    const res = await pushCommentToKintone({
+      client,
+      kintoneRecordId: '5',
+      authorLabel: '山田',
+      body: 'hi',
+    })
+    expect(res).toEqual({ kintoneCommentId: 'kc99' })
+    expect(client.postRecordComment).toHaveBeenCalledWith(
+      '296',
+      '5',
+      '[FunBase] 山田: hi',
+      undefined
+    )
+    spy.mockRestore()
+  })
+})
+
+describe('resolveKintoneCommentTarget', () => {
+  function mockCaseService(row: unknown) {
+    return {
+      from: () => ({
+        select: () => ({
+          eq: () => ({ maybeSingle: async () => ({ data: row }) }),
+        }),
+      }),
+    }
+  }
+
+  it('レコード番号と作業者キャッシュを返す', async () => {
+    const service = mockCaseService({
+      kintone_record_id: '5',
+      kintone_assignee_codes: ['sato'],
+    })
+    expect(await resolveKintoneCommentTarget(service as never, 'case-1')).toEqual({
+      kintoneRecordId: '5',
+      assigneeCodes: ['sato'],
+    })
+  })
+
+  it('作業者キャッシュが null/未設定でも空配列で返す', async () => {
+    const service = mockCaseService({ kintone_record_id: '5', kintone_assignee_codes: null })
+    expect(await resolveKintoneCommentTarget(service as never, 'case-1')).toEqual({
+      kintoneRecordId: '5',
+      assigneeCodes: [],
+    })
+  })
+
+  it('kintone 未紐付けの案件は null', async () => {
+    const service = mockCaseService({ kintone_record_id: null, kintone_assignee_codes: [] })
+    expect(await resolveKintoneCommentTarget(service as never, 'case-1')).toBeNull()
   })
 })
 
@@ -103,7 +223,6 @@ describe('importKintoneComment: 三重ループ防止', () => {
     expect(service.inserts[0]).toEqual({
       case_id: 'case-1',
       tenant_id: 'ten-1',
-      tenant_office_id: 'off-1',
       author: null,
       body: 'kintoneからの新規',
       source: 'kintone',

@@ -33,9 +33,17 @@ export interface KintoneSubtableRow {
   value: Record<string, { value: string | number }>
 }
 
-/** kintone レコードの1フィールド値（スカラ or SUBTABLE 行配列）。 */
+/**
+ * 添付ファイルフィールドの1要素（書込時）。アップロード済みの fileKey だけを送る。
+ * 送信した配列でフィールドが**置換**されるので、追記時は既存分も必ず含める。
+ */
+export interface KintoneFileRef {
+  fileKey: string
+}
+
+/** kintone レコードの1フィールド値（スカラ / SUBTABLE 行配列 / 添付ファイル配列）。 */
 export interface KintoneFieldValue {
-  value: KintoneCellValue | KintoneSubtableRow[]
+  value: KintoneCellValue | KintoneSubtableRow[] | KintoneFileRef[]
 }
 
 /** kintone レコード payload（`{ fieldCode: { value } }`）。空フィールドはキー自体を含めない。 */

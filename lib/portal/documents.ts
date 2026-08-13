@@ -22,7 +22,8 @@ type RequirementContext = {
   id: string
   case_id: string
   tenant_id: string
-  tenant_office_id: string
+  /** office 書類の格納先事業所（案件の代表事業所）。アクセス境界ではない。 */
+  filing_tenant_office_id: string
   scope: 'office' | 'person'
   person_id: string | null
   document_code: string
@@ -44,7 +45,7 @@ async function loadRequirementContext(
   const { data, error } = await supabase
     .from('case_document_requirements')
     .select(
-      'id, case_id, tenant_id, tenant_office_id, scope, person_id, document_code, name, status, office_document_id, person_document_id'
+      'id, case_id, tenant_id, filing_tenant_office_id, scope, person_id, document_code, name, status, office_document_id, person_document_id'
     )
     .eq('id', requirementId)
     .eq('case_id', caseId)
@@ -93,7 +94,7 @@ export async function uploadRequirementDocument(params: {
   if (requirement.scope === 'office') {
     const objectKey = buildOfficeObjectKey({
       tenantId: requirement.tenant_id,
-      officeId: requirement.tenant_office_id,
+      officeId: requirement.filing_tenant_office_id,
       caseId: requirement.case_id,
       requirementId: requirement.id,
       fileName: file.name,
@@ -103,7 +104,7 @@ export async function uploadRequirementDocument(params: {
     const { data: existingDoc } = await service
       .from('office_documents')
       .select('id, storage_path')
-      .eq('tenant_office_id', requirement.tenant_office_id)
+      .eq('tenant_office_id', requirement.filing_tenant_office_id)
       .eq('document_code', requirement.document_code)
       .maybeSingle()
 
@@ -122,7 +123,7 @@ export async function uploadRequirementDocument(params: {
         {
           ...(existingDoc ? { id: (existingDoc as { id: string }).id } : {}),
           tenant_id: requirement.tenant_id,
-          tenant_office_id: requirement.tenant_office_id,
+          tenant_office_id: requirement.filing_tenant_office_id,
           document_code: requirement.document_code,
           storage_path: objectKey,
           file_name: file.name,
@@ -196,7 +197,7 @@ export async function uploadRequirementDocument(params: {
     .insert({
       person_id: requirement.person_id,
       tenant_id: requirement.tenant_id,
-      tenant_office_id: requirement.tenant_office_id,
+      tenant_office_id: requirement.filing_tenant_office_id,
       document_type: 'other',
       storage_path: objectKey,
       title: requirement.name,
