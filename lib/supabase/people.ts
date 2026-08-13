@@ -15,6 +15,7 @@ async function getCurrentUserCompanyAccess(): Promise<CompanyAccess> {
     return {
       fullTenantIds: new Set(),
       restrictedTenantCompanies: new Map(),
+      restrictedTenantOfficeIds: new Map(),
       hasActiveMembership: false,
     }
   }

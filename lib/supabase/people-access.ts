@@ -10,13 +10,15 @@ type TenantMembership = {
   role?: string | null
   status?: string | null
   feature_permissions?: unknown
-  offices?: Array<{ name?: string | null }> | null
+  offices?: Array<{ id?: string | null; name?: string | null }> | null
+  officeIds?: string[] | null
   [key: string]: unknown
 }
 
 export type CompanyAccess = {
   fullTenantIds: Set<string>
   restrictedTenantCompanies: Map<string, Set<string>>
+  restrictedTenantOfficeIds: Map<string, Set<string>>
   hasActiveMembership: boolean
 }
 
@@ -141,6 +143,7 @@ export function buildCompanyAccess(
   const access: CompanyAccess = {
     fullTenantIds: new Set(),
     restrictedTenantCompanies: new Map(),
+    restrictedTenantOfficeIds: new Map(),
     hasActiveMembership: false,
   }
 
@@ -171,19 +174,33 @@ export function buildCompanyAccess(
       const officeNames = (membership.offices || [])
         .map((office) => normalizeCompanyName(office.name))
         .filter((name): name is string => Boolean(name))
-      const companyNames = [
-        ...officeNames,
-        ...COMPANY_ACCESS_KEYS.flatMap((key) => extractCompanyNames(membership[key])),
+      const officeIds = [
+        ...(membership.officeIds || []),
+        ...(membership.offices || []).map((office) => office.id),
       ]
+        .map((id) => (typeof id === "string" ? id.trim() : null))
+        .filter((id): id is string => Boolean(id))
+      const explicitCompanyNames = COMPANY_ACCESS_KEYS.flatMap((key) => extractCompanyNames(membership[key]))
+      const companyNames = officeIds.length > 0
+        ? explicitCompanyNames
+        : [...officeNames, ...explicitCompanyNames]
 
-      if (companyNames.length === 0) {
+      if (companyNames.length === 0 && officeIds.length === 0) {
         access.fullTenantIds.add(tenantId)
         return
       }
 
-      const companies = access.restrictedTenantCompanies.get(tenantId) ?? new Set<string>()
-      companyNames.forEach((name) => companies.add(name))
-      access.restrictedTenantCompanies.set(tenantId, companies)
+      if (companyNames.length > 0) {
+        const companies = access.restrictedTenantCompanies.get(tenantId) ?? new Set<string>()
+        companyNames.forEach((name) => companies.add(name))
+        access.restrictedTenantCompanies.set(tenantId, companies)
+      }
+
+      if (officeIds.length > 0) {
+        const tenantOfficeIds = access.restrictedTenantOfficeIds.get(tenantId) ?? new Set<string>()
+        officeIds.forEach((id) => tenantOfficeIds.add(id))
+        access.restrictedTenantOfficeIds.set(tenantId, tenantOfficeIds)
+      }
     })
 
   return access
@@ -230,7 +247,7 @@ export async function getCompanyAccessForUser(
     new Set(assignmentRecords.map((assignment) => assignment.tenant_office_id))
   )
 
-  const officesById = new Map<string, { name?: string | null }>()
+  const officesById = new Map<string, { id?: string | null; name?: string | null }>()
   if (officeIds.length > 0) {
     const { data: offices, error: officesError } = await supabase
       .from("tenant_offices")
@@ -260,6 +277,11 @@ export async function getCompanyAccessForUser(
   return buildCompanyAccess(
     membershipRecords.map((membership) => ({
       ...membership,
+      officeIds: membership.id
+        ? assignmentRecords
+            .filter((assignment) => assignment.user_tenant_id === membership.id)
+            .map((assignment) => assignment.tenant_office_id)
+        : [],
       offices: membership.id
         ? officeNamesByMembershipId.get(membership.id) || []
         : [],
@@ -268,10 +290,22 @@ export async function getCompanyAccessForUser(
   )
 }
 
-export function canAccessPersonByCompany(person: { tenant_id?: string | null; company?: string | null }, access: CompanyAccess): boolean {
+export function canAccessPersonByCompany(
+  person: { tenant_id?: string | null; tenant_office_id?: string | null; company?: string | null },
+  access: CompanyAccess
+): boolean {
   if (!access.hasActiveMembership) return false
   if (!person.tenant_id) return false
   if (access.fullTenantIds.has(person.tenant_id)) return true
+
+  const allowedOfficeIds = access.restrictedTenantOfficeIds.get(person.tenant_id)
+  if (allowedOfficeIds && allowedOfficeIds.size > 0 && person.tenant_office_id && allowedOfficeIds.has(person.tenant_office_id)) {
+    return true
+  }
+
+  if (allowedOfficeIds && allowedOfficeIds.size > 0) {
+    return false
+  }
 
   const allowedCompanies = access.restrictedTenantCompanies.get(person.tenant_id)
   if (!allowedCompanies || allowedCompanies.size === 0) return false
@@ -296,9 +330,19 @@ function buildPeopleAccessOrFilter(access: CompanyAccess): string | null {
 
   access.restrictedTenantCompanies.forEach((companies, tenantId) => {
     if (access.fullTenantIds.has(tenantId) || companies.size === 0) return
+    const officeIds = access.restrictedTenantOfficeIds.get(tenantId)
+    if (officeIds && officeIds.size > 0) return
 
     clauses.push(
       `and(tenant_id.eq.${tenantId},company.in.(${Array.from(companies).map(quotePostgrestValue).join(",")}))`
+    )
+  })
+
+  access.restrictedTenantOfficeIds.forEach((officeIds, tenantId) => {
+    if (access.fullTenantIds.has(tenantId) || officeIds.size === 0) return
+
+    clauses.push(
+      `and(tenant_id.eq.${tenantId},tenant_office_id.in.(${Array.from(officeIds).map(quotePostgrestValue).join(",")}))`
     )
   })
 
@@ -308,8 +352,12 @@ function buildPeopleAccessOrFilter(access: CompanyAccess): string | null {
 function hasVisibleCompanyAccess(access: CompanyAccess): boolean {
   if (access.fullTenantIds.size > 0) return true
 
-  for (const companies of access.restrictedTenantCompanies.values()) {
-    if (companies.size > 0) return true
+  if (Array.from(access.restrictedTenantCompanies.values()).some((companies) => companies.size > 0)) {
+    return true
+  }
+
+  if (Array.from(access.restrictedTenantOfficeIds.values()).some((officeIds) => officeIds.size > 0)) {
+    return true
   }
 
   return false
@@ -336,7 +384,7 @@ export async function getAccessiblePersonIdsForUser(
     const query = applyPeopleAccessFilter(
       supabase
         .from("people")
-        .select("id, tenant_id, company")
+        .select("id, tenant_id, tenant_office_id, company")
         .order("id"),
       access
     )

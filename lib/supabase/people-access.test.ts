@@ -33,6 +33,119 @@ describe("people company access", () => {
     expect(canAccessPersonByCompany({ tenant_id: "tenant-1", company: "天王寺特別養護老人ホーム" }, access)).toBe(false)
   })
 
+  test("allows scoped members to see people whose tenant office id is assigned even when company names differ", () => {
+    const access = buildCompanyAccess([
+      {
+        id: "membership-1",
+        tenant_id: "tenant-1",
+        role: "member",
+        status: "active",
+        offices: [{ id: "office-parent", name: "医療法人弘善会" }],
+      },
+    ])
+
+    expect(
+      canAccessPersonByCompany(
+        {
+          tenant_id: "tenant-1",
+          tenant_office_id: "office-parent",
+          company: "介護老人保健施設 アロンティアクラブ",
+        },
+        access
+      )
+    ).toBe(true)
+    expect(
+      canAccessPersonByCompany(
+        {
+          tenant_id: "tenant-1",
+          tenant_office_id: "office-child",
+          company: "介護老人保健施設 アロンティアクラブ",
+        },
+        access
+      )
+    ).toBe(false)
+  })
+
+  test("keeps tenant office id authoritative when a person has an unassigned office id", () => {
+    const access = buildCompanyAccess([
+      {
+        id: "membership-1",
+        tenant_id: "tenant-1",
+        role: "member",
+        status: "active",
+        offices: [{ id: "office-parent", name: "医療法人弘善会" }],
+      },
+    ])
+
+    expect(
+      canAccessPersonByCompany(
+        {
+          tenant_id: "tenant-1",
+          tenant_office_id: "office-child",
+          company: "医療法人弘善会",
+        },
+        access
+      )
+    ).toBe(false)
+  })
+
+  test("keeps tenant office id authoritative even when a person has no office id", () => {
+    const access = buildCompanyAccess([
+      {
+        id: "membership-1",
+        tenant_id: "tenant-1",
+        role: "member",
+        status: "active",
+        offices: [{ id: "office-parent", name: "医療法人弘善会" }],
+      },
+    ])
+
+    expect(
+      canAccessPersonByCompany(
+        {
+          tenant_id: "tenant-1",
+          tenant_office_id: null,
+          company: "医療法人弘善会",
+        },
+        access
+      )
+    ).toBe(false)
+  })
+
+  test("keeps assigned office ids restrictive even when office names cannot be hydrated", () => {
+    const access = buildCompanyAccess([
+      {
+        id: "membership-1",
+        tenant_id: "tenant-1",
+        role: "member",
+        status: "active",
+        officeIds: ["office-parent"],
+        offices: [],
+      },
+    ])
+
+    expect(
+      canAccessPersonByCompany(
+        {
+          tenant_id: "tenant-1",
+          tenant_office_id: "office-parent",
+          company: "介護老人保健施設 アロンティアクラブ",
+        },
+        access
+      )
+    ).toBe(true)
+    expect(
+      canAccessPersonByCompany(
+        {
+          tenant_id: "tenant-1",
+          tenant_office_id: "office-child",
+          company: "介護老人保健施設 アロンティアクラブ",
+        },
+        access
+      )
+    ).toBe(false)
+  })
+
   test("extracts company names from settings objects and comma-separated strings", () => {
     const access = buildCompanyAccess([
       {

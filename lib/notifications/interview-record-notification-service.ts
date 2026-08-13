@@ -479,7 +479,7 @@ async function getAccessibleUserIdsForInterviewRecord(
   const feature = record.recordType === 'daily_support' ? 'support_actions' : 'meetings'
   const { data: person, error: personError } = await supabase
     .from('people')
-    .select('id, tenant_id, company')
+    .select('id, tenant_id, tenant_office_id, company')
     .eq('id', record.personId)
     .maybeSingle()
 
