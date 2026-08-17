@@ -42,7 +42,7 @@ function mergeField(
 
 /**
  * SUBTABLE の行を Excel の rowStart..rowEnd から展開する。
- * keyCol（明細の主キー列）が空の行はスキップ。全列 null の行もスキップ。
+ * keyCol（明細の主キー列）指定時はその列が空の行をスキップ。全列 null の行もスキップ。
  */
 function buildSubtableRows(
   getCell: CellReader,
@@ -50,10 +50,12 @@ function buildSubtableRows(
 ): KintoneSubtableRow[] {
   const rows: KintoneSubtableRow[] = []
   for (let row = subtable.rowStart; row <= subtable.rowEnd; row++) {
-    // keyCol が空なら明細行なしとみなしスキップ。
-    const keyRaw = getCell(subtable.sheetName, `${subtable.keyCol}${row}`)
-    if (asText(keyRaw) === null) {
-      continue
+    // keyCol が空なら明細行なしとみなしスキップ（keyCol 未指定なら全列 null 判定に任せる）。
+    if (subtable.keyCol) {
+      const keyRaw = getCell(subtable.sheetName, `${subtable.keyCol}${row}`)
+      if (asText(keyRaw) === null) {
+        continue
+      }
     }
     const value: KintoneSubtableRow['value'] = {}
     for (const column of subtable.columns) {

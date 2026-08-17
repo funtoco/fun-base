@@ -107,8 +107,12 @@ export interface SubtableMapping {
   rowStart: number
   /** 展開する末尾行（含む）。 */
   rowEnd: number
-  /** この列が空の行はスキップする（明細の主キー相当。例: 手当名の列 'D'）。 */
-  keyCol: string
+  /**
+   * この列が空の行はスキップする（明細の主キー相当。例: 手当名の列 'D'）。
+   * 省略時は「マッピング対象セルが全て空の行」だけをスキップする。
+   * 交代制シフトのように任意入力欄しか無く、主キーになる列が無い明細で使う。
+   */
+  keyCol?: string
   /** サブフィールド一覧。 */
   columns: SubtableColumn[]
 }

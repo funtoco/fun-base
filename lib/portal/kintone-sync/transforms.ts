@@ -156,6 +156,26 @@ export function keepIfEquals(expected: string, out: string = expected): CellTran
   return (value) => (asText(value) === expected ? out : null)
 }
 
+/**
+ * CHECK_BOX 用（合成）: 『無』のマーカーが ON でも、対になる「時期・金額等」欄に記載があれば OFF。
+ * values は [『無』マーカーのセル, 時期・金額等のセル] の順。
+ *
+ * 昇給/賞与/退職金（1-6 行103〜105）は、有無のチェックを付けずに「時期，金額等」だけ書く企業が多い。
+ * 記載がある＝『有』とみなして `有` を ON にする（マッピング側で checkboxOn を併記）ので、
+ * ここで『無』が同時に ON になるのを防ぐ。
+ */
+export function checkboxOffWhenNoted(
+  onValues: string[]
+): (values: unknown[]) => string[] | null {
+  return (values) => {
+    // 「時期・金額等」に記載があれば『無』は立てない。
+    if (asText(values[1]) !== null) {
+      return null
+    }
+    return isCheckedPresence(values[0]) ? [...onValues] : null
+  }
+}
+
 /** 入力に関係なく常に固定文字を返す TEXT 変換（例: 4_f_控除額_備考='水道光熱費'）。 */
 export function constantText(text: string): CellTransform {
   return () => text

@@ -14,6 +14,7 @@ import {
 } from '@/lib/portal/kintone-sync/transforms'
 import { buildRecord } from '@/lib/portal/kintone-sync/build-records'
 import { APP34_MAPPING } from '@/lib/portal/kintone-sync/mappings/app34'
+import { APP36_MAPPING } from '@/lib/portal/kintone-sync/mappings/app36'
 import { APP55_MAPPING } from '@/lib/portal/kintone-sync/mappings/app55'
 import {
   transcribeWorkbook,
@@ -26,7 +27,10 @@ import {
   loadCaseHubLinks,
   writeBackSyncStatus,
 } from '@/lib/portal/kintone-sync/case-hub'
-import { buildKoyouRowStatuses } from '@/lib/portal/kintone-sync/run-transcription'
+import {
+  buildKoyouRowStatuses,
+  loadApp55Ofids,
+} from '@/lib/portal/kintone-sync/run-transcription'
 import type {
   KintoneReadRecord,
   KintoneWriteClient,
@@ -282,11 +286,12 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
       '居住費の詳細': { M3: 25000, H4: '借上物件', H5: '按分計算', H7: 3, J2: '有' },
       '1-4': {
         D10: 'グエン', H12: '男', K12: 2,
-        E13: 200000, // 月給金額あり → 月給 CHECK_BOX 自動ON
+        E13: 210000, // ④報酬（＝支払概算額）。基本賃金ではないので 月給金額 には入れない
         E74: new Date(Date.UTC(2026, 6, 29)),
         E75: '株式会社Funtoco', E77: '代表取締役', I77: '山田太郎',
       },
       '1-6別紙': {
+        F5: 200000, // １．基本賃金（月給）あり → 月給 CHECK_BOX 自動ON
         S22: 30000, // (b)社会保険料 → 厚生年金保険料へ
         C26: '(f) その他 （水道光熱費）',
         D9: '通勤手当', K9: 10000, S9: '実費',
@@ -300,7 +305,8 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     })
     const record = buildRecord(getCell, APP55_MAPPING)
 
-    // 賃金区分: 金額の有無で 月給 CHECK_BOX を自動ON
+    // 賃金区分: 1-6別紙「１．基本賃金」の金額の有無で 月給 CHECK_BOX を自動ON。
+    // 1-4:E13（④報酬＝支払概算額）は 月給金額 に混入させない。
     expect(record.月給金額).toEqual({ value: 200000 })
     expect(record.月給).toEqual({ value: ['■'] })
     // 性別は RADIO_BUTTON（選択肢文字列そのもの）
@@ -346,6 +352,134 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     const record = buildRecord(getCell, APP55_MAPPING)
     expect(record.月給).toEqual({ value: ['■'] })
     expect(record.月給金額).toEqual({ value: 180000 })
+  })
+
+  it('月給金額/時間給金額は 1-6別紙(基本賃金)のみを出所にし、1-4の④報酬は混入しない', () => {
+    const getCell = cellsReader({
+      // 企業は 1-4:E13 に「支払概算額（基本賃金＋諸手当）」を書くことが多い。
+      '1-4': { E13: 250000, K13: 1500 },
+      '1-6別紙': { F5: 180000 },
+    })
+    const record = buildRecord(getCell, APP55_MAPPING)
+    expect(record.月給金額).toEqual({ value: 180000 })
+    expect(record.月給).toEqual({ value: ['■'] })
+    // 1-4:K13 だけでは 時間給/時間給金額 は立たない（基本賃金の区分ではないため）。
+    expect('時間給金額' in record).toBe(false)
+    expect('時間給' in record).toBe(false)
+  })
+
+  it('昇給/賞与/退職金: 有無が未チェックでも「時期，金額等」に記載があれば 有 ON・無 OFF', () => {
+    const getCell = cellsReader({
+      '1-6': {
+        E103: false, X103: false, J103: '毎年4月、1,000円〜',
+        E104: false, X104: false, J104: '年2回、計3.4ヶ月分',
+        E105: false, X105: false, J105: '勤続3年以上の場合支給',
+      },
+    })
+    const record = buildRecord(getCell, APP55_MAPPING)
+    expect(record._7_8_1_昇給有).toEqual({ value: ['■'] })
+    expect(record._7_9_1_賞与有).toEqual({ value: ['■'] })
+    expect(record._7_10_1_退職金有).toEqual({ value: ['■'] })
+    expect('_7_8_2_昇給無' in record).toBe(false)
+    expect('_7_9_2_賞与無' in record).toBe(false)
+    expect('_7_10_2_退職金無' in record).toBe(false)
+  })
+
+  it('昇給/賞与/退職金: 無チェックのみ（時期金額等が空）なら 無 ON・有 OFF', () => {
+    const getCell = cellsReader({
+      '1-6': { E103: false, X103: true, E104: false, X104: true, E105: false, X105: true },
+    })
+    const record = buildRecord(getCell, APP55_MAPPING)
+    expect(record._7_8_2_昇給無).toEqual({ value: ['■'] })
+    expect(record._7_9_2_賞与無).toEqual({ value: ['■'] })
+    expect(record._7_10_2_退職金無).toEqual({ value: ['■'] })
+    expect('_7_8_1_昇給有' in record).toBe(false)
+  })
+
+  it('昇給/賞与/退職金: 何も書かれていなければ 有・無 とも出さない（Y103のラベル誤読の回帰）', () => {
+    const record = buildRecord(cellsReader({ '1-6': {} }), APP55_MAPPING)
+    expect('_7_8_2_昇給無' in record).toBe(false)
+    expect('_7_9_2_賞与無' in record).toBe(false)
+    expect('_7_10_2_退職金無' in record).toBe(false)
+  })
+
+  it('交代制の勤務時間等: 適用日が空でもシフト行を転記する', () => {
+    const getCell = cellsReader({
+      '1-6': {
+        // 適用日(P列)は未記入。始業/終業/1日の所定労働時間だけ記入されるケース。
+        D54: 5, F54: 0, J54: 14, L54: 0, W54: 7, Z54: 30,
+        D55: 9, F55: 0, J55: 18, L55: 0, W55: 7, Z55: 30,
+        P56: '4月〜9月', D56: 13, F56: 0, J56: 22, L56: 0, W56: 7, Z56: 30,
+      },
+    })
+    const record = buildRecord(getCell, APP55_MAPPING)
+    expect(record.交代制の勤務時間等).toEqual({
+      value: [
+        { value: { 始業時間_時: { value: 5 }, 始業時間_分: { value: 0 }, 終業時間_時: { value: 14 }, 終業時間_分: { value: 0 }, _1日の所定労働時間_時間: { value: 7 }, _1日の所定労働時間_分: { value: 30 } } },
+        { value: { 始業時間_時: { value: 9 }, 始業時間_分: { value: 0 }, 終業時間_時: { value: 18 }, 終業時間_分: { value: 0 }, _1日の所定労働時間_時間: { value: 7 }, _1日の所定労働時間_分: { value: 30 } } },
+        { value: { 始業時間_時: { value: 13 }, 始業時間_分: { value: 0 }, 終業時間_時: { value: 22 }, 終業時間_分: { value: 0 }, 交代制の勤務時間_適用日: { value: '4月〜9月' }, _1日の所定労働時間_時間: { value: 7 }, _1日の所定労働時間_分: { value: 30 } } },
+      ],
+    })
+  })
+
+  it('交代制の勤務時間等: 1行も記入が無ければ payload に含めない（既存行を消さない）', () => {
+    const record = buildRecord(cellsReader({ '1-6': {} }), APP55_MAPPING)
+    expect('交代制の勤務時間等' in record).toBe(false)
+  })
+})
+
+// ── app36: 所定労働時間数など（app55では書込ロックのためマスタ側に書く）────────
+describe('APP36_MAPPING: 労働時間系を事業所マスタへ転記する', () => {
+  it('3.所定労働時間数 / 4.所定労働日数 / 年間合計休日日数 を payload にする', () => {
+    const getCell = cellsReader({
+      '1-6': {
+        E68: 40, H68: 0, // ①週 40時間0分
+        M68: 173, P68: 20, // ②月 173時間20分
+        U68: 2080, X68: 0, // ③年 2080時間0分
+        I69: 5, P69: 21, W69: 256, // 所定労働日数 週/月/年
+        X74: 109, // 年間合計休日日数
+      },
+    })
+    const record = buildRecord(getCell, APP36_MAPPING)
+    expect(record).toEqual({
+      所定労働時間_週_時間: { value: 40 },
+      所定労働時間_週_分: { value: 0 },
+      所定労働時間_月_時間: { value: 173 },
+      所定労働時間_月_分: { value: 20 },
+      所定労働時間_年_時間: { value: 2080 },
+      所定労働時間_年_分: { value: 0 },
+      所定労働日数_週: { value: 5 },
+      所定労働日数_月: { value: 21 },
+      所定労働日数_年: { value: 256 },
+      年間合計休日日数: { value: 109 },
+    })
+  })
+
+  it('記入が無ければ空 payload（事業所マスタの既存値を消さない）', () => {
+    expect(buildRecord(cellsReader({ '1-6': {} }), APP36_MAPPING)).toEqual({})
+  })
+
+  it('一部だけ記入されていれば、その項目だけ送る', () => {
+    const record = buildRecord(cellsReader({ '1-6': { E68: 40, H68: 0 } }), APP36_MAPPING)
+    expect(record).toEqual({
+      所定労働時間_週_時間: { value: 40 },
+      所定労働時間_週_分: { value: 0 },
+    })
+  })
+
+  it('app55 側には所定労働時間数系を出さない（書込ロックのため）', () => {
+    const record = buildRecord(
+      cellsReader({ '1-6': { E68: 40, H68: 0, I69: 5, X74: 109 } }),
+      APP55_MAPPING
+    )
+    for (const code of [
+      '_4_3_1_1_時間',
+      '_4_3_1_2_分',
+      '_4_4_1_週所定労働日数',
+      '_5_3_年間合計休日日数',
+    ]) {
+      expect(code in record).toBe(false)
+    }
   })
 })
 
@@ -500,7 +634,8 @@ describe('transcribeWorkbook: targets（app296 事前紐付け・Aモデル）',
 describe('buildApp55Record（複数人・共通payload）', () => {
   it('人固有項目（氏名/性別/経験年数）は除外し、共通項目は残す', () => {
     const getCell = cellsReader({
-      '1-4': { D10: 'グエン', H12: '男', K12: 2, E13: 200000 },
+      '1-4': { D10: 'グエン', H12: '男', K12: 2 },
+      '1-6別紙': { F5: 200000 },
     })
     const record = buildApp55Record(getCell)
     // 人固有（HRIDルックアップが人材マスタから補完する項目）は payload に出さない。
@@ -568,9 +703,34 @@ describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
         { rowId: '2', app55RecordId: '56', hrid: 'HR-002', applicantName: 'タン' },
       ],
       koyouRowIds: ['1', '2'],
+      officeTargets: [],
       driveFolderUrl: null,
       companyName: null,
     })
+  })
+
+  it('loadCaseHubLinks: office_details を officeTargets（app36の反映先）に解決する', async () => {
+    const rec = hubRecord()
+    rec.office_details = {
+      value: [
+        {
+          id: '10',
+          value: {
+            office_ref: { value: '17351' },
+            office_name_disp: { value: '社会医療法人盛和会本田病院' },
+          },
+        },
+        // office_ref 空の行は反映先が無いのでスキップ。
+        { id: '11', value: { office_ref: { value: '' } } },
+        { id: '12', value: { office_ref: { value: '66' }, office_name_disp: { value: '' } } },
+      ],
+    } as unknown as { value: unknown }
+    const client = makeMockClient({ getRecords: vi.fn().mockResolvedValue([rec]) })
+    const links = await loadCaseHubLinks(client, '5')
+    expect(links?.officeTargets).toEqual([
+      { rowId: '10', app36RecordId: '17351', officeName: '社会医療法人盛和会本田病院' },
+      { rowId: '12', app36RecordId: '66', officeName: null },
+    ])
   })
 
   it('loadCaseHubLinks: company_name_disp を companyName として返す（Driveのファイル名に使う）', async () => {
@@ -613,6 +773,28 @@ describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
   it('loadCaseHubLinks: 見つからなければ null', async () => {
     const client = makeMockClient({ getRecords: vi.fn().mockResolvedValue([]) })
     expect(await loadCaseHubLinks(client, '999')).toBeNull()
+  })
+
+  it('loadApp55Ofids: 対象レコードの現在の OFID を引く（ルックアップ再取得用）', async () => {
+    const getRecords = vi.fn().mockResolvedValue([
+      { $id: { value: '55' }, OFID: { value: '17351' } },
+      { $id: { value: '56' }, OFID: { value: '' } }, // OFID 未設定は対象外
+    ])
+    const client = makeMockClient({ getRecords })
+    const ofids = await loadApp55Ofids(client, [
+      { rowId: '1', app55RecordId: '55', hrid: null, applicantName: null },
+      { rowId: '2', app55RecordId: '56', hrid: null, applicantName: null },
+    ])
+    expect(getRecords).toHaveBeenCalledWith('55', '$id in ("55", "56")')
+    expect(ofids.get('55')).toBe('17351')
+    expect(ofids.has('56')).toBe(false)
+  })
+
+  it('loadApp55Ofids: 対象0件なら問い合わせない', async () => {
+    const getRecords = vi.fn()
+    const client = makeMockClient({ getRecords })
+    expect((await loadApp55Ofids(client, [])).size).toBe(0)
+    expect(getRecords).not.toHaveBeenCalled()
   })
 
   it('writeBackSyncStatus: app296 へ status/synced_at/log を update', async () => {

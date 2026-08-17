@@ -1,6 +1,7 @@
 import { buildRecord } from './build-records'
 import { openWorkbook, workbookCellReader } from './excel-reader'
 import { APP34_MAPPING } from './mappings/app34'
+import { APP36_MAPPING } from './mappings/app36'
 import { APP55_MAPPING } from './mappings/app55'
 import type { KintoneWriteClient } from './kintone-write-client'
 import type { AppMapping, CellReader, KintoneRecordPayload } from './types'
@@ -43,7 +44,7 @@ export interface TranscribeResult {
   plan: TranscribePlan
 }
 
-/** ワークブック単位の転記結果。app55 は payload のみ返し、N件(複数人)への書込は run-transcription が fan-out する。 */
+/** ワークブック単位の転記結果。app55/app36 は payload のみ返し、N件への書込は run-transcription が fan-out する。 */
 export interface TranscribeWorkbookResult {
   /** 法人(app34)。案件レベルで1回 update/preview。 */
   app34: TranscribeResult
@@ -51,6 +52,12 @@ export interface TranscribeWorkbookResult {
   app55Record: KintoneRecordPayload
   /** app55 の主ソースシート。 */
   app55Sheet: string
+  /**
+   * 事業所(app36)の payload（所定労働時間数・所定労働日数・年間合計休日日数のみ）。
+   * app55 側はこれらが OFID ルックアップのコピー先＝書込ロックのため、コピー元の app36 に書く。
+   * Excel に記入が無ければ空オブジェクト（＝書込不要）。
+   */
+  app36Record: KintoneRecordPayload
 }
 
 /**
@@ -216,9 +223,17 @@ export function buildApp55Record(getCell: CellReader): KintoneRecordPayload {
 }
 
 /**
- * 提出Excel（申請書類作成フォーム）を読み、app34 を転記し、app55 の payload を返す。
- * app55（雇用条件書）は複数人（サブテーブル）なので、ここでは payload 生成のみ。
- * 各人の雇用条件書レコードへの書込は run-transcription が fan-out する。app36 は対象外。
+ * app36（マスタ_事業所）の payload を生成する（労働時間系のみ）。
+ * 実際の書込は案件に紐づく事業所（複数可）へ run-transcription が fan-out する。
+ */
+export function buildApp36Record(getCell: CellReader): KintoneRecordPayload {
+  return buildRecord(getCell, APP36_MAPPING)
+}
+
+/**
+ * 提出Excel（申請書類作成フォーム）を読み、app34 を転記し、app55 / app36 の payload を返す。
+ * app55（雇用条件書）は複数人、app36（事業所マスタ）は複数事業所なので、ここでは payload 生成のみ。
+ * 各レコードへの書込は run-transcription が fan-out する。
  */
 export async function transcribeWorkbook(
   options: TranscribeOptions
@@ -239,6 +254,7 @@ export async function transcribeWorkbook(
 
   const app34 = await transcribeApp34(getCell, dryRun, client, targets.app34RecordId ?? null)
   const app55Record = buildApp55Record(getCell)
+  const app36Record = buildApp36Record(getCell)
 
-  return { app34, app55Record, app55Sheet: '1-4' }
+  return { app34, app55Record, app55Sheet: '1-4', app36Record }
 }

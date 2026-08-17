@@ -1,10 +1,14 @@
 import { getServiceClient } from '../storage'
-import { createKintoneWriteClientFromEnv } from './kintone-write-client'
+import {
+  createKintoneWriteClientFromEnv,
+  type KintoneWriteClient,
+} from './kintone-write-client'
 import {
   loadCaseHubLinks,
   writeBackSyncStatus,
   type CaseHubLinks,
   type KoyouRowStatus,
+  type KoyouTarget,
   type SyncStatus,
 } from './case-hub'
 import { loadApplicationWorkbook, APPLICATION_WORKBOOK_CODE } from './source'
@@ -32,6 +36,48 @@ export interface App55WriteResult {
   applicantName: string | null
   /** action='error' 時のメッセージ。 */
   error?: string
+}
+
+/** app36（マスタ_事業所）1事業所分の書込結果。 */
+export interface App36WriteResult {
+  /** 反映先 app36 レコード番号（office_ref）。 */
+  app36RecordId: string
+  /** 実行された操作。'skipped' は Excel に労働時間の記入が無く書込不要だったケース。 */
+  action: 'update' | 'dry-run' | 'skipped' | 'error'
+  /** 表示用の事業所名（office_name_disp・あれば）。 */
+  officeName: string | null
+  /** action='error' 時のメッセージ。 */
+  error?: string
+}
+
+/**
+ * app55（雇用条件書）各レコードの現在の OFID を取得する。
+ *
+ * app36（事業所マスタ）を更新しても、app55 側の OFID ルックアップのコピー先
+ * （所定労働時間数など）は kintone では自動更新されない。app55 の更新 payload に
+ * OFID を含めるとルックアップが再実行され、コピー先が最新のマスタ値になる。
+ * そのため「現在値と同じ OFID」を送り返す必要がある。
+ *
+ * @returns app55レコード番号 → OFID。取得できないもの（OFID未設定）は含めない。
+ */
+export async function loadApp55Ofids(
+  client: KintoneWriteClient,
+  targets: KoyouTarget[]
+): Promise<Map<string, string>> {
+  const ids = targets.map((t) => t.app55RecordId)
+  const ofidByRecordId = new Map<string, string>()
+  if (ids.length === 0) {
+    return ofidByRecordId
+  }
+  const query = `$id in (${ids.map((id) => `"${id}"`).join(', ')})`
+  const records = await client.getRecords('55', query)
+  for (const record of records) {
+    const ofid = (record['OFID'] as { value: unknown } | undefined)?.value
+    if (ofid !== undefined && ofid !== null && ofid !== '') {
+      ofidByRecordId.set(record.$id.value, String(ofid))
+    }
+  }
+  return ofidByRecordId
 }
 
 /**
@@ -75,13 +121,20 @@ export interface RunCaseTranscriptionResult {
   app55Record: KintoneRecordPayload
   /** 雇用条件書(app55)を各人へ fan-out した結果（0件=紐付け無し）。 */
   app55Writes: App55WriteResult[]
+  /** app36 に送った payload（労働時間系のみ）。空なら Excel に記入が無い。 */
+  app36Record: KintoneRecordPayload
+  /** 事業所マスタ(app36)を各事業所へ fan-out した結果（0件=紐付け無し）。 */
+  app36Writes: App36WriteResult[]
   sourceFileName: string | null
 }
 
 /**
  * 案件の提出Excelを転記する。
  * - kintoneCaseId + client あり: app296 の事前紐付けを解決し、Aモデルで app34 を直接 update、
+ *   app36（事業所マスタ）は office_details の各事業所へ、
  *   app55（雇用条件書）は koyou_details サブテーブルの各人へ同一payloadを fan-out。
+ * - 書込順は app34 → app36 → app55。app55 の所定労働時間数などは OFID ルックアップのコピー先
+ *   （書込ロック）なので、先に app36 を更新し、app55 更新時に OFID を送ってコピーを再実行させる。
  * - 実書き込み（dryRun=false かつ client あり）時は結果を app296 に書き戻す（成功/エラー）。
  * - dryRun（既定 false）や client 無しは書き込みなし。
  */
@@ -114,6 +167,7 @@ export async function runCaseTranscription(params: {
   }
 
   const koyouTargets = links?.koyouTargets ?? []
+  const officeTargets = links?.officeTargets ?? []
 
   try {
     const result = await transcribeWorkbook({
@@ -122,6 +176,57 @@ export async function runCaseTranscription(params: {
       client,
       targets,
     })
+
+    // app36（事業所マスタ）は app55 より先に書く。
+    // 所定労働時間数などは app55 では OFID ルックアップのコピー先＝書込ロックなので、
+    // コピー元の app36 を先に最新化してから app55 を OFID 付きで更新し、コピーを再実行させる。
+    const hasApp36Values = Object.keys(result.app36Record).length > 0
+    const app36Writes: App36WriteResult[] = []
+    for (const target of officeTargets) {
+      if (!hasApp36Values) {
+        // Excel に労働時間の記入が無い＝マスタを触らない（既存値を消さない）。
+        app36Writes.push({
+          app36RecordId: target.app36RecordId,
+          action: 'skipped',
+          officeName: target.officeName,
+        })
+        continue
+      }
+      if (dryRun || !client) {
+        app36Writes.push({
+          app36RecordId: target.app36RecordId,
+          action: 'dry-run',
+          officeName: target.officeName,
+        })
+        continue
+      }
+      try {
+        await client.updateRecord('36', target.app36RecordId, result.app36Record)
+        app36Writes.push({
+          app36RecordId: target.app36RecordId,
+          action: 'update',
+          officeName: target.officeName,
+        })
+      } catch (e) {
+        app36Writes.push({
+          app36RecordId: target.app36RecordId,
+          action: 'error',
+          officeName: target.officeName,
+          error: e instanceof Error ? e.message : String(e),
+        })
+      }
+    }
+
+    // 事業所マスタを更新したときだけ、app55 のルックアップを再取得させるため OFID を送り返す。
+    // 取得に失敗しても転記自体は続行する（コピー先が古いままになるだけ）。
+    let ofidByRecordId = new Map<string, string>()
+    if (!dryRun && client && app36Writes.some((w) => w.action === 'update')) {
+      try {
+        ofidByRecordId = await loadApp55Ofids(client, koyouTargets)
+      } catch (e) {
+        console.error('Error loading app55 OFID for lookup refresh:', e)
+      }
+    }
 
     // app55（雇用条件書）は複数人。共通payloadを各人のレコードへ fan-out する。
     // 1人分の失敗が他の人を巻き添えにしないよう、行ごとに成否を収集する（app34同様の分離方針）。
@@ -136,8 +241,12 @@ export async function runCaseTranscription(params: {
         })
         continue
       }
+      const ofid = ofidByRecordId.get(target.app55RecordId)
+      const record = ofid
+        ? { ...result.app55Record, OFID: { value: ofid } }
+        : result.app55Record
       try {
-        await client.updateRecord('55', target.app55RecordId, result.app55Record)
+        await client.updateRecord('55', target.app55RecordId, record)
         app55Writes.push({
           rowId: target.rowId,
           app55RecordId: target.app55RecordId,
@@ -160,6 +269,12 @@ export async function runCaseTranscription(params: {
     if (!dryRun && client && params.kintoneCaseId) {
       const okCount = app55Writes.filter((w) => w.action === 'update').length
       const errCount = app55Writes.filter((w) => w.action === 'error').length
+      // 事業所マスタは app296 に専用のステータス欄が無いため、ログ文字列で可視化する。
+      const officeOk = app36Writes.filter((w) => w.action === 'update').length
+      const officeErr = app36Writes.filter((w) => w.action === 'error').length
+      const officeLog = hasApp36Values
+        ? `事業所(app36)=${officeOk}件反映済・${officeErr}件エラー（計${app36Writes.length}事業所）`
+        : '事業所(app36)=対象なし（Excelに所定労働時間数等の記入なし）'
       try {
         await writeBackSyncStatus(client, params.kintoneCaseId, {
           companyStatus: syncStatusLabelForAction(result.app34.plan.action),
@@ -168,7 +283,8 @@ export async function runCaseTranscription(params: {
           syncedAt: new Date().toISOString(),
           log:
             `法人(app34)=${result.app34.plan.action}/rec ${result.app34.plan.recordId ?? '-'} / ` +
-            `雇用条件書(app55)=${okCount}件反映済・${errCount}件エラー（計${app55Writes.length}人）`,
+            `雇用条件書(app55)=${okCount}件反映済・${errCount}件エラー（計${app55Writes.length}人） / ` +
+            officeLog,
         })
       } catch (writebackError) {
         console.error('Error writing back sync status to app296:', writebackError)
@@ -182,6 +298,8 @@ export async function runCaseTranscription(params: {
       app34: result.app34,
       app55Record: result.app55Record,
       app55Writes,
+      app36Record: result.app36Record,
+      app36Writes,
       sourceFileName: workbook.data.fileName,
     }
   } catch (error) {
@@ -216,6 +334,12 @@ export interface AutoTranscribeSummary {
   app55Error: number
   /** 雇用条件書(app55)の対象人数。 */
   app55Total: number
+  /** 事業所マスタ(app36)の反映成功件数。 */
+  app36Ok: number
+  /** 事業所マスタ(app36)のエラー件数。 */
+  app36Error: number
+  /** 事業所マスタ(app36)の対象事業所数。 */
+  app36Total: number
 }
 
 export interface MaybeAutoTranscribeResult {
@@ -272,6 +396,9 @@ export async function maybeAutoTranscribeOnUpload(params: {
       app55Ok: result.app55Writes.filter((w) => w.action === 'update').length,
       app55Error: result.app55Writes.filter((w) => w.action === 'error').length,
       app55Total: result.app55Writes.length,
+      app36Ok: result.app36Writes.filter((w) => w.action === 'update').length,
+      app36Error: result.app36Writes.filter((w) => w.action === 'error').length,
+      app36Total: result.app36Writes.length,
     },
   }
 }
