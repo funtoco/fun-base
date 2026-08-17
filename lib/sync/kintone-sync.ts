@@ -971,12 +971,13 @@ export class KintoneDataSync {
               id: string
               name?: string | null
               company?: string | null
+              tenantOfficeId?: string | null
               reopenSentIfBefore?: string | null
             } | null = null
             if (targetAppType === 'people' && targetTable === 'people') {
               const { data: existingPeople, error: existingPersonError } = await this.supabase
                 .from('people')
-                .select('id, name, company, working_status, updated_at')
+                .select('id, name, company, tenant_office_id, working_status, updated_at')
                 .match(whereCondition)
                 .limit(1)
 
@@ -993,6 +994,7 @@ export class KintoneDataSync {
                     id: string
                     name?: string | null
                     company?: string | null
+                    tenant_office_id?: string | null
                     working_status?: string | null
                     updated_at?: string | null
                   }
@@ -1022,8 +1024,11 @@ export class KintoneDataSync {
               if (shouldNotifyRetirement || shouldRetryRetirementNotification) {
                 retirementNoticePerson = {
                   id: existingPerson!.id,
-                  name: typeof data.name === 'string' ? data.name : existingPerson!.name,
-                  company: typeof data.company === 'string' ? data.company : existingPerson!.company,
+                  name: Object.prototype.hasOwnProperty.call(data, 'name') ? data.name as string | null : existingPerson!.name,
+                  company: Object.prototype.hasOwnProperty.call(data, 'company') ? data.company as string | null : existingPerson!.company,
+                  tenantOfficeId: Object.prototype.hasOwnProperty.call(data, 'tenant_office_id')
+                    ? data.tenant_office_id as string | null
+                    : existingPerson!.tenant_office_id,
                   reopenSentIfBefore: shouldNotifyRetirement ? existingPerson!.updated_at : null,
                 }
               }

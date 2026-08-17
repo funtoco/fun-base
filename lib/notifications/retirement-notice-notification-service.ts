@@ -21,6 +21,7 @@ type RetirementNoticeNotificationInput = {
     id: string
     name?: string | null
     company?: string | null
+    tenantOfficeId?: string | null
   }
 }
 
@@ -80,7 +81,7 @@ export async function notifyRetirementNoticeRequired({
   let createdAnnouncement: AnnouncementRow | null = null
 
   try {
-    const recipients = await getRecipients(supabase, tenantId, person.company)
+    const recipients = await getRecipients(supabase, tenantId, person.company, person.tenantOfficeId)
     if (recipients.length === 0) {
       await markRetirementNoticeNotificationEventSent(supabase, eventId)
       console.log('[notification] retirement-notice:no-recipients', {
@@ -142,7 +143,8 @@ export async function notifyRetirementNoticeRequired({
 async function getRecipients(
   supabase: SupabaseClient<any, any, any>,
   tenantId: string,
-  companyName?: string | null
+  companyName?: string | null,
+  tenantOfficeId?: string | null
 ): Promise<RetirementNoticeRecipient[]> {
   const { data: members, error: membersError } = await supabase
     .from('user_tenants')
@@ -156,7 +158,7 @@ async function getRecipients(
 
   for (const candidate of candidates) {
     const access = await getCompanyAccessForUser(supabase, candidate.userId, 'people')
-    if (canAccessPersonByCompany({ tenant_id: tenantId, company: companyName }, access)) {
+    if (canAccessPersonByCompany({ tenant_id: tenantId, tenant_office_id: tenantOfficeId, company: companyName }, access)) {
       recipients.push(candidate)
     }
   }

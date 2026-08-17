@@ -20,7 +20,7 @@ export async function getVisasByPersonId(personId: string): Promise<Visa[]> {
   const personQuery = applyPeopleAccessFilter(
     supabase
       .from('people')
-      .select('id, tenant_id, company')
+      .select('id, tenant_id, tenant_office_id, company')
       .eq('id', personId),
     companyAccess
   )
