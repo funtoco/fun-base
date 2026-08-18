@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { Search, Bell, Settings, LogOut, RefreshCw, Cable, Users, ShieldCheck, Megaphone, Building2, ArrowRight, History } from "lucide-react"
+import { Search, Bell, Settings, LogOut, RefreshCw, Cable, Users, ShieldCheck, Megaphone, Building2, ArrowRight, History, ClipboardCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -606,6 +606,10 @@ export function Header() {
               </DropdownMenuItem>
               {user?.email?.endsWith("@funtoco.jp") && (
                 <>
+                  <DropdownMenuItem onClick={() => navigate('/admin/prepare')}>
+                    <ClipboardCheck className="mr-2 h-4 w-4" />
+                    ビザ案件 事前準備
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate('/admin/connectors/dashboard')}>
                     <Cable className="mr-2 h-4 w-4" />
                     コネクター管理
