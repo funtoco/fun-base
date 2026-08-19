@@ -11,6 +11,8 @@ import {
 import { validateInviteOffices } from "@/lib/portal/invite-validation"
 
 const INVITABLE_ROLES = new Set(TENANT_INVITABLE_ROLES)
+const PENDING_INVITATION_ERROR =
+  'このメールアドレスはすでに招待中です。既存メンバー行の「再送」ボタンから招待メールを再送してください。'
 
 function normalizeOfficeIds(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -147,10 +149,10 @@ export async function POST(
     }
 
     if (existingAppMemberships.some((membership) => membership.status === 'pending')) {
-        return NextResponse.json(
-          { error: "Invitation already sent (pending)" },
-          { status: 400 }
-        )
+      return NextResponse.json(
+        { error: PENDING_INVITATION_ERROR },
+        { status: 400 }
+      )
     }
 
     const adminSupabase = createAdminClient()
@@ -186,7 +188,7 @@ export async function POST(
         console.error('Error creating user tenant record:', userTenantError)
         if (userTenantError.code === '23505') {
           return NextResponse.json(
-            { error: "This user is already a member or has a pending invitation" },
+            { error: "このメールアドレスはすでにメンバー登録済み、または招待中です。画面を更新して状態を確認してください。" },
             { status: 400 }
           )
         }
