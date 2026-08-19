@@ -188,7 +188,7 @@ export async function POST(
         console.error('Error creating user tenant record:', userTenantError)
         if (userTenantError.code === '23505') {
           return NextResponse.json(
-            { error: PENDING_INVITATION_ERROR },
+            { error: "このメールアドレスはすでにメンバー登録済み、または招待中です。画面を更新して状態を確認してください。" },
             { status: 400 }
           )
         }
