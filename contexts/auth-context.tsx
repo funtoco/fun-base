@@ -39,10 +39,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const getInitialSession = async () => {
       try {
         const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        setUser(session?.user ?? null)
-        setRole(session?.user?.user_metadata?.role ?? null)
+          data: { user },
+          error,
+        } = await supabase.auth.getUser()
+
+        if (error) {
+          console.warn("認証セッションの検証に失敗しました:", error.message)
+        }
+
+        setUser(user ?? null)
+        setRole(user?.user_metadata?.role ?? null)
         setLoading(false)
       } catch (error) {
         console.error("認証セッション取得エラー:", error)
