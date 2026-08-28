@@ -19,24 +19,21 @@ import {
   UserCheck,
   UserX
 } from "lucide-react"
-import { getPeople } from "@/lib/supabase/people"
-import { getVisas } from "@/lib/supabase/visas"
-import { getPublishedAnnouncements, getReadAnnouncementIds } from "@/lib/supabase/announcements"
-import { getLatestDailySupportRecords, getLatestRegularInterviews } from "@/lib/kintone-data"
 import { buildDashboardViewModel } from "@/lib/dashboard/view-model"
+import {
+  loadDashboardDataSources,
+  type DashboardData,
+  type DashboardDataLoaders,
+  type DashboardSourceFailure,
+} from "@/lib/dashboard/load-data"
+import { getLatestDailySupportRecords, getLatestRegularInterviews } from "@/lib/kintone-data"
 import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
 import { getCategoryColor } from "@/lib/interview-records"
+import { getPublishedAnnouncements, getReadAnnouncementIds } from "@/lib/supabase/announcements"
+import { getPeople } from "@/lib/supabase/people"
+import { getVisas } from "@/lib/supabase/visas"
 import { formatDate, formatDateTime } from "@/lib/utils"
-import type { Announcement, DailySupportRecord, Person, RegularInterview, Visa } from "@/lib/models"
 
-type DashboardData = {
-  people: Person[]
-  visas: Visa[]
-  regularInterviews: RegularInterview[]
-  dailySupportRecords: DailySupportRecord[]
-  announcements: Announcement[]
-  readAnnouncementIds: string[]
-}
 
 function buildFilteredHref(path: string, params: Record<string, string>): string {
   const searchParams = new URLSearchParams(params)
@@ -44,16 +41,27 @@ function buildFilteredHref(path: string, params: Record<string, string>): string
   return query ? `${path}?${query}` : path
 }
 
+const dashboardDataLoaders: DashboardDataLoaders = {
+  people: getPeople,
+  visas: getVisas,
+  regularInterviews: () => getLatestRegularInterviews(5),
+  dailySupportRecords: () => getLatestDailySupportRecords(5),
+  announcements: getPublishedAnnouncements,
+  readAnnouncementIds: getReadAnnouncementIds,
+}
+
 function DashboardContent({
   data,
   loadedAt,
   loading,
   onRefresh,
+  failedSources,
 }: {
   data: DashboardData
   loadedAt: Date
   loading: boolean
   onRefresh: () => void
+  failedSources: DashboardSourceFailure[]
 }) {
   const viewModel = buildDashboardViewModel({ ...data, now: loadedAt })
   const formattedTimestamp = formatDateTime(loadedAt)
@@ -80,6 +88,12 @@ function DashboardContent({
           </Button>
         </div>
       </div>
+
+      <DashboardLoadWarning
+        failedSources={failedSources}
+        loading={loading}
+        onRetry={onRefresh}
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -398,6 +412,47 @@ function DashboardContent({
   )
 }
 
+function DashboardLoadWarning({
+  failedSources,
+  loading,
+  onRetry,
+}: {
+  failedSources: DashboardSourceFailure[]
+  loading: boolean
+  onRetry: () => void
+}) {
+  if (failedSources.length === 0) return null
+
+  return (
+    <Card className="border-amber-200 bg-amber-50/30">
+      <CardContent className="p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <p className="text-sm font-medium text-foreground">一部のデータを読み込めませんでした</p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              表示できる情報を先に表示しています。再読み込みすると解消する場合があります。
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {failedSources.map((source) => (
+                <Badge key={source.name} variant="secondary" className="bg-background/80">
+                  {source.label}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={onRetry} disabled={loading} className="gap-2 shrink-0">
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            再読み込み
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // KPI Card Component
 function KPICard({
   title,
@@ -558,7 +613,13 @@ function DashboardLoading() {
   )
 }
 
-function DashboardError({ onRetry, loading }: { onRetry: () => void; loading: boolean }) {
+function DashboardError({
+  onRetry,
+  loading,
+}: {
+  onRetry: () => void
+  loading: boolean
+}) {
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -571,10 +632,16 @@ function DashboardError({ onRetry, loading }: { onRetry: () => void; loading: bo
             <div>
               <p className="font-medium text-foreground">ダッシュボードデータの取得に失敗しました</p>
               <p className="text-sm text-muted-foreground mt-1">
-                接続状況または権限を確認して、もう一度読み込んでください。
+                接続状況を確認して、もう一度読み込んでください。
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={onRetry} disabled={loading} className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              disabled={loading}
+              className="gap-2 shrink-0"
+            >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               再読み込み
             </Button>
@@ -585,30 +652,45 @@ function DashboardError({ onRetry, loading }: { onRetry: () => void; loading: bo
   )
 }
 
+function logDashboardLoadFailures(status: "partial" | "fatal", failedSources: DashboardSourceFailure[]) {
+  const sourceNames = failedSources.map((source) => source.name)
+  if (status === "fatal") {
+    console.error("Failed to load dashboard data", { sourceNames })
+    return
+  }
+  console.warn("Some dashboard data sources failed to load", { sourceNames })
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const [failedSources, setFailedSources] = useState<DashboardSourceFailure[]>([])
+
 
   const loadDashboardData = useCallback(async () => {
     setLoading(true)
     try {
-      const [people, visas, regularInterviews, dailySupportRecords, announcements, readAnnouncementIds] = await Promise.all([
-        getPeople(),
-        getVisas(),
-        getLatestRegularInterviews(5),
-        getLatestDailySupportRecords(5),
-        getPublishedAnnouncements(),
-        getReadAnnouncementIds(),
-      ])
-      setData({ people, visas, regularInterviews, dailySupportRecords, announcements, readAnnouncementIds })
+      const result = await loadDashboardDataSources(dashboardDataLoaders)
+
+      if (result.status === "fatal") {
+        logDashboardLoadFailures(result.status, result.failedSources)
+        setData(null)
+        setFailedSources(result.failedSources)
+        return
+      }
+
+      if (result.status === "partial") {
+        logDashboardLoadFailures(result.status, result.failedSources)
+      }
+
+      setData(result.data)
       setLoadedAt(new Date())
-      setError(false)
+      setFailedSources(result.failedSources)
     } catch (err) {
       console.error("Failed to load dashboard data", err)
       setData(null)
-      setError(true)
+      setFailedSources([])
     } finally {
       setLoading(false)
     }
@@ -619,7 +701,22 @@ export default function DashboardPage() {
   }, [loadDashboardData])
 
   if (loading && !data) return <DashboardLoading />
-  if (error || !data || !loadedAt) return <DashboardError onRetry={loadDashboardData} loading={loading} />
+  if (!data || !loadedAt) {
+    return (
+      <DashboardError
+        onRetry={loadDashboardData}
+        loading={loading}
+      />
+    )
+  }
 
-  return <DashboardContent data={data} loadedAt={loadedAt} loading={loading} onRefresh={loadDashboardData} />
+  return (
+    <DashboardContent
+      data={data}
+      loadedAt={loadedAt}
+      loading={loading}
+      onRefresh={loadDashboardData}
+      failedSources={failedSources}
+    />
+  )
 }
