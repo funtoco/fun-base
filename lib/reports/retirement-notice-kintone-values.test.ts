@@ -21,7 +21,11 @@ vi.mock('@/lib/kintone/api-client', () => ({
   }),
 }))
 
-import { applyRetirementNoticeKintoneValues, getRetirementNoticeKintoneValues } from './retirement-notice-kintone-values'
+import {
+  applyRetirementNoticeKintoneValues,
+  getRetirementNoticeKintoneValues,
+  hasRetirementNoticeKintoneRecord,
+} from './retirement-notice-kintone-values'
 
 const basePerson = {
   id: '1234',
@@ -141,6 +145,7 @@ describe('getRetirementNoticeKintoneValues', () => {
 
     expect(mocks.getRecords).toHaveBeenCalledWith('13', '$id = 1234 limit 1', [])
     expect(values.name).toBe('CORRECT WORKER')
+    expect(values.hasRetirementNoticeRecord).toBe(false)
   })
 
   test('refreshes kintone token with client credentials even when the stored access token is missing', async () => {
@@ -231,6 +236,7 @@ describe('getRetirementNoticeKintoneValues', () => {
       事案概要: '本人都合ではない退職です',
     })
     expect(values.retirementNoticeType).toBe('自己都合退職')
+    expect(values.hasRetirementNoticeRecord).toBe(true)
 
     expect(applyRetirementNoticeKintoneValues(basePerson as any, values)).toMatchObject({
       name: 'NYEIN CHAN AUNG',
@@ -304,6 +310,7 @@ describe('getRetirementNoticeKintoneValues', () => {
     const values = await getRetirementNoticeKintoneValues(basePerson as any)
 
     expect(values).toMatchObject({
+      hasRetirementNoticeRecord: true,
       name: 'APP92 TARO',
       nationality: 'ミャンマー',
       dob: '1999-01-14',
@@ -325,5 +332,35 @@ describe('getRetirementNoticeKintoneValues', () => {
         会社都合: '✓',
       }),
     })
+  })
+
+  test('checks app92 record existence without loading company and office master records', async () => {
+    mocks.getRecords.mockImplementation(async (appId: string) => {
+      if (appId === '13') {
+        return [
+          {
+            $id: { value: '1234' },
+            $revision: { value: '1' },
+            WOID: { value: '1234' },
+          },
+        ]
+      }
+      if (appId === '92') {
+        return [
+          {
+            $id: { value: '92' },
+            $revision: { value: '1' },
+            WOID: { value: '1234' },
+          },
+        ]
+      }
+      throw new Error(`unexpected app lookup: ${appId}`)
+    })
+
+    await expect(hasRetirementNoticeKintoneRecord(basePerson as any)).resolves.toBe(true)
+    expect(mocks.getRecords).toHaveBeenCalledWith('13', '$id = 1234 limit 1', [])
+    expect(mocks.getRecords).toHaveBeenCalledWith('92', 'WOID = "1234" limit 1', [])
+    expect(mocks.getRecords).not.toHaveBeenCalledWith('34', expect.anything(), expect.anything())
+    expect(mocks.getRecords).not.toHaveBeenCalledWith('36', expect.anything(), expect.anything())
   })
 })

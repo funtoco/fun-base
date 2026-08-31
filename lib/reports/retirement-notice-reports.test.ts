@@ -43,10 +43,9 @@ describe('retirement notice report templates', () => {
     expect(fitRetirementNoticeSingleLineFontSize('1234567890', true, 100, 20, font)).toBe(20)
   })
 
-  test('allows creating retirement notices for retired and support-ended people', () => {
-    expect(canCreateRetirementNotice('退職')).toBe(true)
-    expect(canCreateRetirementNotice('支援終了')).toBe(true)
-    expect(canCreateRetirementNotice('在籍中')).toBe(false)
+  test('allows creating retirement notices only when app92 has a retirement notice record', () => {
+    expect(canCreateRetirementNotice(true)).toBe(true)
+    expect(canCreateRetirementNotice(false)).toBe(false)
     expect(canCreateRetirementNotice()).toBe(false)
   })
 

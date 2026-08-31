@@ -34,6 +34,7 @@ export type RetirementNoticeKintoneValues = Partial<
   >
 > & {
   retirementNoticeType?: string
+  hasRetirementNoticeRecord?: boolean
   fieldValues?: Record<string, string>
 }
 
@@ -75,6 +76,7 @@ export async function getRetirementNoticeKintoneValues(
 
   if (retirementRecord) {
     const values = compactValues({
+      hasRetirementNoticeRecord: true,
       retirementNoticeType: valueOf(retirementRecord, '退職届種類'),
       name: valueOf(retirementRecord, '人材名') || valueOf(workRecord, 'name'),
       nationality: valueOf(retirementRecord, '国籍') || valueOf(workRecord, 'country'),
@@ -110,6 +112,7 @@ export async function getRetirementNoticeKintoneValues(
   }
 
   return compactValues({
+    hasRetirementNoticeRecord: false,
     name: valueOf(workRecord, 'name'),
     nationality: valueOf(workRecord, 'country'),
     dob: valueOf(workRecord, 'dateOfBirth'),
@@ -125,6 +128,39 @@ export async function getRetirementNoticeKintoneValues(
     companyAddress: valueOf(officeRecord, 'address') || valueOf(companyRecord, 'address'),
     companyPhone: valueOf(officeRecord, 'phoneNumber') || valueOf(companyRecord, 'telephoneNumber'),
   })
+}
+
+export async function hasRetirementNoticeKintoneRecord(person: Person): Promise<boolean> {
+  if (!person.tenantId) return false
+
+  const connectors = await listConnectors(person.tenantId)
+  const connector = connectors.find((item) => item.provider === 'kintone')
+  if (!connector) return false
+
+  const [config, token] = await Promise.all([
+    getCredential(connector.id, 'kintone_config'),
+    getCredential(connector.id, 'kintone_token'),
+  ])
+  const domain = config?.domain
+  const accessToken = await getValidKintoneAccessToken(connector.id, config, token)
+
+  if (!domain || !accessToken) return false
+
+  const client = new KintoneApiClient({
+    domain,
+    accessToken,
+  })
+
+  const workRecord = await getRecordById(client, KINTONE_WORK_APP_ID, person.id)
+  const workId = valueOf(workRecord, 'WOID')?.replace(/^WO-/, '') || person.id
+  if (!workId) return false
+
+  const retirementRecord = await getFirstRecord(
+    client,
+    KINTONE_RETIREMENT_NOTICE_APP_ID,
+    `WOID = ${quoteKintoneValue(workId)} limit 1`
+  )
+  return retirementRecord !== null
 }
 
 export function applyRetirementNoticeKintoneValues(
@@ -335,6 +371,9 @@ function quoteKintoneValue(value: string): string {
 
 function compactValues(values: RetirementNoticeKintoneValues): RetirementNoticeKintoneValues {
   return Object.fromEntries(
-    Object.entries(values).filter(([, value]) => typeof value === 'string' && value.trim())
+    Object.entries(values).filter(([, value]) => {
+      if (typeof value === 'boolean') return true
+      return typeof value === 'string' && value.trim()
+    })
   ) as RetirementNoticeKintoneValues
 }
