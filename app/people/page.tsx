@@ -13,6 +13,7 @@ import { getPeople } from "@/lib/supabase/people"
 import { getVisasByPersonIds } from "@/lib/supabase/visas"
 import { PERSON_SEARCH_KEYS } from "@/lib/person-search"
 import { isManualPersonId } from "@/lib/person-source"
+import { selectPrimaryVisa } from "@/lib/visa-display"
 import type { Person } from "@/lib/models"
 
 interface PersonWithVisa extends Person {
@@ -100,7 +101,7 @@ export default function PeoplePage() {
 
   // Combine people with their visa information
   const peopleWithVisas: PersonWithVisa[] = people.map((person) => {
-    const visa = visas.find((v) => v.personId === person.id)
+    const visa = selectPrimaryVisa(visas.filter((item) => item.personId === person.id))
     return {
       ...person,
       visaStatus: visa?.status,

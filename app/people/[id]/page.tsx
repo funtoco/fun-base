@@ -15,6 +15,7 @@ import { isManualPersonId } from "@/lib/person-source"
 import { hasRetirementNoticeKintoneRecord } from "@/lib/reports/retirement-notice-kintone-values"
 import { canCreateRetirementNotice } from "@/lib/reports/retirement-notice-reports"
 import { formatDate, formatDateTime } from "@/lib/utils"
+import { selectPrimaryVisa } from "@/lib/visa-display"
 import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase, Printer } from "lucide-react"
 
 interface PersonDetailPageProps {
@@ -29,7 +30,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
   ])
   const excludedVisaStatuses = new Set<string>(['内定[辞退•取消]•退職'])
   const filteredVisas = personVisas.filter((item) => !excludedVisaStatuses.has(item.status))
-  const visa = filteredVisas[0] // 最新のvisa (除外済み)
+  const visa = selectPrimaryVisa(filteredVisas)
 
   // Get Kintone interview data (async data adapter)
   const [personRegularInterviews, personDailySupportRecords] = await Promise.all([
