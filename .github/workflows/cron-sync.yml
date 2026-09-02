@@ -352,14 +352,16 @@ jobs:
             import { createClient } from "@supabase/supabase-js";
             const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
             const ids = ["3355", "3356", "3357", "3358"];
-            for (const id of ids) {
-              const prefix = `global/people_image/${id}/%`;
-              const { data, error } = await db.from("people")
-                .update({ image_path: null, updated_at: new Date().toISOString() })
-                .eq("id", id)
-                .like("image_path", prefix)
-                .select("id");
-              if (error) throw error;
-              console.log(JSON.stringify({ id, cleared: data?.length ?? 0 }));
-            }
+            (async () => {
+              for (const id of ids) {
+                const prefix = `global/people_image/${id}/%`;
+                const { data, error } = await db.from("people")
+                  .update({ image_path: null, updated_at: new Date().toISOString() })
+                  .eq("id", id)
+                  .like("image_path", prefix)
+                  .select("id");
+                if (error) throw error;
+                console.log(JSON.stringify({ id, cleared: data?.length ?? 0 }));
+              }
+            })().catch((error) => { console.error(error); process.exit(1); });
           '
