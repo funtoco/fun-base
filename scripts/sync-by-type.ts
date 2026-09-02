@@ -225,7 +225,7 @@ async function runSyncByType(
 
   for (const connector of connectors) {
     try {
-      if (!connector.tenant_id) {
+      if (!connector.tenant_id && targetAppType !== 'people_image') {
         console.warn(`⚠️ Skipping ${targetAppType} sync for connector ${connector.id}: missing tenant_id`)
 
         results.push({
@@ -245,7 +245,7 @@ async function runSyncByType(
 
       const syncService = await createSyncService(
         connector.id,
-        connector.tenant_id,
+        connector.tenant_id || '',
         'scheduled'
       )
 
