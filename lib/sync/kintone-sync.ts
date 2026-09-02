@@ -165,6 +165,31 @@ export function shouldSkipMissingUpdateTarget(
   return skipIfNoUpdateTarget || targetAppType === 'people_image'
 }
 
+export function resolveUpdateKeysForTarget<T extends FieldMapping>(
+  targetAppType: string,
+  updateKeys: T[]
+): T[] {
+  if (targetAppType !== 'people_image') return updateKeys
+
+  return updateKeys.map((key) => ({
+    ...key,
+    // App30 record IDs are HRIDs. FunBase people IDs are App13 work-management
+    // IDs, so image records must join through people.external_id instead.
+    target_field_id: key.target_field_id === 'id' ? 'external_id' : key.target_field_id,
+  }) as T)
+}
+
+export function shouldSkipUpdateKeyPayloadField(
+  targetAppType: string,
+  fieldMapping: FieldMapping,
+  updateKeys: FieldMapping[]
+): boolean {
+  return targetAppType === 'people_image' && updateKeys.some((key) =>
+    key.source_field_code === fieldMapping.source_field_code &&
+    key.target_field_id === fieldMapping.target_field_id
+  )
+}
+
 export interface KintoneSyncOptions {
   recordId?: string
   recordIdFrom?: string
@@ -875,7 +900,8 @@ export class KintoneDataSync {
         let syncedCount = 0
 
         // Fetch update keys once per appMapping and reuse inside the loop
-        const updateKeys = await getUpdateKeysByConnector(this.connectorId, targetAppType, appMapping.id)
+        const configuredUpdateKeys = await getUpdateKeysByConnector(this.connectorId, targetAppType, appMapping.id)
+        const updateKeys = resolveUpdateKeysForTarget(targetAppType, configuredUpdateKeys)
 
         // Fetch data mappings once per appMapping and reuse inside the loop
         let dataMappings: DataMapping[] = []
@@ -944,6 +970,9 @@ export class KintoneDataSync {
 
             // Map fields using database configuration
             for (const fieldMapping of appMapping.field_mappings) {
+              if (shouldSkipUpdateKeyPayloadField(targetAppType, fieldMapping, configuredUpdateKeys)) {
+                continue
+              }
               if (fieldMapping.source_field_type === 'FILE') {
                 const fileResult = await processFileField(this.kintoneClient, record, fieldMapping, this.tenantId)
                 applyFileFieldProcessResult(data, fieldMapping.target_field_id, fileResult)
