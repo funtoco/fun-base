@@ -8,7 +8,9 @@ import {
   combineKintoneQueries,
   buildPeopleImageStoragePath,
   parseKintoneSyncOptions,
+  resolveUpdateKeysForTarget,
   shouldSkipMissingUpdateTarget,
+  shouldSkipUpdateKeyPayloadField,
 } from './kintone-sync'
 import { buildUpdateCondition, getKintoneRecordValue } from './update-key-utils'
 
@@ -96,6 +98,44 @@ test('people_image sync always skips records without an existing target person',
   assert.equal(shouldSkipMissingUpdateTarget('people_image', true), true)
   assert.equal(shouldSkipMissingUpdateTarget('people', false), false)
   assert.equal(shouldSkipMissingUpdateTarget('people', true), true)
+})
+
+test('people_image sync joins App30 record IDs to people external IDs', () => {
+  const configuredKey = {
+    source_field_code: '__ID__',
+    target_field_id: 'id',
+    is_required: true,
+    sort_order: 0,
+    is_update_key: true,
+  }
+
+  assert.deepEqual(resolveUpdateKeysForTarget('people_image', [configuredKey]), [
+    { ...configuredKey, target_field_id: 'external_id' },
+  ])
+  assert.deepEqual(resolveUpdateKeysForTarget('people', [configuredKey]), [configuredKey])
+})
+
+test('people_image sync does not write its update key into the target primary key', () => {
+  const configuredKey = {
+    source_field_code: '__ID__',
+    source_field_type: '__ID__',
+    target_field_id: 'id',
+    is_required: true,
+    sort_order: 0,
+    is_update_key: true,
+  }
+  const imageMapping = {
+    source_field_code: 'image',
+    source_field_type: 'FILE',
+    target_field_id: 'image',
+    is_required: false,
+    sort_order: 1,
+    is_update_key: false,
+  }
+
+  assert.equal(shouldSkipUpdateKeyPayloadField('people_image', configuredKey, [configuredKey]), true)
+  assert.equal(shouldSkipUpdateKeyPayloadField('people_image', imageMapping, [configuredKey]), false)
+  assert.equal(shouldSkipUpdateKeyPayloadField('people', configuredKey, [configuredKey]), false)
 })
 
 test('buildRecordIdQuery targets one Kintone record by numeric id', () => {

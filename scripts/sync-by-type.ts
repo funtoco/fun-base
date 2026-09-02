@@ -11,7 +11,7 @@ import {
   parseOptionalConnectorBatchParams,
 } from '@/lib/sync/connector-batch'
 
-type SyncTargetType = 'people' | 'visas' | 'interview_records'
+type SyncTargetType = 'people' | 'people_image' | 'visas' | 'interview_records'
 type CliSyncType = SyncTargetType | 'both'
 
 const MAX_CONNECTOR_BATCH_ITERATIONS = 1000
@@ -44,11 +44,11 @@ function parseSyncType(): CliSyncType {
   const rawType = getArgValue('--type') || process.env.SYNC_TYPE
 
   if (!rawType) {
-    throw new Error('Missing sync type. Use --type people|visas|interview_records|both')
+    throw new Error('Missing sync type. Use --type people|people_image|visas|interview_records|both')
   }
 
-  if (rawType !== 'people' && rawType !== 'visas' && rawType !== 'interview_records' && rawType !== 'both') {
-    throw new Error(`Invalid sync type "${rawType}". Use people, visas, interview_records, or both`)
+  if (rawType !== 'people' && rawType !== 'people_image' && rawType !== 'visas' && rawType !== 'interview_records' && rawType !== 'both') {
+    throw new Error(`Invalid sync type "${rawType}". Use people, people_image, visas, interview_records, or both`)
   }
 
   return rawType
@@ -225,7 +225,7 @@ async function runSyncByType(
 
   for (const connector of connectors) {
     try {
-      if (!connector.tenant_id) {
+      if (!connector.tenant_id && targetAppType !== 'people_image') {
         console.warn(`⚠️ Skipping ${targetAppType} sync for connector ${connector.id}: missing tenant_id`)
 
         results.push({
@@ -245,7 +245,7 @@ async function runSyncByType(
 
       const syncService = await createSyncService(
         connector.id,
-        connector.tenant_id,
+        connector.tenant_id || '',
         'scheduled'
       )
 
