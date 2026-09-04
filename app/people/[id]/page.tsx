@@ -15,6 +15,7 @@ import { isManualPersonId } from "@/lib/person-source"
 import { hasRetirementNoticeKintoneRecord } from "@/lib/reports/retirement-notice-kintone-values"
 import { canCreateRetirementNotice } from "@/lib/reports/retirement-notice-reports"
 import { formatDate, formatDateTime } from "@/lib/utils"
+import { formatSpecifiedSkilledWorkerRemainingTerm } from "@/lib/specified-skilled-worker-term"
 import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase, Printer } from "lucide-react"
 
 interface PersonDetailPageProps {
@@ -228,6 +229,17 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
                     <span className="text-sm text-muted-foreground">特定技能分野</span>
                   </div>
                   <span className="text-sm">{person.specificSkillField}</span>
+                </div>
+              )}
+              {typeof person.specifiedSkilledWorkerRemainingMonths === 'number' && (
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">特定技能1号 残り期間</span>
+                  </div>
+                  <span className="text-right text-sm">
+                    {formatSpecifiedSkilledWorkerRemainingTerm(person.specifiedSkilledWorkerRemainingMonths)}
+                  </span>
                 </div>
               )}
               {person.company && (
