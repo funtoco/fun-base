@@ -98,6 +98,7 @@ const SERVICE_FIELDS = {
     { name: 'employee_number', label: '従業員番号', type: 'string', required: false },
     { name: 'working_status', label: '就労ステータス', type: 'string', required: false },
     { name: 'specific_skill_field', label: '特定技能分野', type: 'string', required: false },
+    { name: 'specified_skilled_worker_remaining_months', label: '特定技能1号 残り月数', type: 'number', required: false },
     { name: 'residence_card_no', label: '在留カード番号', type: 'string', required: false },
     { name: 'residence_card_expiry_date', label: '在留カード有効期限', type: 'date', required: false },
     { name: 'residence_card_issued_date', label: '在留カード交付日', type: 'date', required: false }

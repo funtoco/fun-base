@@ -75,6 +75,7 @@ export async function getPersonById(id: string): Promise<Person | null> {
     nationality: data.nationality,
     dob: data.dob,
     specificSkillField: data.specific_skill_field,
+    specifiedSkilledWorkerRemainingMonths: data.specified_skilled_worker_remaining_months,
     businessCategory: pickString(data, ['business_category', 'work_category', 'specific_skill_business_category']),
     sex: pickString(data, ['sex', 'gender']),
     phone: data.phone,

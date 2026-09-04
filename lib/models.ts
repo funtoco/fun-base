@@ -5,6 +5,7 @@ export type Person = {
   nationality?: string
   dob?: string
   specificSkillField?: string
+  specifiedSkilledWorkerRemainingMonths?: number
   businessCategory?: string
   sex?: string
   phone?: string

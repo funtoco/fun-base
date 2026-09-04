@@ -14,6 +14,7 @@ import { getVisasByPersonIds } from "@/lib/supabase/visas"
 import { PERSON_SEARCH_KEYS } from "@/lib/person-search"
 import { isManualPersonId } from "@/lib/person-source"
 import type { Person } from "@/lib/models"
+import { formatSpecifiedSkilledWorkerRemainingTerm } from "@/lib/specified-skilled-worker-term"
 
 interface PersonWithVisa extends Person {
   visaStatus?: string
@@ -216,6 +217,19 @@ export default function PeoplePage() {
       render: (value) =>
         value ? <StatusBadge status={value} type="working" /> : <span className="text-muted-foreground">-</span>,
     },
+    {
+      key: "specifiedSkilledWorkerRemainingMonths",
+      label: "特定技能1号 残り期間",
+      sortable: true,
+      headerClassName: "w-[270px]",
+      cellClassName: "w-[270px] max-w-[270px] overflow-hidden",
+      render: (value) => {
+        const text = typeof value === 'number'
+          ? formatSpecifiedSkilledWorkerRemainingTerm(value)
+          : null
+        return renderTruncatedText(text)
+      },
+    },
   ]
 
   const filters = [
@@ -274,6 +288,7 @@ export default function PeoplePage() {
     { key: "residenceCardExpiryDate", label: "在留カード期限" },
     { key: "residenceCardIssuedDate", label: "在留カード許可日" },
     { key: "specificSkillField", label: "特定技能分野" },
+    { key: "specifiedSkilledWorkerRemainingMonths", label: "特定技能1号 残り月数" },
     { key: "employmentNotificationDate", label: "雇用状況届出日" },
     { key: "employmentChangeNotificationDate", label: "変更届出日" },
     { key: "visaStatus", label: "ビザステータス" },
@@ -333,7 +348,7 @@ export default function PeoplePage() {
         searchPlaceholder="人材名、法人名、事業所名で検索..."
         onRowClick={handleRowClick}
         loading={loading}
-        tableClassName="min-w-[1180px] table-fixed"
+        tableClassName="min-w-[1450px] table-fixed"
         initialSearchTerm={searchParams.get('search') || ''}
         initialActiveFilters={getFiltersFromUrl()}
         onFilterChange={updateUrl}
