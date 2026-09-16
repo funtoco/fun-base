@@ -38,6 +38,8 @@ import {
 // import { getKintoneMapping, type KintoneMapping } from './mapping-loader'
 
 const DEFAULT_SYNC_CONCURRENCY = 6
+const APP30_PEOPLE_SOURCE_APP_ID = '30'
+const TENANT_PEOPLE_HRID_QUERY_CHUNK_SIZE = 100
 
 // Types for field mappings
 interface FieldMapping {
@@ -141,6 +143,14 @@ interface AppMapping {
   omit_tenant_on_write?: boolean
   skip_if_no_update_target: boolean
   field_mappings: FieldMapping[]
+}
+
+type UpdateKeyFieldMapping = {
+  source_field_code: string
+  target_field_id: string
+  is_required: boolean
+  sort_order: number
+  is_update_key: boolean
 }
 
 interface FileFieldProcessResult {
@@ -283,6 +293,111 @@ export function combineKintoneQueries(...queries: Array<string | null | undefine
     .map((query) => query?.trim())
     .filter((query): query is string => !!query)
     .join(' and ')
+}
+
+export function escapeKintoneStringLiteral(value: string): string {
+  return JSON.stringify(value)
+}
+
+function chunkArray<T>(values: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = []
+  for (let index = 0; index < values.length; index += chunkSize) {
+    chunks.push(values.slice(index, index + chunkSize))
+  }
+  return chunks
+}
+
+function normalizeExternalIds(values: Array<string | null | undefined>): string[] {
+  const uniqueIds = new Set<string>()
+  for (const value of values) {
+    const normalized = typeof value === 'string' ? value.trim() : ''
+    if (normalized) {
+      uniqueIds.add(normalized)
+    }
+  }
+  return Array.from(uniqueIds)
+}
+
+function hasExplicitBoundedRecordOption(options?: KintoneSyncOptions): boolean {
+  if (!options) {
+    return false
+  }
+
+  return (
+    (typeof options.recordId === 'string' && options.recordId.trim() !== '') ||
+    (typeof options.recordIdFrom === 'string' && options.recordIdFrom.trim() !== '') ||
+    (typeof options.recordIdTo === 'string' && options.recordIdTo.trim() !== '') ||
+    options.recordIdTailSize !== undefined
+  )
+}
+
+export function buildTenantPeopleHridKintoneQueries({
+  baseQuery,
+  externalIds,
+}: {
+  baseQuery?: string | null
+  externalIds: Array<string | null | undefined>
+}): string[] {
+  const normalizedExternalIds = normalizeExternalIds(externalIds)
+  if (normalizedExternalIds.length === 0) {
+    return []
+  }
+
+  return chunkArray(normalizedExternalIds, TENANT_PEOPLE_HRID_QUERY_CHUNK_SIZE).map((chunk) => {
+    const hridQuery = `HRID in (${chunk.map(escapeKintoneStringLiteral).join(', ')})`
+    return combineKintoneQueries(baseQuery, hridQuery)
+  })
+}
+
+export function shouldLimitApp30PeopleSyncToTenantExternalIds({
+  targetAppType,
+  sourceAppId,
+  skipIfNoUpdateTarget,
+  tenantId,
+  updateKeys,
+  syncOptions,
+}: {
+  targetAppType: string
+  sourceAppId: string
+  skipIfNoUpdateTarget: boolean
+  tenantId: string
+  updateKeys: UpdateKeyFieldMapping[]
+  syncOptions?: KintoneSyncOptions
+}): boolean {
+  const hasHridExternalIdUpdateKey = updateKeys.some((fieldMapping) => (
+    fieldMapping.source_field_code === 'HRID' &&
+    fieldMapping.target_field_id === 'external_id'
+  ))
+
+  return (
+    targetAppType === 'people' &&
+    String(sourceAppId) === APP30_PEOPLE_SOURCE_APP_ID &&
+    skipIfNoUpdateTarget &&
+    tenantId.trim() !== '' &&
+    !hasExplicitBoundedRecordOption(syncOptions) &&
+    hasHridExternalIdUpdateKey
+  )
+}
+
+type TenantPeopleExternalIdPageRow = {
+  id: string
+  external_id: string | null
+}
+
+export async function createTenantPeopleExternalIdPageQuery(
+  supabase: any,
+  tenantId: string,
+  from: number,
+  pageSize: number
+): Promise<{ data: TenantPeopleExternalIdPageRow[] | null; error: any }> {
+  return supabase
+    .from('people')
+    .select('id, external_id')
+    .eq('tenant_id', tenantId)
+    .not('external_id', 'is', null)
+    .neq('external_id', '')
+    .order('id', { ascending: true })
+    .range(from, from + pageSize - 1)
 }
 
 function getSyncConcurrencyLimit(): number {
@@ -608,6 +723,39 @@ export class KintoneDataSync {
     return buildRecordIdTailQuery(maxRecordId, options.recordIdTailSize)
   }
 
+  private async getTenantPeopleExternalIds(): Promise<string[]> {
+    const pageSize = 1000
+    const externalIds: Array<string | null | undefined> = []
+
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await createTenantPeopleExternalIdPageQuery(
+        this.supabase,
+        this.tenantId,
+        from,
+        pageSize
+      )
+
+      if (error) {
+        console.error('[sync] app30-people:external-id-lookup-error', {
+          tenantId: this.tenantId,
+          error,
+        })
+        throw error
+      }
+
+      const rows = Array.isArray(data) ? data : []
+      for (const row of rows) {
+        externalIds.push(row.external_id)
+      }
+
+      if (rows.length < pageSize) {
+        break
+      }
+    }
+
+    return normalizeExternalIds(externalIds)
+  }
+
   /**
    * Build Kintone query from filter conditions
    */
@@ -858,24 +1006,71 @@ export class KintoneDataSync {
       
       // Process each mapping
       for (const appMapping of appMappings) {
+        // Fetch update keys once per appMapping before query planning, then reuse inside the loop
+        const updateKeys = await getUpdateKeysByConnector(this.connectorId, targetAppType, appMapping.id)
+
         // Build query using only database filter conditions
         const filterQuery = await this.buildFilterQuery(targetAppType, appMapping.id)
+        const shouldUseTenantExternalIdFilter = shouldLimitApp30PeopleSyncToTenantExternalIds({
+          targetAppType,
+          sourceAppId: appMapping.source_app_id,
+          skipIfNoUpdateTarget: appMapping.skip_if_no_update_target,
+          tenantId: this.tenantId,
+          updateKeys,
+          syncOptions: options,
+        })
+        const tenantPeopleExternalIds = shouldUseTenantExternalIdFilter
+          ? await this.getTenantPeopleExternalIds()
+          : null
+
+        if (shouldUseTenantExternalIdFilter && tenantPeopleExternalIds?.length === 0) {
+          console.log('[sync] app30-people:skip-empty-external-ids', {
+            tenantId: this.tenantId,
+            appMappingId: appMapping.id,
+          })
+          continue
+        }
+
         const recordIdQuery = await this.buildRecordIdQueryForApp(appMapping.source_app_id, options)
-        const query = combineKintoneQueries(filterQuery, recordIdQuery)
+        const baseQuery = combineKintoneQueries(filterQuery, recordIdQuery)
+        const kintoneRecordQueries = tenantPeopleExternalIds
+          ? buildTenantPeopleHridKintoneQueries({
+              baseQuery,
+              externalIds: tenantPeopleExternalIds,
+            })
+          : [baseQuery]
+        if (shouldUseTenantExternalIdFilter) {
+          console.log('[sync] app30-people:tenant-hrid-filter', {
+            tenantId: this.tenantId,
+            appMappingId: appMapping.id,
+            externalIdCount: tenantPeopleExternalIds?.length ?? 0,
+            queryCount: kintoneRecordQueries.length,
+          })
+        }
         console.log('[sync] kintone-query', {
           targetAppType,
           sourceAppId,
           appMappingId: appMapping.id,
           recordIdTailSize: options.recordIdTailSize,
-          query
+          queryCount: kintoneRecordQueries.length,
+          query: kintoneRecordQueries.length === 1 ? kintoneRecordQueries[0] : undefined,
         })
-        
-        // Get records from Kintone
-        const records = await this.kintoneClient.getRecords(appMapping.source_app_id, query, [])
-        let syncedCount = 0
 
-        // Fetch update keys once per appMapping and reuse inside the loop
-        const updateKeys = await getUpdateKeysByConnector(this.connectorId, targetAppType, appMapping.id)
+        if (kintoneRecordQueries.length === 0) {
+          console.log('[sync] kintone-query:skip-empty', {
+            targetAppType,
+            sourceAppId,
+            appMappingId: appMapping.id,
+          })
+          continue
+        }
+
+        // Get records from Kintone
+        const records: KintoneRecord[] = []
+        for (const query of kintoneRecordQueries) {
+          records.push(...await this.kintoneClient.getRecords(appMapping.source_app_id, query, []))
+        }
+        let syncedCount = 0
 
         // Fetch data mappings once per appMapping and reuse inside the loop
         let dataMappings: DataMapping[] = []
