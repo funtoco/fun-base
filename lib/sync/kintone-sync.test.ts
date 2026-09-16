@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import { describe, test } from 'vitest'
 
 import {
   applyFileFieldProcessResult,
   buildRecordIdQuery,
   buildRecordIdTailQuery,
+  buildTenantPeopleHridKintoneQueries,
   combineKintoneQueries,
+  createTenantPeopleExternalIdPageQuery,
   buildPeopleImageStoragePath,
+  escapeKintoneStringLiteral,
   parseKintoneSyncOptions,
+  shouldLimitApp30PeopleSyncToTenantExternalIds,
   shouldSkipMissingUpdateTarget,
 } from './kintone-sync'
 import { buildUpdateCondition, getKintoneRecordValue } from './update-key-utils'
@@ -165,4 +169,205 @@ test('buildRecordIdTailQuery creates a bounded newest-record window', () => {
     buildRecordIdTailQuery(1200, 2000),
     '$id >= 1 and $id <= 1200'
   )
+})
+
+describe('app30人材同期のHRID絞り込み', () => {
+  test('HRIDからexternal_idへの更新キーのときだけ絞り込みを有効にする', () => {
+    assert.equal(
+      shouldLimitApp30PeopleSyncToTenantExternalIds({
+        targetAppType: 'people',
+        sourceAppId: '30',
+        skipIfNoUpdateTarget: true,
+        tenantId: 'tenant-17614',
+        updateKeys: [
+          {
+            source_field_code: 'HRID',
+            target_field_id: 'external_id',
+            is_required: true,
+            sort_order: 1,
+            is_update_key: true,
+          },
+        ],
+      }),
+      true
+    )
+  })
+
+  const app30HridExternalIdUpdateKeyOptions = {
+    targetAppType: 'people',
+    sourceAppId: '30',
+    skipIfNoUpdateTarget: true,
+    tenantId: 'tenant-17614',
+    updateKeys: [
+      {
+        source_field_code: 'HRID',
+        target_field_id: 'external_id',
+        is_required: true,
+        sort_order: 1,
+        is_update_key: true,
+      },
+    ],
+  }
+
+  test('明示的なrecordId指定があるとHRID絞り込みのfan outをしない', () => {
+    assert.equal(
+      shouldLimitApp30PeopleSyncToTenantExternalIds({
+        ...app30HridExternalIdUpdateKeyOptions,
+        syncOptions: { recordId: '2447' },
+      }),
+      false
+    )
+  })
+
+  test('明示的なrecordId範囲指定があるとHRID絞り込みのfan outをしない', () => {
+    const common = {
+      ...app30HridExternalIdUpdateKeyOptions,
+    }
+
+    assert.equal(
+      shouldLimitApp30PeopleSyncToTenantExternalIds({
+        ...common,
+        syncOptions: { recordIdFrom: '2400' },
+      }),
+      false
+    )
+    assert.equal(
+      shouldLimitApp30PeopleSyncToTenantExternalIds({
+        ...common,
+        syncOptions: { recordIdTo: '2500' },
+      }),
+      false
+    )
+  })
+
+  test('recordIdTailSize指定があるとHRID絞り込みのfan outをしない', () => {
+    assert.equal(
+      shouldLimitApp30PeopleSyncToTenantExternalIds({
+        ...app30HridExternalIdUpdateKeyOptions,
+        syncOptions: { recordIdTailSize: 100 },
+      }),
+      false
+    )
+  })
+
+  test('HRID以外の更新キーでは絞り込みを有効にしない', () => {
+    const common = {
+      targetAppType: 'people',
+      sourceAppId: '30',
+      skipIfNoUpdateTarget: true,
+      tenantId: 'tenant-17614',
+    }
+
+    assert.equal(
+      shouldLimitApp30PeopleSyncToTenantExternalIds({
+        ...common,
+        updateKeys: [
+          {
+            source_field_code: '$id',
+            target_field_id: 'external_id',
+            is_required: true,
+            sort_order: 1,
+            is_update_key: true,
+          },
+        ],
+      }),
+      false
+    )
+    assert.equal(
+      shouldLimitApp30PeopleSyncToTenantExternalIds({
+        ...common,
+        updateKeys: [
+          {
+            source_field_code: 'HRID',
+            target_field_id: 'id',
+            is_required: true,
+            sort_order: 1,
+            is_update_key: true,
+          },
+        ],
+      }),
+      false
+    )
+  })
+
+  test('既存filterとrecordId条件を維持して100件ずつ分割する', () => {
+    const externalIds = Array.from({ length: 101 }, (_, index) => String(index + 1))
+
+    const queries = buildTenantPeopleHridKintoneQueries({
+      baseQuery: combineKintoneQueries('COID = "tenant-17614"', buildRecordIdQuery({ recordIdFrom: '2400' })),
+      externalIds,
+    })
+
+    assert.equal(queries.length, 2)
+    assert.match(queries[0], /^COID = "tenant-17614" and \$id >= 2400 and HRID in \("1", "2"/)
+    assert.match(queries[0], /"100"\)$/)
+    assert.equal(queries[1], 'COID = "tenant-17614" and $id >= 2400 and HRID in ("101")')
+  })
+
+  test('空のexternal_idならKintone全件検索を作らない', () => {
+    assert.deepEqual(
+      buildTenantPeopleHridKintoneQueries({
+        baseQuery: 'COID = "tenant-17614"',
+        externalIds: ['', '   ', null, undefined],
+      }),
+      []
+    )
+  })
+
+  test('Kintone文字列リテラルを安全にエスケープする', () => {
+    assert.equal(escapeKintoneStringLiteral('hr"id\\line\nnext'), '"hr\\"id\\\\line\\nnext"')
+    assert.deepEqual(
+      buildTenantPeopleHridKintoneQueries({
+        baseQuery: '',
+        externalIds: ['123', 'hr"id\\line\nnext'],
+      }),
+      ['HRID in ("123", "hr\\"id\\\\line\\nnext")']
+    )
+  })
+
+  test('people.external_idのrangeページングはid昇順で固定する', async () => {
+    const calls: unknown[][] = []
+    const query = {
+      from(table: string) {
+        calls.push(['from', table])
+        return this
+      },
+      select(columns: string) {
+        calls.push(['select', columns])
+        return this
+      },
+      eq(column: string, value: unknown) {
+        calls.push(['eq', column, value])
+        return this
+      },
+      not(column: string, operator: string, value: unknown) {
+        calls.push(['not', column, operator, value])
+        return this
+      },
+      neq(column: string, value: unknown) {
+        calls.push(['neq', column, value])
+        return this
+      },
+      order(column: string, options: unknown) {
+        calls.push(['order', column, options])
+        return this
+      },
+      async range(from: number, to: number) {
+        calls.push(['range', from, to])
+        return { data: [], error: null }
+      },
+    }
+
+    await createTenantPeopleExternalIdPageQuery(query, 'tenant-17614', 1000, 1000)
+
+    assert.deepEqual(calls, [
+      ['from', 'people'],
+      ['select', 'id, external_id'],
+      ['eq', 'tenant_id', 'tenant-17614'],
+      ['not', 'external_id', 'is', null],
+      ['neq', 'external_id', ''],
+      ['order', 'id', { ascending: true }],
+      ['range', 1000, 1999],
+    ])
+  })
 })
