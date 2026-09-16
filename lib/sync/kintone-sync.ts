@@ -12,6 +12,7 @@ import { decryptJson } from '@/lib/security/crypto'
 import { SyncLogger, createSyncLogger } from './sync-logger'
 import { getUpdateKeysByConnector, buildConflictColumns, buildUpdateCondition, getKintoneRecordValue } from './update-key-utils'
 import { uploadFileToStorage } from '@/lib/storage/file-uploader'
+import { isKintonePlaceholderImageName } from '@/lib/people/person-image'
 import { getDataMappings, mapFieldValues, type DataMapping } from '@/lib/mappings/value-mapper'
 import {
   notifyInterviewRecordsCreatedBatch,
@@ -535,12 +536,21 @@ async function processFileField(
       console.log(`[file] no-key field=%s`, fieldMapping.source_field_code)
       return { shouldUpdate: false, path: null }
     }
+    if (isKintonePlaceholderImageName(fileInfo.name)) {
+      console.log(`[file] placeholder-skipped field=%s file=%s`, fieldMapping.source_field_code, fileInfo.name)
+      return { shouldUpdate: true, path: null }
+    }
 
     // Download file from Kintone
     const fileData = await kintoneClient.downloadFile(fileInfo.fileKey)
     
     // Use the original filename (decode MIME Encoded-Word if necessary)
     const decodedName = decodeMimeEncodedWord(fileData.fileName) || fileData.fileName
+    if (isKintonePlaceholderImageName(decodedName)) {
+      console.log(`[file] placeholder-skipped field=%s file=%s`, fieldMapping.source_field_code, decodedName)
+      return { shouldUpdate: true, path: null }
+    }
+
     const recordIdValue = getKintoneRecordValue(record, '$id')
     if (recordIdValue === undefined || recordIdValue === null) {
       console.log(`[file] no-record-id field=%s`, fieldMapping.source_field_code)

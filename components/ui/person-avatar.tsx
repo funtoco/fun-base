@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { isKintonePlaceholderImagePath } from "@/lib/people/person-image"
 
 interface PersonAvatarProps {
   name: string
@@ -143,9 +144,10 @@ export function PersonAvatar({
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
+  const displayImagePath = isKintonePlaceholderImagePath(imagePath) ? undefined : imagePath
 
   useEffect(() => {
-    if (!imagePath) {
+    if (!displayImagePath) {
       setImageUrl(null)
       setError(false)
       setLoading(false)
@@ -153,14 +155,14 @@ export function PersonAvatar({
     }
 
     // 無効なimagePathの場合はスキップ
-    if (imagePath === 'null' || imagePath === 'undefined' || imagePath.trim() === '') {
+    if (displayImagePath === 'null' || displayImagePath === 'undefined' || displayImagePath.trim() === '') {
       setImageUrl(null)
       setError(false)
       setLoading(false)
       return
     }
 
-    const cached = getFromCache(imagePath)
+    const cached = getFromCache(displayImagePath)
     if (cached) {
       setImageUrl(cached)
       setError(false)
@@ -173,10 +175,10 @@ export function PersonAvatar({
       setLoading(true)
       setError(false)
       try {
-        const signedUrl = await getSignedUrl(imagePath)
+        const signedUrl = await getSignedUrl(displayImagePath)
         if (!active) return
         if (signedUrl) {
-          saveToCache(imagePath, signedUrl)
+          saveToCache(displayImagePath, signedUrl)
           setImageUrl(signedUrl)
         } else {
           setError(true)
@@ -191,7 +193,7 @@ export function PersonAvatar({
     }
     fetchSignedUrl()
     return () => { active = false }
-  }, [imagePath])
+  }, [displayImagePath])
 
   const handleImageError = () => {
     console.warn('Failed to load image for person:', name, 'path:', imagePath)
