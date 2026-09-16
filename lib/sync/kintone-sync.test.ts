@@ -11,6 +11,7 @@ import {
   buildPeopleImageStoragePath,
   escapeKintoneStringLiteral,
   parseKintoneSyncOptions,
+  resolveApp30PeopleExternalId,
   shouldLimitApp30PeopleSyncToTenantExternalIds,
   shouldSkipMissingUpdateTarget,
 } from './kintone-sync'
@@ -290,7 +291,7 @@ describe('app30人材同期のHRID絞り込み', () => {
     )
   })
 
-  test('既存filterとrecordId条件を維持して100件ずつ分割する', () => {
+  test('既存filterとrecordId条件を維持して展開後100件ずつ分割する', () => {
     const externalIds = Array.from({ length: 101 }, (_, index) => String(index + 1))
 
     const queries = buildTenantPeopleHridKintoneQueries({
@@ -298,10 +299,30 @@ describe('app30人材同期のHRID絞り込み', () => {
       externalIds,
     })
 
+    assert.equal(queries.length, 3)
+    assert.match(queries[0], /^COID = "tenant-17614" and \$id >= 2400 and HRID in \("1", "PE-1", "2", "PE-2"/)
+    assert.match(queries[0], /"50", "PE-50"\)$/)
+    assert.match(queries[1], /^COID = "tenant-17614" and \$id >= 2400 and HRID in \("51", "PE-51"/)
+    assert.match(queries[1], /"100", "PE-100"\)$/)
+    assert.equal(queries[2], 'COID = "tenant-17614" and $id >= 2400 and HRID in ("101", "PE-101")')
+  })
+
+  test('tenant external_idごとにrawとPE-prefix HRIDを検索し、展開後にdedupeと100件分割をする', () => {
+    const externalIds = Array.from({ length: 51 }, (_, index) => String(index + 1))
+    externalIds.push('PE-1', '1', ' hr"id\\line\nnext ')
+
+    const queries = buildTenantPeopleHridKintoneQueries({
+      baseQuery: 'COID = "tenant-17614"',
+      externalIds,
+    })
+
     assert.equal(queries.length, 2)
-    assert.match(queries[0], /^COID = "tenant-17614" and \$id >= 2400 and HRID in \("1", "2"/)
-    assert.match(queries[0], /"100"\)$/)
-    assert.equal(queries[1], 'COID = "tenant-17614" and $id >= 2400 and HRID in ("101")')
+    assert.match(queries[0], /^COID = "tenant-17614" and HRID in \("1", "PE-1", "2", "PE-2"/)
+    assert.match(queries[0], /"50", "PE-50"\)$/)
+    assert.equal(
+      queries[1],
+      'COID = "tenant-17614" and HRID in ("51", "PE-51", "hr\\"id\\\\line\\nnext", "PE-hr\\"id\\\\line\\nnext")'
+    )
   })
 
   test('空のexternal_idならKintone全件検索を作らない', () => {
@@ -321,7 +342,7 @@ describe('app30人材同期のHRID絞り込み', () => {
         baseQuery: '',
         externalIds: ['123', 'hr"id\\line\nnext'],
       }),
-      ['HRID in ("123", "hr\\"id\\\\line\\nnext")']
+      ['HRID in ("123", "PE-123", "hr\\"id\\\\line\\nnext", "PE-hr\\"id\\\\line\\nnext")']
     )
   })
 
@@ -369,5 +390,26 @@ describe('app30人材同期のHRID絞り込み', () => {
       ['order', 'id', { ascending: true }],
       ['range', 1000, 1999],
     ])
+  })
+
+  test('app30 HRIDがPE-付きでtenant側external_idがlegacy値ならactual external_idへ解決する', () => {
+    assert.equal(
+      resolveApp30PeopleExternalId('PE-2173', ['2173', '2447']),
+      '2173'
+    )
+  })
+
+  test('exact matchをnormalized matchより優先する', () => {
+    assert.equal(
+      resolveApp30PeopleExternalId('PE-2173', ['2173', 'PE-2173']),
+      'PE-2173'
+    )
+  })
+
+  test('一致するtenant external_idがない場合はnullを返す', () => {
+    assert.equal(
+      resolveApp30PeopleExternalId('PE-9999', ['2173', '2447']),
+      null
+    )
   })
 })

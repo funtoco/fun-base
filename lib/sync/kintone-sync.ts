@@ -318,6 +318,43 @@ function normalizeExternalIds(values: Array<string | null | undefined>): string[
   return Array.from(uniqueIds)
 }
 
+function normalizeOptionalPePrefix(value: string): string {
+  return value.startsWith('PE-') ? value.slice(3) : value
+}
+
+function expandOptionalPePrefixVariants(values: string[]): string[] {
+  const uniqueIds = new Set<string>()
+  for (const value of values) {
+    const unprefixedValue = normalizeOptionalPePrefix(value)
+    uniqueIds.add(unprefixedValue)
+    uniqueIds.add(`PE-${unprefixedValue}`)
+  }
+  return Array.from(uniqueIds)
+}
+
+export function resolveApp30PeopleExternalId(
+  sourceHrid: string | null | undefined,
+  tenantExternalIds: Array<string | null | undefined>
+): string | null {
+  const trimmedSourceHrid = typeof sourceHrid === 'string' ? sourceHrid.trim() : ''
+  if (!trimmedSourceHrid) {
+    return null
+  }
+
+  const normalizedTenantExternalIds = normalizeExternalIds(tenantExternalIds)
+  const exactMatch = normalizedTenantExternalIds.find((externalId) => externalId === trimmedSourceHrid)
+  if (exactMatch) {
+    return exactMatch
+  }
+
+  const normalizedSourceHrid = normalizeOptionalPePrefix(trimmedSourceHrid)
+  const normalizedMatches = normalizedTenantExternalIds.filter((externalId) => {
+    return normalizeOptionalPePrefix(externalId) === normalizedSourceHrid
+  })
+
+  return normalizedMatches.length === 1 ? normalizedMatches[0] : null
+}
+
 function hasExplicitBoundedRecordOption(options?: KintoneSyncOptions): boolean {
   if (!options) {
     return false
@@ -331,6 +368,13 @@ function hasExplicitBoundedRecordOption(options?: KintoneSyncOptions): boolean {
   )
 }
 
+function hasApp30PeopleHridExternalIdUpdateKey(updateKeys: UpdateKeyFieldMapping[]): boolean {
+  return updateKeys.some((fieldMapping) => (
+    fieldMapping.source_field_code === 'HRID' &&
+    fieldMapping.target_field_id === 'external_id'
+  ))
+}
+
 export function buildTenantPeopleHridKintoneQueries({
   baseQuery,
   externalIds,
@@ -338,7 +382,7 @@ export function buildTenantPeopleHridKintoneQueries({
   baseQuery?: string | null
   externalIds: Array<string | null | undefined>
 }): string[] {
-  const normalizedExternalIds = normalizeExternalIds(externalIds)
+  const normalizedExternalIds = expandOptionalPePrefixVariants(normalizeExternalIds(externalIds))
   if (normalizedExternalIds.length === 0) {
     return []
   }
@@ -364,18 +408,35 @@ export function shouldLimitApp30PeopleSyncToTenantExternalIds({
   updateKeys: UpdateKeyFieldMapping[]
   syncOptions?: KintoneSyncOptions
 }): boolean {
-  const hasHridExternalIdUpdateKey = updateKeys.some((fieldMapping) => (
-    fieldMapping.source_field_code === 'HRID' &&
-    fieldMapping.target_field_id === 'external_id'
-  ))
-
   return (
     targetAppType === 'people' &&
     String(sourceAppId) === APP30_PEOPLE_SOURCE_APP_ID &&
     skipIfNoUpdateTarget &&
     tenantId.trim() !== '' &&
     !hasExplicitBoundedRecordOption(syncOptions) &&
-    hasHridExternalIdUpdateKey
+    hasApp30PeopleHridExternalIdUpdateKey(updateKeys)
+  )
+}
+
+function shouldResolveApp30PeopleExternalIdUpdateKey({
+  targetAppType,
+  sourceAppId,
+  skipIfNoUpdateTarget,
+  tenantId,
+  updateKeys,
+}: {
+  targetAppType: string
+  sourceAppId: string
+  skipIfNoUpdateTarget: boolean
+  tenantId: string
+  updateKeys: UpdateKeyFieldMapping[]
+}): boolean {
+  return (
+    targetAppType === 'people' &&
+    String(sourceAppId) === APP30_PEOPLE_SOURCE_APP_ID &&
+    skipIfNoUpdateTarget &&
+    tenantId.trim() !== '' &&
+    hasApp30PeopleHridExternalIdUpdateKey(updateKeys)
   )
 }
 
@@ -1019,7 +1080,14 @@ export class KintoneDataSync {
           updateKeys,
           syncOptions: options,
         })
-        const tenantPeopleExternalIds = shouldUseTenantExternalIdFilter
+        const shouldResolveApp30PeopleExternalId = shouldResolveApp30PeopleExternalIdUpdateKey({
+          targetAppType,
+          sourceAppId: appMapping.source_app_id,
+          skipIfNoUpdateTarget: appMapping.skip_if_no_update_target,
+          tenantId: this.tenantId,
+          updateKeys,
+        })
+        const tenantPeopleExternalIds = shouldResolveApp30PeopleExternalId
           ? await this.getTenantPeopleExternalIds()
           : null
 
@@ -1033,7 +1101,7 @@ export class KintoneDataSync {
 
         const recordIdQuery = await this.buildRecordIdQueryForApp(appMapping.source_app_id, options)
         const baseQuery = combineKintoneQueries(filterQuery, recordIdQuery)
-        const kintoneRecordQueries = tenantPeopleExternalIds
+        const kintoneRecordQueries = shouldUseTenantExternalIdFilter && tenantPeopleExternalIds
           ? buildTenantPeopleHridKintoneQueries({
               baseQuery,
               externalIds: tenantPeopleExternalIds,
@@ -1097,6 +1165,15 @@ export class KintoneDataSync {
             // Check if record exists using update keys
             const includeTenant = !!this.tenantId
             const whereCondition = buildUpdateCondition(record, updateKeys, this.tenantId, includeTenant)
+            if (shouldResolveApp30PeopleExternalId && typeof whereCondition.external_id === 'string') {
+              const resolvedExternalId = resolveApp30PeopleExternalId(
+                whereCondition.external_id,
+                tenantPeopleExternalIds ?? []
+              )
+              if (resolvedExternalId) {
+                whereCondition.external_id = resolvedExternalId
+              }
+            }
             console.log(`[sync] where=${JSON.stringify(whereCondition)}`)
 
             const missingUpdateKeys = updateKeys.filter((fieldMapping) => {
@@ -1246,6 +1323,9 @@ export class KintoneDataSync {
             const updatePayload = { ...data }
             if (targetTable === 'people') {
               delete (updatePayload as any).id
+              if (shouldResolveApp30PeopleExternalId) {
+                delete (updatePayload as any).external_id
+              }
             }
             const { data: updatedRows, error: updateError } = await this.supabase
               .from(targetTable)
@@ -1256,7 +1336,7 @@ export class KintoneDataSync {
               error = updateError
             }
             if (!error && (!updatedRows || updatedRows.length === 0)) {
-              if (targetAppType === 'people_image') {
+              if (shouldSkipMissingUpdateTarget(targetAppType, appMapping.skip_if_no_update_target)) {
                 console.log(`[sync] skip-no-target-after-update rec=${record.$id?.value}`)
                 return
               }
