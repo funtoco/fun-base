@@ -7,12 +7,19 @@ import {
   buildRecordIdTailQuery,
   buildTenantPeopleHridKintoneQueries,
   combineKintoneQueries,
+  assertSourceDeletionReconciliationSafe,
+  computeMissingSourceDeletedPeopleIds,
   createTenantPeopleExternalIdPageQuery,
+  createTenantSourceActiveNumericPeopleIdPageQuery,
   buildPeopleImageStoragePath,
   escapeKintoneStringLiteral,
   parseKintoneSyncOptions,
+  shouldMarkMissingApp13PeopleAsSourceDeleted,
+  shouldRestoreApp13PeopleSourceDeletedAt,
+  shouldSetApp13PeopleSourceProvenance,
   resolveApp30PeopleExternalId,
   shouldLimitApp30PeopleSyncToTenantExternalIds,
+  throwIfRecordFailures,
   shouldSkipMissingUpdateTarget,
 } from './kintone-sync'
 import { buildUpdateCondition, getKintoneRecordValue } from './update-key-utils'
@@ -101,6 +108,198 @@ test('people_image sync always skips records without an existing target person',
   assert.equal(shouldSkipMissingUpdateTarget('people_image', true), true)
   assert.equal(shouldSkipMissingUpdateTarget('people', false), false)
   assert.equal(shouldSkipMissingUpdateTarget('people', true), true)
+})
+
+describe('app13全件同期後のsource_deleted_at無効化判定', () => {
+  test('app13→peopleのrecordId/range/tail指定なし全件同期だけ無効化を許可する', () => {
+    assert.equal(
+      shouldMarkMissingApp13PeopleAsSourceDeleted({
+        targetAppType: 'people',
+        sourceAppId: '13',
+        targetTable: 'people',
+        tenantId: 'tenant-17614',
+        syncOptions: {},
+      }),
+      true
+    )
+  })
+
+  test('部分同期では絶対に無効化しない', () => {
+    const common = {
+      targetAppType: 'people',
+      sourceAppId: '13',
+      targetTable: 'people',
+      tenantId: 'tenant-17614',
+    }
+
+    assert.equal(
+      shouldMarkMissingApp13PeopleAsSourceDeleted({
+        ...common,
+        syncOptions: { recordId: '3951' },
+      }),
+      false
+    )
+    assert.equal(
+      shouldMarkMissingApp13PeopleAsSourceDeleted({
+        ...common,
+        syncOptions: { recordIdFrom: '3900', recordIdTo: '3999' },
+      }),
+      false
+    )
+    assert.equal(
+      shouldMarkMissingApp13PeopleAsSourceDeleted({
+        ...common,
+        syncOptions: { recordIdTailSize: 100 },
+      }),
+      false
+    )
+  })
+
+  test('app30 enrichment同期では無効化判定しない', () => {
+    assert.equal(
+      shouldMarkMissingApp13PeopleAsSourceDeleted({
+        targetAppType: 'people',
+        sourceAppId: '30',
+        targetTable: 'people',
+        tenantId: 'tenant-17614',
+        syncOptions: {},
+      }),
+      false
+    )
+  })
+
+  test('app13レコードが再出現して同期されるとsource_deleted_atをnullへ戻す', () => {
+    assert.equal(
+      shouldRestoreApp13PeopleSourceDeletedAt({
+        targetAppType: 'people',
+        sourceAppId: '13',
+        targetTable: 'people',
+        tenantId: 'tenant-17614',
+      }),
+      true
+    )
+    assert.equal(
+      shouldRestoreApp13PeopleSourceDeletedAt({
+        targetAppType: 'people',
+        sourceAppId: '30',
+        targetTable: 'people',
+        tenantId: 'tenant-17614',
+      }),
+      false
+    )
+  })
+
+  test('tenant idが空なら復元とprovenance付与を許可しない', () => {
+    assert.equal(
+      shouldRestoreApp13PeopleSourceDeletedAt({
+        targetAppType: 'people',
+        sourceAppId: '13',
+        targetTable: 'people',
+        tenantId: '',
+      }),
+      false
+    )
+    assert.equal(
+      shouldSetApp13PeopleSourceProvenance({
+        targetAppType: 'people',
+        sourceAppId: '13',
+        targetTable: 'people',
+        tenantId: '   ',
+      }),
+      false
+    )
+  })
+
+  test('同一provenanceのsource_record_idだけをKintone取得$idとの差分で無効化候補にする', () => {
+    assert.deepEqual(
+      computeMissingSourceDeletedPeopleIds(
+        [
+          { id: 'person-1', source_record_id: '3951' },
+          { id: 'person-2', source_record_id: '3952' },
+          { id: 'manual-1', source_record_id: null },
+        ],
+        new Set(['3951'])
+      ),
+      ['person-2', 'manual-1']
+    )
+  })
+
+  test('Kintone取得が空なのに有効な数値IDがある場合は全件無効化せず停止する', () => {
+    assert.throws(
+      () => assertSourceDeletionReconciliationSafe([{ id: 'person-1', source_record_id: '3951' }], new Set()),
+      /refusing to mark all active people as source-deleted/
+    )
+  })
+
+  test('Kintone取得も有効な数値IDも空なら照合を続行できる', () => {
+    assert.doesNotThrow(() => assertSourceDeletionReconciliationSafe([], new Set()))
+  })
+
+  test('provenanceとcutoffで絞ったsource_deleted_at未設定のpeopleだけをid昇順ページングで読む', async () => {
+    const calls: unknown[][] = []
+    const query = {
+      from(table: string) {
+        calls.push(['from', table])
+        return this
+      },
+      select(columns: string) {
+        calls.push(['select', columns])
+        return this
+      },
+      eq(column: string, value: unknown) {
+        calls.push(['eq', column, value])
+        return this
+      },
+      is(column: string, value: unknown) {
+        calls.push(['is', column, value])
+        return this
+      },
+      or(filters: string) {
+        calls.push(['or', filters])
+        return this
+      },
+      order(column: string, options: unknown) {
+        calls.push(['order', column, options])
+        return this
+      },
+      async range(from: number, to: number) {
+        calls.push(['range', from, to])
+        return { data: [], error: null }
+      },
+    }
+
+    await createTenantSourceActiveNumericPeopleIdPageQuery(
+      query,
+      {
+        tenantId: 'tenant-17614',
+        connectorId: 'connector-1',
+        appMappingId: 'mapping-1',
+        reconciliationCutoff: '2026-09-18T00:00:00.000Z',
+      },
+      1000,
+      1000
+    )
+
+    assert.deepEqual(calls, [
+      ['from', 'people'],
+      ['select', 'id, source_record_id'],
+      ['eq', 'tenant_id', 'tenant-17614'],
+      ['eq', 'source_connector_id', 'connector-1'],
+      ['eq', 'source_app_id', '13'],
+      ['eq', 'source_app_mapping_id', 'mapping-1'],
+      ['is', 'source_deleted_at', null],
+      ['or', 'source_last_seen_at.is.null,source_last_seen_at.lt.2026-09-18T00:00:00.000Z'],
+      ['order', 'id', { ascending: true }],
+      ['range', 1000, 1999],
+    ])
+  })
+
+  test('レコード単位エラーは成功扱いにせず検知可能にする', () => {
+    assert.throws(
+      () => throwIfRecordFailures('people', 'mapping-1', 2),
+      /people sync had 2 failed records/
+    )
+  })
 })
 
 test('buildRecordIdQuery targets one Kintone record by numeric id', () => {
