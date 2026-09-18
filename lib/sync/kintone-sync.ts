@@ -39,8 +39,10 @@ import {
 // import { getKintoneMapping, type KintoneMapping } from './mapping-loader'
 
 const DEFAULT_SYNC_CONCURRENCY = 6
+const APP13_PEOPLE_SOURCE_APP_ID = '13'
 const APP30_PEOPLE_SOURCE_APP_ID = '30'
 const TENANT_PEOPLE_HRID_QUERY_CHUNK_SIZE = 100
+const SOURCE_DELETED_PEOPLE_UPDATE_CHUNK_SIZE = 500
 
 // Types for field mappings
 interface FieldMapping {
@@ -369,6 +371,106 @@ function hasExplicitBoundedRecordOption(options?: KintoneSyncOptions): boolean {
   )
 }
 
+function isFullKintoneSync(options?: KintoneSyncOptions): boolean {
+  return !hasExplicitBoundedRecordOption(options)
+}
+
+export function shouldMarkMissingApp13PeopleAsSourceDeleted({
+  targetAppType,
+  sourceAppId,
+  targetTable,
+  tenantId,
+  syncOptions,
+}: {
+  targetAppType: string
+  sourceAppId: string
+  targetTable?: string | null
+  tenantId: string
+  syncOptions?: KintoneSyncOptions
+}): boolean {
+  return (
+    targetAppType === 'people' &&
+    String(sourceAppId) === APP13_PEOPLE_SOURCE_APP_ID &&
+    (targetTable ?? 'people') === 'people' &&
+    tenantId.trim() !== '' &&
+    isFullKintoneSync(syncOptions)
+  )
+}
+
+export function shouldRestoreApp13PeopleSourceDeletedAt({
+  targetAppType,
+  sourceAppId,
+  targetTable,
+  tenantId,
+}: {
+  targetAppType: string
+  sourceAppId: string
+  targetTable?: string | null
+  tenantId: string
+}): boolean {
+  return shouldSetApp13PeopleSourceProvenance({
+    targetAppType,
+    sourceAppId,
+    targetTable,
+    tenantId,
+  })
+}
+
+export function shouldSetApp13PeopleSourceProvenance({
+  targetAppType,
+  sourceAppId,
+  targetTable,
+  tenantId,
+}: {
+  targetAppType: string
+  sourceAppId: string
+  targetTable?: string | null
+  tenantId: string
+}): boolean {
+  return (
+    targetAppType === 'people' &&
+    String(sourceAppId) === APP13_PEOPLE_SOURCE_APP_ID &&
+    (targetTable ?? 'people') === 'people' &&
+    tenantId.trim() !== ''
+  )
+}
+
+export function assertSourceDeletionReconciliationSafe(
+  tenantPeopleRows: Array<{ id: string | null | undefined; source_record_id: string | null | undefined }>,
+  fetchedKintoneRecordIds: Set<string>
+): void {
+  const activeSourcePersonCount = tenantPeopleRows.length
+
+  if (activeSourcePersonCount > 0 && fetchedKintoneRecordIds.size === 0) {
+    throw new Error(
+      `refusing to mark all active people as source-deleted: Kintone returned 0 records for ${activeSourcePersonCount} active source people rows`
+    )
+  }
+}
+
+export function computeMissingSourceDeletedPeopleIds(
+  tenantPeopleRows: Array<{ id: string | null | undefined; source_record_id: string | null | undefined }>,
+  fetchedKintoneRecordIds: Set<string>
+): string[] {
+  return tenantPeopleRows
+    .filter((row) => {
+      const sourceRecordId = typeof row.source_record_id === 'string' ? row.source_record_id.trim() : ''
+      return sourceRecordId === '' || !fetchedKintoneRecordIds.has(sourceRecordId)
+    })
+    .map((row) => (typeof row.id === 'string' ? row.id.trim() : ''))
+    .filter((id) => id !== '')
+}
+
+export function throwIfRecordFailures(
+  targetAppType: string,
+  appMappingId: string,
+  failedRecords: number
+): void {
+  if (failedRecords > 0) {
+    throw new Error(`${targetAppType} sync had ${failedRecords} failed records for app mapping ${appMappingId}`)
+  }
+}
+
 function hasApp30PeopleHridExternalIdUpdateKey(updateKeys: UpdateKeyFieldMapping[]): boolean {
   return updateKeys.some((fieldMapping) => (
     fieldMapping.source_field_code === 'HRID' &&
@@ -458,6 +560,37 @@ export async function createTenantPeopleExternalIdPageQuery(
     .eq('tenant_id', tenantId)
     .not('external_id', 'is', null)
     .neq('external_id', '')
+    .order('id', { ascending: true })
+    .range(from, from + pageSize - 1)
+}
+
+type TenantPeopleIdPageRow = {
+  id: string | null
+  source_record_id: string | null
+}
+
+type App13PeopleReconciliationQueryParams = {
+  tenantId: string
+  connectorId: string
+  appMappingId: string
+  reconciliationCutoff: string
+}
+
+export async function createTenantSourceActiveNumericPeopleIdPageQuery(
+  supabase: any,
+  params: App13PeopleReconciliationQueryParams,
+  from: number,
+  pageSize: number
+): Promise<{ data: TenantPeopleIdPageRow[] | null; error: any }> {
+  return supabase
+    .from('people')
+    .select('id, source_record_id')
+    .eq('tenant_id', params.tenantId)
+    .eq('source_connector_id', params.connectorId)
+    .eq('source_app_id', APP13_PEOPLE_SOURCE_APP_ID)
+    .eq('source_app_mapping_id', params.appMappingId)
+    .is('source_deleted_at', null)
+    .or(`source_last_seen_at.is.null,source_last_seen_at.lt.${params.reconciliationCutoff}`)
     .order('id', { ascending: true })
     .range(from, from + pageSize - 1)
 }
@@ -827,6 +960,132 @@ export class KintoneDataSync {
     return normalizeExternalIds(externalIds)
   }
 
+  private async getSourceActiveTenantPeopleRows({
+    appMappingId,
+    reconciliationCutoff,
+  }: {
+    appMappingId: string
+    reconciliationCutoff: string
+  }): Promise<TenantPeopleIdPageRow[]> {
+    const pageSize = 1000
+    const peopleRows: TenantPeopleIdPageRow[] = []
+
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await createTenantSourceActiveNumericPeopleIdPageQuery(
+        this.supabase,
+        {
+          tenantId: this.tenantId,
+          connectorId: this.connectorId,
+          appMappingId,
+          reconciliationCutoff,
+        },
+        from,
+        pageSize
+      )
+
+      if (error) {
+        console.error('[sync] app13-people:source-active-lookup-error', {
+          tenantId: this.tenantId,
+          error,
+        })
+        throw error
+      }
+
+      const rows = Array.isArray(data) ? data : []
+      for (const row of rows) {
+        if (typeof row.id === 'string') {
+          peopleRows.push(row)
+        }
+      }
+
+      if (rows.length < pageSize) {
+        break
+      }
+    }
+
+    return peopleRows
+  }
+
+  private async markMissingApp13PeopleAsSourceDeleted({
+    appMappingId,
+    fetchedKintoneRecordIds,
+    reconciliationCutoff,
+  }: {
+    appMappingId: string
+    fetchedKintoneRecordIds: Set<string>
+    reconciliationCutoff: string
+  }): Promise<{ disabledCount: number; disabledIds: string[] }> {
+    const tenantPeopleRows = await this.getSourceActiveTenantPeopleRows({
+      appMappingId,
+      reconciliationCutoff,
+    })
+    assertSourceDeletionReconciliationSafe(tenantPeopleRows, fetchedKintoneRecordIds)
+    const missingPeopleIds = computeMissingSourceDeletedPeopleIds(tenantPeopleRows, fetchedKintoneRecordIds)
+    const now = new Date().toISOString()
+    const disabledIds: string[] = []
+
+    for (const ids of chunkArray(missingPeopleIds, SOURCE_DELETED_PEOPLE_UPDATE_CHUNK_SIZE)) {
+      const { data, error } = await this.supabase
+        .from('people')
+        .update({
+          source_deleted_at: now,
+          updated_at: now,
+        })
+        .eq('tenant_id', this.tenantId)
+        .eq('source_connector_id', this.connectorId)
+        .eq('source_app_id', APP13_PEOPLE_SOURCE_APP_ID)
+        .eq('source_app_mapping_id', appMappingId)
+        .in('id', ids)
+        .is('source_deleted_at', null)
+        .or(`source_last_seen_at.is.null,source_last_seen_at.lt.${reconciliationCutoff}`)
+        .select('id')
+
+      if (error) {
+        console.error('[sync] app13-people:source-delete-update-error', {
+          tenantId: this.tenantId,
+          appMappingId,
+          candidateCount: ids.length,
+          error,
+        })
+        throw error
+      }
+
+      const updatedRows = Array.isArray(data) ? data : []
+      for (const row of updatedRows) {
+        if (typeof row.id === 'string') {
+          disabledIds.push(row.id)
+        }
+      }
+    }
+
+    const summary = {
+      tenantId: this.tenantId,
+      connectorId: this.connectorId,
+      appMappingId,
+      sourceAppId: APP13_PEOPLE_SOURCE_APP_ID,
+      fetchedKintoneRecordCount: fetchedKintoneRecordIds.size,
+      sourceActiveTenantPeopleCount: tenantPeopleRows.length,
+      reconciliationCutoff,
+      disabledCount: disabledIds.length,
+      disabledIds,
+    }
+    console.log('[sync] app13-people:source-deleted-summary', summary)
+    try {
+      await addLog(this.connectorId, 'info', 'app13_people_source_deleted_summary', summary)
+    } catch (logError) {
+      console.warn('[sync] app13-people:source-deleted-log-error', {
+        tenantId: this.tenantId,
+        appMappingId,
+        error: logError instanceof Error ? logError.message : logError,
+      })
+    }
+
+    return {
+      disabledCount: disabledIds.length,
+      disabledIds,
+    }
+  }
+
   /**
    * Build Kintone query from filter conditions
    */
@@ -1143,12 +1402,27 @@ export class KintoneDataSync {
           continue
         }
 
+        const reconciliationCutoff = new Date().toISOString()
         // Get records from Kintone
         const records: KintoneRecord[] = []
         for (const query of kintoneRecordQueries) {
           records.push(...await this.kintoneClient.getRecords(appMapping.source_app_id, query, []))
         }
+        const shouldMarkMissingPeopleAsSourceDeleted = shouldMarkMissingApp13PeopleAsSourceDeleted({
+          targetAppType,
+          sourceAppId: appMapping.source_app_id,
+          targetTable: appMapping.target_table || this.getTargetTable(targetAppType),
+          tenantId: this.tenantId,
+          syncOptions: options,
+        })
+        const fetchedKintoneRecordIds = new Set(
+          records
+            .map((record) => record.$id?.value)
+            .filter((id): id is string => typeof id === 'string' && id.trim() !== '')
+            .map((id) => id.trim())
+        )
         let syncedCount = 0
+        let failedRecords = 0
 
         // Fetch data mappings once per appMapping and reuse inside the loop
         let dataMappings: DataMapping[] = []
@@ -1221,6 +1495,22 @@ export class KintoneDataSync {
             }
             if (this.tenantId) {
               data.tenant_id = this.tenantId
+            }
+            if (shouldSetApp13PeopleSourceProvenance({
+              targetAppType,
+              sourceAppId: appMapping.source_app_id,
+              targetTable,
+              tenantId: this.tenantId,
+            })) {
+              const sourceRecordId = record.$id?.value
+              data.source_connector_id = this.connectorId
+              data.source_app_id = APP13_PEOPLE_SOURCE_APP_ID
+              data.source_app_mapping_id = appMapping.id
+              data.source_record_id = sourceRecordId === undefined || sourceRecordId === null
+                ? null
+                : String(sourceRecordId)
+              data.source_last_seen_at = new Date().toISOString()
+              data.source_deleted_at = null
             }
             
 
@@ -1385,13 +1675,23 @@ export class KintoneDataSync {
 
             syncedCount++
           } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+            failedRecords++
             console.error(`❌ Failed to sync ${targetAppType} ${record.$id.value}:`, err)
             
             
             // Continue with other records
           }
         })
+
+        throwIfRecordFailures(targetAppType, appMapping.id, failedRecords)
+
+        if (shouldMarkMissingPeopleAsSourceDeleted) {
+          await this.markMissingApp13PeopleAsSourceDeleted({
+            appMappingId: appMapping.id,
+            fetchedKintoneRecordIds,
+            reconciliationCutoff,
+          })
+        }
         
         totalSyncedCount += syncedCount
       }

@@ -238,6 +238,9 @@ describe("people company access", () => {
 
     let captured: string | null = null
     const query = {
+      is() {
+        return this
+      },
       or(filters: string) {
         captured = filters
         return this
@@ -247,6 +250,32 @@ describe("people company access", () => {
     expect(applyPeopleAccessFilter(query, access)).toBe(query)
     expect(captured).toContain(`company.in.("医療法人弘善会")`)
     expect(captured).toContain(`tenant_office_id.in.("office-parent")`)
+  })
+
+  test("人物アクセスのPostgRESTクエリはsource_deleted_atがnullの行だけを対象にする", () => {
+    const access = buildCompanyAccess([
+      {
+        id: "membership-1",
+        tenant_id: "tenant-1",
+        role: "admin",
+        status: "active",
+      },
+    ])
+    const calls: unknown[][] = []
+    const query = {
+      is(column: string, value: unknown) {
+        calls.push(["is", column, value])
+        return this
+      },
+      or(filters: string) {
+        calls.push(["or", filters])
+        return this
+      },
+    }
+
+    expect(applyPeopleAccessFilter(query, access)).toBe(query)
+    expect(calls[0]).toEqual(["is", "source_deleted_at", null])
+    expect(calls[1]?.[0]).toBe("or")
   })
 
   test("returns no accessible people when a feature is disabled", async () => {
