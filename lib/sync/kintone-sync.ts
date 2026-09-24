@@ -146,6 +146,18 @@ interface AppMapping {
   field_mappings: FieldMapping[]
 }
 
+type SyncAppMapping = Pick<AppMapping, 'id' | 'source_app_id' | 'target_app_type' | 'skip_if_no_update_target'>
+
+export function orderAppMappingsForSync<T extends SyncAppMapping>(mappings: T[]): T[] {
+  return mappings
+    .map((mapping, index) => ({ mapping, index }))
+    .sort((left, right) => {
+      const dependencyOrder = Number(left.mapping.skip_if_no_update_target) - Number(right.mapping.skip_if_no_update_target)
+      return dependencyOrder || left.index - right.index
+    })
+    .map(({ mapping }) => mapping)
+}
+
 type UpdateKeyFieldMapping = {
   source_field_code: string
   target_field_id: string
@@ -323,6 +335,20 @@ function normalizeOptionalPePrefix(value: string): string {
   return value.startsWith('PE-') ? value.slice(3) : value
 }
 
+export function getSafeTenantPeopleExternalIds(rows: TenantPeopleExternalIdPageRow[]): string[] {
+  return normalizeExternalIds(rows.flatMap((row) => {
+    const externalId = typeof row.external_id === 'string' ? row.external_id.trim() : ''
+    const personId = typeof row.id === 'string' ? row.id.trim() : ''
+    if (!externalId || !personId) {
+      return externalId ? [externalId] : []
+    }
+
+    return normalizeOptionalPePrefix(externalId) === normalizeOptionalPePrefix(personId)
+      ? []
+      : [externalId]
+  }))
+}
+
 function expandOptionalPePrefixVariants(values: string[]): string[] {
   const uniqueIds = new Set<string>()
   for (const value of values) {
@@ -354,6 +380,26 @@ export function resolveApp30PeopleExternalId(
   })
 
   return normalizedMatches.length === 1 ? normalizedMatches[0] : null
+}
+
+export function requireResolvedApp30PeopleExternalId(
+  whereCondition: Record<string, unknown>,
+  tenantExternalIds: Array<string | null | undefined>
+): boolean {
+  if (typeof whereCondition.external_id !== 'string') {
+    return false
+  }
+
+  const resolvedExternalId = resolveApp30PeopleExternalId(
+    whereCondition.external_id,
+    tenantExternalIds
+  )
+  if (!resolvedExternalId) {
+    return false
+  }
+
+  whereCondition.external_id = resolvedExternalId
+  return true
 }
 
 function hasExplicitBoundedRecordOption(options?: KintoneSyncOptions): boolean {
@@ -796,7 +842,7 @@ export class KintoneDataSync {
 
   private async getTenantPeopleExternalIds(): Promise<string[]> {
     const pageSize = 1000
-    const externalIds: Array<string | null | undefined> = []
+    const peopleRows: TenantPeopleExternalIdPageRow[] = []
 
     for (let from = 0; ; from += pageSize) {
       const { data, error } = await createTenantPeopleExternalIdPageQuery(
@@ -816,7 +862,7 @@ export class KintoneDataSync {
 
       const rows = Array.isArray(data) ? data : []
       for (const row of rows) {
-        externalIds.push(row.external_id)
+        peopleRows.push(row)
       }
 
       if (rows.length < pageSize) {
@@ -824,7 +870,7 @@ export class KintoneDataSync {
       }
     }
 
-    return normalizeExternalIds(externalIds)
+    return getSafeTenantPeopleExternalIds(peopleRows)
   }
 
   /**
@@ -941,7 +987,7 @@ export class KintoneDataSync {
       // Get app mappings for this connector
       let query = this.supabase
         .from('connector_app_mappings')
-        .select('id, target_app_type, source_app_id')
+        .select('id, target_app_type, source_app_id, skip_if_no_update_target')
         .eq('connector_id', this.connectorId)
         .eq('is_active', true)
 
@@ -971,16 +1017,22 @@ export class KintoneDataSync {
         return { success: false, synced: {}, errors, duration: Date.now() - startTime, sessionId }
       }
 
-      // Sync each app mapping
-      console.log('[sync] syncAll:mappings', appMappings.map(m => ({ id: m.id, target_app_type: m.target_app_type, source_app_id: m.source_app_id })))
-      for (const appMapping of appMappings) {
+      // Sync each app mapping. Base imports must refresh identifiers before enrichment mappings use them.
+      const orderedAppMappings = orderAppMappingsForSync(appMappings)
+      console.log('[sync] syncAll:mappings', orderedAppMappings.map(m => ({
+        id: m.id,
+        target_app_type: m.target_app_type,
+        source_app_id: m.source_app_id,
+        skip_if_no_update_target: m.skip_if_no_update_target,
+      })))
+      for (const appMapping of orderedAppMappings) {
         try {
           const syncedCount = await this.syncAppData(appMapping.target_app_type, appMapping.source_app_id, appMapping.id, options)
-          synced[appMapping.target_app_type] = syncedCount
+          synced[appMapping.target_app_type] = (synced[appMapping.target_app_type] ?? 0) + syncedCount
         } catch (err) {
           const error = `${appMapping.target_app_type} sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`
           errors.push(error)
-          synced[appMapping.target_app_type] = 0
+          synced[appMapping.target_app_type] ??= 0
         }
       }
 
@@ -1175,14 +1227,12 @@ export class KintoneDataSync {
             // Check if record exists using update keys
             const includeTenant = !!this.tenantId
             const whereCondition = buildUpdateCondition(record, updateKeys, this.tenantId, includeTenant)
-            if (shouldResolveApp30PeopleExternalId && typeof whereCondition.external_id === 'string') {
-              const resolvedExternalId = resolveApp30PeopleExternalId(
-                whereCondition.external_id,
-                tenantPeopleExternalIds ?? []
-              )
-              if (resolvedExternalId) {
-                whereCondition.external_id = resolvedExternalId
-              }
+            if (
+              shouldResolveApp30PeopleExternalId &&
+              !requireResolvedApp30PeopleExternalId(whereCondition, tenantPeopleExternalIds ?? [])
+            ) {
+              console.log(`[sync] skip-unresolved-app30-people-hrid rec=${record.$id?.value}`)
+              return
             }
             console.log(`[sync] where=${JSON.stringify(whereCondition)}`)
 

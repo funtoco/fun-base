@@ -10,7 +10,10 @@ import {
   createTenantPeopleExternalIdPageQuery,
   buildPeopleImageStoragePath,
   escapeKintoneStringLiteral,
+  getSafeTenantPeopleExternalIds,
+  orderAppMappingsForSync,
   parseKintoneSyncOptions,
+  requireResolvedApp30PeopleExternalId,
   resolveApp30PeopleExternalId,
   shouldLimitApp30PeopleSyncToTenantExternalIds,
   shouldSkipMissingUpdateTarget,
@@ -103,6 +106,42 @@ test('people_image sync always skips records without an existing target person',
   assert.equal(shouldSkipMissingUpdateTarget('people', true), true)
 })
 
+describe('同期対象アプリの実行順', () => {
+  test('既存行を補完する同期より先に基幹同期を実行する', () => {
+    const enrichment = {
+      id: 'app30',
+      target_app_type: 'people',
+      source_app_id: '30',
+      skip_if_no_update_target: true,
+    }
+    const primary = {
+      id: 'app13',
+      target_app_type: 'people',
+      source_app_id: '13',
+      skip_if_no_update_target: false,
+    }
+
+    assert.deepEqual(orderAppMappingsForSync([enrichment, primary]), [primary, enrichment])
+  })
+
+  test('同じ種類の同期同士は取得時の順序を維持する', () => {
+    const first = {
+      id: 'first',
+      target_app_type: 'people',
+      source_app_id: '13',
+      skip_if_no_update_target: false,
+    }
+    const second = {
+      id: 'second',
+      target_app_type: 'visas',
+      source_app_id: '50',
+      skip_if_no_update_target: false,
+    }
+
+    assert.deepEqual(orderAppMappingsForSync([first, second]), [first, second])
+  })
+})
+
 test('buildRecordIdQuery targets one Kintone record by numeric id', () => {
   assert.equal(buildRecordIdQuery({ recordId: '2447' }), '$id = 2447')
 })
@@ -173,6 +212,41 @@ test('buildRecordIdTailQuery creates a bounded newest-record window', () => {
 })
 
 describe('app30人材同期のHRID絞り込み', () => {
+  test('旧形式のpeople.id由来external_idを同期候補から除外する', () => {
+    assert.deepEqual(
+      getSafeTenantPeopleExternalIds([
+        { id: '2906', external_id: 'PE-2906' },
+        { id: '2905', external_id: '2905' },
+        { id: 'other', external_id: 'PE-1926' },
+        { id: 'another', external_id: '1925' },
+      ]),
+      ['PE-1926', '1925'],
+    )
+  })
+
+  test('旧形式のexternal_idしかない場合は別人のapp30レコードへ解決しない', () => {
+    const safeExternalIds = getSafeTenantPeopleExternalIds([
+      { id: '2906', external_id: 'PE-2906' },
+    ])
+
+    assert.equal(resolveApp30PeopleExternalId('PE-2906', safeExternalIds), null)
+    assert.deepEqual(buildTenantPeopleHridKintoneQueries({ externalIds: safeExternalIds }), [])
+  })
+
+  test('recordId指定のapp30同期でも安全なHRIDへ解決できないレコードは拒否する', () => {
+    const whereCondition = { tenant_id: 'tenant-17614', external_id: 'PE-2906' }
+
+    assert.equal(requireResolvedApp30PeopleExternalId(whereCondition, []), false)
+    assert.equal(whereCondition.external_id, 'PE-2906')
+  })
+
+  test('安全なHRIDへ解決できた場合だけ更新条件を書き換える', () => {
+    const whereCondition = { tenant_id: 'tenant-17614', external_id: 'PE-1926' }
+
+    assert.equal(requireResolvedApp30PeopleExternalId(whereCondition, ['1926']), true)
+    assert.equal(whereCondition.external_id, '1926')
+  })
+
   test('HRIDからexternal_idへの更新キーのときだけ絞り込みを有効にする', () => {
     assert.equal(
       shouldLimitApp30PeopleSyncToTenantExternalIds({
