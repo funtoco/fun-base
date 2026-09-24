@@ -359,16 +359,13 @@ function hasVisibleCompanyAccess(access: CompanyAccess): boolean {
   return false
 }
 
-export function applyPeopleAccessFilter<TQuery extends {
-  is: (column: string, value: unknown) => TQuery
-  or: (filters: string) => TQuery
-}>(
+export function applyPeopleAccessFilter<TQuery extends { or: (filters: string) => TQuery }>(
   query: TQuery,
   access: CompanyAccess
 ): TQuery | null {
   const filter = buildPeopleAccessOrFilter(access)
   if (!filter) return null
-  return query.is("source_deleted_at", null).or(filter)
+  return query.or(filter)
 }
 
 export async function getAccessiblePersonIdsForUser(
