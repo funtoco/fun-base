@@ -88,7 +88,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           echo "🕐 Starting people sync at $(date)"
-          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type people
+          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type people --connector-id 7511d29b-4227-4778-87c1-ccc56d227b6c
 
   sync-visas:
     if: github.event_name == 'schedule' && github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch' && (github.event.inputs.sync_type == 'visas' || github.event.inputs.sync_type == 'both')
@@ -116,7 +116,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           echo "🕐 Starting visas sync at $(date)"
-          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type visas
+          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type visas --connector-id 7511d29b-4227-4778-87c1-ccc56d227b6c
 
   sync-interview-records:
     if: github.event_name == 'schedule' && github.event.schedule == '0 0 * * *' || github.event_name == 'workflow_dispatch' && github.event.inputs.sync_type == 'interview_records'
