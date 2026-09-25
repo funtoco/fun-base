@@ -5,6 +5,7 @@ on:
     - cron: '0 2 * * *'
     - cron: '0 3 * * *'
     - cron: '0 0 * * *'
+    - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
       sync_type:
@@ -17,6 +18,7 @@ on:
           - visas
           - interview_records
           - app98_mapping_audit
+          - people_cleanup
           - both
       batch_size:
         description: 'Connector batch size for interview_records manual sync'
@@ -60,6 +62,18 @@ on:
         options:
           - 'false'
           - 'true'
+      people_cleanup_apply:
+        description: 'Apply people cleanup deletes. Leave false for dry-run.'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      people_cleanup_max_delete_per_tenant:
+        description: 'Maximum people rows to delete per tenant'
+        required: false
+        default: '20'
 
 jobs:
   sync-people:
@@ -67,6 +81,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     environment: Production
+    concurrency:
+      group: people-sync-${{ github.workflow }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
@@ -269,6 +286,60 @@ jobs:
 
           if [ "$APP98_MAPPING_REQUIRE_EXTERNAL_USERS" = "true" ]; then
             cmd+=(--require-external-users)
+          fi
+
+          "${cmd[@]}"
+
+  people-cleanup:
+    if: github.event_name == 'schedule' && github.event.schedule == '0 9 * * *' || github.event_name == 'workflow_dispatch' && github.event.inputs.sync_type == 'people_cleanup'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: Production
+    concurrency:
+      group: people-sync-${{ github.workflow }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cleanup deleted people
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PEOPLE_CLEANUP_APPLY: ${{ github.event.inputs.people_cleanup_apply }}
+          PEOPLE_CLEANUP_MAX_DELETE_PER_TENANT: ${{ github.event.inputs.people_cleanup_max_delete_per_tenant || '20' }}
+        run: |
+          echo "Starting people cleanup at $(date)"
+          cmd=(pnpm dlx tsx@4.20.3 scripts/cleanup-deleted-people.ts)
+
+          if [ -n "$PEOPLE_CLEANUP_MAX_DELETE_PER_TENANT" ]; then
+            if [[ ! "$PEOPLE_CLEANUP_MAX_DELETE_PER_TENANT" =~ ^[0-9]+$ ]]; then
+              echo "::error title=Invalid workflow input::people_cleanup_max_delete_per_tenant must be digits only"
+              exit 1
+            fi
+            if [ "$PEOPLE_CLEANUP_MAX_DELETE_PER_TENANT" -gt 100 ]; then
+              echo "::error title=Invalid workflow input::people_cleanup_max_delete_per_tenant must be 100 or less"
+              exit 1
+            fi
+            cmd+=(--max-delete-per-tenant "$PEOPLE_CLEANUP_MAX_DELETE_PER_TENANT")
+          fi
+
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ] || [ "$PEOPLE_CLEANUP_APPLY" = "true" ]; then
+            cmd+=(--apply)
           fi
 
           "${cmd[@]}"
