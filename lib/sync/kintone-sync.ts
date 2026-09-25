@@ -39,6 +39,7 @@ import {
 // import { getKintoneMapping, type KintoneMapping } from './mapping-loader'
 
 const DEFAULT_SYNC_CONCURRENCY = 6
+const APP13_PEOPLE_BASE_SOURCE_APP_ID = '13'
 const APP30_PEOPLE_SOURCE_APP_ID = '30'
 const TENANT_PEOPLE_HRID_QUERY_CHUNK_SIZE = 100
 
@@ -148,14 +149,85 @@ interface AppMapping {
 
 type SyncAppMapping = Pick<AppMapping, 'id' | 'source_app_id' | 'target_app_type' | 'skip_if_no_update_target'>
 
+type PeopleEnrichmentSyncState = {
+  completedPeopleBaseMapping: boolean
+}
+
+function isApp30PeopleEnrichmentMapping(mapping: SyncAppMapping): boolean {
+  return (
+    mapping.target_app_type === 'people' &&
+    String(mapping.source_app_id) === APP30_PEOPLE_SOURCE_APP_ID
+  )
+}
+
+function isAuthoritativePeopleBaseMapping(mapping: SyncAppMapping): boolean {
+  return (
+    mapping.target_app_type === 'people' &&
+    String(mapping.source_app_id) === APP13_PEOPLE_BASE_SOURCE_APP_ID &&
+    !mapping.skip_if_no_update_target
+  )
+}
+
 export function orderAppMappingsForSync<T extends SyncAppMapping>(mappings: T[]): T[] {
-  return mappings
-    .map((mapping, index) => ({ mapping, index }))
-    .sort((left, right) => {
-      const dependencyOrder = Number(left.mapping.skip_if_no_update_target) - Number(right.mapping.skip_if_no_update_target)
-      return dependencyOrder || left.index - right.index
-    })
-    .map(({ mapping }) => mapping)
+  const lastBaseMappingIndex = mappings.findLastIndex(isAuthoritativePeopleBaseMapping)
+  if (lastBaseMappingIndex === -1) {
+    return mappings
+  }
+
+  const orderedMappings: T[] = []
+  const deferredApp30PeopleMappings: T[] = []
+
+  mappings.forEach((mapping, index) => {
+    if (isApp30PeopleEnrichmentMapping(mapping) && index < lastBaseMappingIndex) {
+      deferredApp30PeopleMappings.push(mapping)
+      return
+    }
+
+    orderedMappings.push(mapping)
+    if (index === lastBaseMappingIndex) {
+      orderedMappings.push(...deferredApp30PeopleMappings)
+    }
+  })
+
+  return orderedMappings
+}
+
+export function getApp30PeopleEnrichmentSkipError(
+  mapping: SyncAppMapping,
+  state: PeopleEnrichmentSyncState,
+  options: KintoneSyncOptions = {}
+): string | null {
+  if (!isApp30PeopleEnrichmentMapping(mapping)) {
+    return null
+  }
+
+  if (hasExplicitBoundedRecordOption(options)) {
+    return 'app30 people enrichment skipped: bounded recordId options are unsafe because app13 and app30 $id namespaces differ'
+  }
+
+  if (!state.completedPeopleBaseMapping) {
+    return 'app30 people enrichment skipped: requires app13 people base sync with skip_if_no_update_target=false to process syncedCount > 0 in the same syncAll'
+  }
+
+  return null
+}
+
+export function shouldRunApp30PeopleEnrichmentMapping(
+  mapping: SyncAppMapping,
+  state: PeopleEnrichmentSyncState,
+  options: KintoneSyncOptions = {}
+): boolean {
+  return getApp30PeopleEnrichmentSkipError(mapping, state, options) === null
+}
+
+export function markSuccessfulPeopleBaseMapping(
+  mapping: SyncAppMapping,
+  state: PeopleEnrichmentSyncState,
+  syncedCount: number
+): PeopleEnrichmentSyncState {
+  return isAuthoritativePeopleBaseMapping(mapping) && syncedCount > 0
+    ? { completedPeopleBaseMapping: true }
+    : state
 }
 
 type UpdateKeyFieldMapping = {
@@ -335,20 +407,6 @@ function normalizeOptionalPePrefix(value: string): string {
   return value.startsWith('PE-') ? value.slice(3) : value
 }
 
-export function getSafeTenantPeopleExternalIds(rows: TenantPeopleExternalIdPageRow[]): string[] {
-  return normalizeExternalIds(rows.flatMap((row) => {
-    const externalId = typeof row.external_id === 'string' ? row.external_id.trim() : ''
-    const personId = typeof row.id === 'string' ? row.id.trim() : ''
-    if (!externalId || !personId) {
-      return externalId ? [externalId] : []
-    }
-
-    return normalizeOptionalPePrefix(externalId) === normalizeOptionalPePrefix(personId)
-      ? []
-      : [externalId]
-  }))
-}
-
 function expandOptionalPePrefixVariants(values: string[]): string[] {
   const uniqueIds = new Set<string>()
   for (const value of values) {
@@ -420,6 +478,23 @@ function hasApp30PeopleHridExternalIdUpdateKey(updateKeys: UpdateKeyFieldMapping
     fieldMapping.source_field_code === 'HRID' &&
     fieldMapping.target_field_id === 'external_id'
   ))
+}
+
+export function shouldOmitApp30PeopleHridExternalIdFromWritePayload({
+  targetAppType,
+  sourceAppId,
+  fieldMapping,
+}: {
+  targetAppType: string
+  sourceAppId: string
+  fieldMapping: Pick<FieldMapping, 'source_field_code' | 'target_field_id'>
+}): boolean {
+  return (
+    targetAppType === 'people' &&
+    String(sourceAppId) === APP30_PEOPLE_SOURCE_APP_ID &&
+    fieldMapping.source_field_code === 'HRID' &&
+    fieldMapping.target_field_id === 'external_id'
+  )
 }
 
 export function buildTenantPeopleHridKintoneQueries({
@@ -870,7 +945,7 @@ export class KintoneDataSync {
       }
     }
 
-    return getSafeTenantPeopleExternalIds(peopleRows)
+    return normalizeExternalIds(peopleRows.map((row) => row.external_id))
   }
 
   /**
@@ -1025,10 +1100,32 @@ export class KintoneDataSync {
         source_app_id: m.source_app_id,
         skip_if_no_update_target: m.skip_if_no_update_target,
       })))
+      let peopleEnrichmentSyncState: PeopleEnrichmentSyncState = { completedPeopleBaseMapping: false }
       for (const appMapping of orderedAppMappings) {
+        const app30PeopleEnrichmentSkipError = getApp30PeopleEnrichmentSkipError(
+          appMapping,
+          peopleEnrichmentSyncState,
+          options
+        )
+        if (app30PeopleEnrichmentSkipError) {
+          console.log('[sync] app30-people:skip-unmet-base-dependency', {
+            appMappingId: appMapping.id,
+            sourceAppId: appMapping.source_app_id,
+            reason: app30PeopleEnrichmentSkipError,
+          })
+          errors.push(app30PeopleEnrichmentSkipError)
+          synced[appMapping.target_app_type] ??= 0
+          continue
+        }
+
         try {
           const syncedCount = await this.syncAppData(appMapping.target_app_type, appMapping.source_app_id, appMapping.id, options)
           synced[appMapping.target_app_type] = (synced[appMapping.target_app_type] ?? 0) + syncedCount
+          peopleEnrichmentSyncState = markSuccessfulPeopleBaseMapping(
+            appMapping,
+            peopleEnrichmentSyncState,
+            syncedCount
+          )
         } catch (err) {
           const error = `${appMapping.target_app_type} sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`
           errors.push(error)
@@ -1276,6 +1373,16 @@ export class KintoneDataSync {
 
             // Map fields using database configuration
             for (const fieldMapping of appMapping.field_mappings) {
+              if (
+                shouldOmitApp30PeopleHridExternalIdFromWritePayload({
+                  targetAppType,
+                  sourceAppId: appMapping.source_app_id,
+                  fieldMapping,
+                })
+              ) {
+                continue
+              }
+
               if (fieldMapping.source_field_type === 'FILE') {
                 const fileResult = await processFileField(this.kintoneClient, record, fieldMapping, this.tenantId)
                 applyFileFieldProcessResult(data, fieldMapping.target_field_id, fileResult)
