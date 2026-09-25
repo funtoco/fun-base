@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
+import { describe, test, vi } from 'vitest'
 
 import {
   applyFileFieldProcessResult,
@@ -10,8 +10,15 @@ import {
   createTenantPeopleExternalIdPageQuery,
   buildPeopleImageStoragePath,
   escapeKintoneStringLiteral,
+  getApp30PeopleEnrichmentSkipError,
+  KintoneDataSync,
+  markSuccessfulPeopleBaseMapping,
+  orderAppMappingsForSync,
   parseKintoneSyncOptions,
+  requireResolvedApp30PeopleExternalId,
   resolveApp30PeopleExternalId,
+  shouldOmitApp30PeopleHridExternalIdFromWritePayload,
+  shouldRunApp30PeopleEnrichmentMapping,
   shouldLimitApp30PeopleSyncToTenantExternalIds,
   shouldSkipMissingUpdateTarget,
 } from './kintone-sync'
@@ -103,6 +110,236 @@ test('people_image sync always skips records without an existing target person',
   assert.equal(shouldSkipMissingUpdateTarget('people', true), true)
 })
 
+describe('同期対象アプリの実行順', () => {
+  test('既存行を補完する同期より先に基幹同期を実行する', () => {
+    const enrichment = {
+      id: 'app30',
+      target_app_type: 'people',
+      source_app_id: '30',
+      skip_if_no_update_target: true,
+    }
+    const primary = {
+      id: 'app13',
+      target_app_type: 'people',
+      source_app_id: '13',
+      skip_if_no_update_target: false,
+    }
+
+    assert.deepEqual(orderAppMappingsForSync([enrichment, primary]), [primary, enrichment])
+  })
+
+  test('app30人材補完だけをapp13基幹人材同期の後ろへ移動し他の同期順は維持する', () => {
+    const visa = {
+      id: 'visa',
+      target_app_type: 'visas',
+      source_app_id: '50',
+      skip_if_no_update_target: false,
+    }
+    const unrelatedPeople = {
+      id: 'unrelated-people',
+      target_app_type: 'people',
+      source_app_id: '99',
+      skip_if_no_update_target: false,
+    }
+    const enrichment = {
+      id: 'app30',
+      target_app_type: 'people',
+      source_app_id: '30',
+      skip_if_no_update_target: true,
+    }
+    const app13 = {
+      id: 'app13',
+      target_app_type: 'people',
+      source_app_id: '13',
+      skip_if_no_update_target: false,
+    }
+    const meeting = {
+      id: 'meeting',
+      target_app_type: 'meetings',
+      source_app_id: '90',
+      skip_if_no_update_target: false,
+    }
+
+    assert.deepEqual(
+      orderAppMappingsForSync([visa, unrelatedPeople, enrichment, app13, meeting]),
+      [visa, unrelatedPeople, app13, enrichment, meeting]
+    )
+  })
+
+  test('app13基幹人材同期がない場合は無関係な同期を並べ替えない', () => {
+    const first = {
+      id: 'first',
+      target_app_type: 'people',
+      source_app_id: '99',
+      skip_if_no_update_target: false,
+    }
+    const second = {
+      id: 'second',
+      target_app_type: 'visas',
+      source_app_id: '50',
+      skip_if_no_update_target: false,
+    }
+
+    assert.deepEqual(orderAppMappingsForSync([first, second]), [first, second])
+  })
+})
+
+describe('app30人材補完同期の実行制御', () => {
+  test('同じsyncAllでapp13基幹人材同期が1件以上成功するまでapp30人材補完を実行しない', () => {
+    const enrichment = {
+      id: 'app30',
+      target_app_type: 'people',
+      source_app_id: '30',
+      skip_if_no_update_target: true,
+    }
+    const primary = {
+      id: 'app13',
+      target_app_type: 'people',
+      source_app_id: '13',
+      skip_if_no_update_target: false,
+    }
+    const unrelatedPeople = {
+      id: 'unrelated-people',
+      target_app_type: 'people',
+      source_app_id: '99',
+      skip_if_no_update_target: false,
+    }
+    const initialState = { completedPeopleBaseMapping: false }
+
+    assert.equal(shouldRunApp30PeopleEnrichmentMapping(enrichment, initialState), false)
+    assert.equal(
+      shouldRunApp30PeopleEnrichmentMapping(
+        enrichment,
+        markSuccessfulPeopleBaseMapping(unrelatedPeople, initialState, 10)
+      ),
+      false
+    )
+    assert.equal(
+      shouldRunApp30PeopleEnrichmentMapping(
+        enrichment,
+        markSuccessfulPeopleBaseMapping(primary, initialState, 0)
+      ),
+      false
+    )
+
+    const afterBaseSuccess = markSuccessfulPeopleBaseMapping(primary, initialState, 1)
+
+    assert.equal(shouldRunApp30PeopleEnrichmentMapping(enrichment, afterBaseSuccess), true)
+  })
+
+  test('依存未解決のapp30人材補完skipはsyncAll失敗用の明確なerrorを返す', () => {
+    const enrichment = {
+      id: 'app30',
+      target_app_type: 'people',
+      source_app_id: '30',
+      skip_if_no_update_target: true,
+    }
+
+    const error = getApp30PeopleEnrichmentSkipError(enrichment, { completedPeopleBaseMapping: false })
+
+    assert.ok(error)
+    assert.match(error, /app13.*syncedCount > 0/)
+  })
+
+  test('recordId境界付きのapp30人材補完はKintone id空間が違うため閉じてskipする', () => {
+    const enrichment = {
+      id: 'app30',
+      target_app_type: 'people',
+      source_app_id: '30',
+      skip_if_no_update_target: true,
+    }
+
+    const error = getApp30PeopleEnrichmentSkipError(
+      enrichment,
+      { completedPeopleBaseMapping: true },
+      { recordId: '2447' }
+    )
+
+    assert.ok(error)
+    assert.match(error, /app13 and app30 \$id namespaces differ/)
+  })
+})
+
+describe('syncAllのapp30人材補完依存制御', () => {
+  function createAppMappingQuery(mappings: unknown[]) {
+    return {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      then(resolve: (value: unknown) => void) {
+        resolve({ data: mappings, error: null })
+      },
+    }
+  }
+
+  function createSyncWithMappings(mappings: unknown[], syncedCounts: Record<string, number>) {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
+
+    const sync = new KintoneDataSync('connector-1', { getRecords: vi.fn() } as any, 'tenant-1')
+    const query = createAppMappingQuery(mappings)
+    const syncAppData = vi.fn(async (_targetAppType: string, _sourceAppId: string, appMappingId: string) => {
+      return syncedCounts[appMappingId] ?? 0
+    })
+
+    ;(sync as any).supabase = {
+      from: vi.fn(() => query),
+    }
+    ;(sync as any).syncLogger = {
+      startSession: vi.fn(async () => 'session-1'),
+      completeSession: vi.fn(async () => undefined),
+    }
+    ;(sync as any).syncAppData = syncAppData
+
+    return { sync, syncAppData }
+  }
+
+  test('app13基幹人材同期が0件ならapp30人材補完を実行せずsuccess falseにする', async () => {
+    const app13 = {
+      id: 'app13',
+      target_app_type: 'people',
+      source_app_id: '13',
+      skip_if_no_update_target: false,
+    }
+    const app30 = {
+      id: 'app30',
+      target_app_type: 'people',
+      source_app_id: '30',
+      skip_if_no_update_target: true,
+    }
+    const { sync, syncAppData } = createSyncWithMappings([app13, app30], { app13: 0, app30: 1 })
+
+    const result = await sync.syncAll(undefined, 'people')
+
+    assert.equal(result.success, false)
+    assert.deepEqual(result.synced, { people: 0 })
+    assert.match(result.errors.join('\n'), /app13.*syncedCount > 0/)
+    assert.deepEqual(syncAppData.mock.calls.map((call) => call[2]), ['app13'])
+  })
+
+  test('boundedなtype=people同期ではapp13だけ実行しapp30人材補完をskipしてsuccess falseにする', async () => {
+    const app13 = {
+      id: 'app13',
+      target_app_type: 'people',
+      source_app_id: '13',
+      skip_if_no_update_target: false,
+    }
+    const app30 = {
+      id: 'app30',
+      target_app_type: 'people',
+      source_app_id: '30',
+      skip_if_no_update_target: true,
+    }
+    const { sync, syncAppData } = createSyncWithMappings([app13, app30], { app13: 1, app30: 1 })
+
+    const result = await sync.syncAll(undefined, 'people', { recordId: '2447' })
+
+    assert.equal(result.success, false)
+    assert.deepEqual(result.synced, { people: 1 })
+    assert.match(result.errors.join('\n'), /app13 and app30 \$id namespaces differ/)
+    assert.deepEqual(syncAppData.mock.calls.map((call) => call[2]), ['app13'])
+  })
+})
+
 test('buildRecordIdQuery targets one Kintone record by numeric id', () => {
   assert.equal(buildRecordIdQuery({ recordId: '2447' }), '$id = 2447')
 })
@@ -173,6 +410,53 @@ test('buildRecordIdTailQuery creates a bounded newest-record window', () => {
 })
 
 describe('app30人材同期のHRID絞り込み', () => {
+  test('app30人材補完ではHRID→external_id更新キーを更新payloadから除外しapp13基幹同期では通常通り残す', () => {
+    const hridExternalIdMapping = {
+      source_field_code: 'HRID',
+      target_field_id: 'external_id',
+      is_required: true,
+      sort_order: 1,
+      is_update_key: true,
+    }
+    const enrichmentMapping = {
+      targetAppType: 'people',
+      sourceAppId: '30',
+      fieldMapping: hridExternalIdMapping,
+    }
+    const baseMapping = {
+      targetAppType: 'people',
+      sourceAppId: '13',
+      fieldMapping: hridExternalIdMapping,
+    }
+    const otherUpdateKey = {
+      targetAppType: 'people',
+      sourceAppId: '30',
+      fieldMapping: {
+        ...hridExternalIdMapping,
+        source_field_code: '$id',
+        target_field_id: 'legacy_record_id',
+      },
+    }
+
+    assert.equal(shouldOmitApp30PeopleHridExternalIdFromWritePayload(enrichmentMapping), true)
+    assert.equal(shouldOmitApp30PeopleHridExternalIdFromWritePayload(baseMapping), false)
+    assert.equal(shouldOmitApp30PeopleHridExternalIdFromWritePayload(otherUpdateKey), false)
+  })
+
+  test('recordId指定のapp30同期でも安全なHRIDへ解決できないレコードは拒否する', () => {
+    const whereCondition = { tenant_id: 'tenant-17614', external_id: 'PE-2906' }
+
+    assert.equal(requireResolvedApp30PeopleExternalId(whereCondition, []), false)
+    assert.equal(whereCondition.external_id, 'PE-2906')
+  })
+
+  test('安全なHRIDへ解決できた場合だけ更新条件を書き換える', () => {
+    const whereCondition = { tenant_id: 'tenant-17614', external_id: 'PE-1926' }
+
+    assert.equal(requireResolvedApp30PeopleExternalId(whereCondition, ['1926']), true)
+    assert.equal(whereCondition.external_id, '1926')
+  })
+
   test('HRIDからexternal_idへの更新キーのときだけ絞り込みを有効にする', () => {
     assert.equal(
       shouldLimitApp30PeopleSyncToTenantExternalIds({
