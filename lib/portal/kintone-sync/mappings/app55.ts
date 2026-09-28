@@ -31,11 +31,11 @@ import type { AppMapping } from '../types'
  *   1-6別紙 C5/K5/T5 の明示チェックとも OR 合成する。1-4:E13/K13（④報酬＝支払概算額）は転記しない。
  * - (b)社会保険料（1-6別紙:S22）→ `厚生年金保険料` に合計を格納（`健康保険料` は設定しない）。
  * - 締切日/支払日の「毎月」CHECK_BOX（毎月4種）は常に ON（固定）。
- * - _4_f_控除額_備考 は固定文字『水道光熱費』。
+ * - _4_f_控除額_備考 は空文字を送り、過去の固定文字『水道光熱費』を残さない。
  *
  * 実装しない行（v4で「転記不要」/対象外）:
  * - CALC: 申請人_年齢, _3_支払概算額(1-6別紙:S18), _4_控除額合計(U30), 日本人等合計 等
- * - 企業入力対象外/Funtoco既定: 休業手当・健康診断関連(1-6 行106/115/116), _9_2_3_その後の頻度(T116)
+ * - 企業入力対象外/Funtoco既定: 休業手当・健康診断日(1-6 行106/115/116)
  * - ミラー/再掲で不要: 特定技能所属機関名（居住費の詳細:O52）
  * - ふりがな（1-4:E76/I76）: app39運用のためフィールド追加なし
  *
@@ -126,7 +126,8 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6別紙', cell: 'S24', code: '_4_d_控除額', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6別紙', cell: 'S25', code: '_4_e_控除額', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6別紙', cell: 'S26', code: '_4_f_控除額', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6別紙', cell: 'C26', code: '_4_f_控除額_備考', kind: 'TEXT', transform: constantText('水道光熱費') },
+    // 費目名の定型ラベル C26 は転記しない。過去の誤転記を再アップロードで消せるよう空文字を明示送信する。
+    { sheetName: '1-6別紙', cell: 'C26', code: '_4_f_控除額_備考', kind: 'TEXT', transform: constantText('') },
     // S18(_3_支払概算額) / U30(_4_控除額合計) は CALC → 転記しない。
 
     // ── 1-6（割増率・締切/支払日・各種チェック・保険）──────────
@@ -167,7 +168,7 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'E105', code: '_7_10_1_退職金有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'J105', code: '_7_10_1_退職金有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'J105', code: '_7_10_3_退職金有の時期金額等', kind: 'TEXT', transform: asText },
-    // 11. 休業手当・健康診断関連（行106/115/116）は企業入力対象外 → 実装しない。
+    // 11. 休業手当・健康診断日（行106/115/116）は企業入力対象外。
 
     { sheetName: '1-6', cell: 'K113', code: '_9_1_1_厚生年金', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'O113', code: '_9_1_2_健康保険', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
@@ -177,7 +178,8 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'O114', code: '_9_1_6_国民健康保険', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'S114', code: '_9_1_7_その他', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'U114', code: '_9_1_8_その他の内容', kind: 'TEXT', transform: asText },
-    // T116(_9_2_3_その後の頻度) は弊社既定 → 実装しない。
+    // 健康診断「その後 ○○ ごとに実施」。結合セル T116:X116 のアンカーを文字列で転記する。
+    { sheetName: '1-6', cell: 'T116', code: '_9_2_3_その後の頻度', kind: 'TEXT', transform: asText },
 
     // ══════════════════════════════════════════════════════════════════════
     // 雇用条件書「1-6」本体 v5追加（2026-08-04）: 契約更新／労働時間／休日／休暇。
@@ -185,7 +187,7 @@ export const APP55_MAPPING: AppMapping = {
     // チェックは各項目が独立の True/False セル（checkboxOn）。⚠️=非結合セル or 割当が要確認。
     // 契約期間開始/終了日は「年/月/日」の3セル分割 → derived で1つの日付に合成（後述の derived[]）。
     // 更新上限の有無/最多更新回数/通算年数(契約_年)は ■/□マーカー方式で実装済（下記Ⅰ更新上限）。
-    // 未実装（要判断・別途）: 契約締結日・無期転換(無期条件変更_有/無)・就業規則条項各種・
+    // 未実装（要判断・別途）: 契約締結日・無期転換(無期条件変更_有/無)・
     //   派遣(受け皿無)・分野/業務区分(様式上「弊社で入力」の灰色欄)。
     //   1-11-1/1-11-1別紙(所属機関概要書・役員一覧・決算)はマッピング対象外（ユーザー確定）。
     // ══════════════════════════════════════════════════════════════════════
@@ -236,6 +238,13 @@ export const APP55_MAPPING: AppMapping = {
     // 6.所定時間外労働の有無
     { sheetName: '1-6', cell: 'I70', code: '_4_5_1_所定時間外労働有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'L70', code: '_4_5_2_所定時間外労働無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    // 就業規則の条番号（行72）。入力セルは条件付き書式の対象 L/O/R/U/W/Z。
+    { sheetName: '1-6', cell: 'L72', code: '就業規則1_0', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'O72', code: '就業規則1_1', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'R72', code: '就業規則1_2', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'U72', code: '就業規則1_3', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'W72', code: '就業規則1_4', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'Z72', code: '就業規則1_5', kind: 'TEXT', transform: asText },
 
     // ── Ⅴ 休日 ──
     // 定例日: 毎週定休曜日（F74）＋その他（M74）。⚠️祝日/曜日/その他の結合はせず個別格納・要確認。
@@ -248,6 +257,13 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'H76', code: '_5_2_1_2_月あたり', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'L76', code: '_5_2_1_3_非定例日', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'S76', code: '_5_2_2_その他休日', kind: 'TEXT', transform: asText },
+    // 就業規則の条番号（行77）。各範囲の開始・終了を同じ連番の 1/2 フィールドへ入れる。
+    { sheetName: '1-6', cell: 'L77', code: '_5_2_1就業規則1', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'O77', code: '_5_2_2就業規則1', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'R77', code: '_5_2_1就業規則2', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'U77', code: '_5_2_2就業規則2', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'W77', code: '_5_2_1就業規則3', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'Z77', code: '_5_2_2就業規則3', kind: 'TEXT', transform: asText },
 
     // ── Ⅵ 休暇 ──
     // 1.年次有給休暇: 6か月継続の付与日数＋6か月未満の有無/経過月数/付与日数
@@ -259,9 +275,23 @@ export const APP55_MAPPING: AppMapping = {
     // 2.その他の休暇（有給/無給）
     { sheetName: '1-6', cell: 'I82', code: '_6_2_1_有給休暇', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'S82', code: '_6_2_2_無給休暇', kind: 'TEXT', transform: asText },
+    // 就業規則の条番号（行85）。
+    { sheetName: '1-6', cell: 'L85', code: '_6_4_就業規則1', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'O85', code: '_6_4_就業規則2', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'R85', code: '_6_4_就業規則3', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'U85', code: '_6_4_就業規則4', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'W85', code: '_6_4_就業規則5', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'Z85', code: '_6_4_就業規則6', kind: 'TEXT', transform: asText },
 
     // ── Ⅷ退職に関する事項（1-6 行108：自己都合退職の届出先。届出日数はOFID自動コピーのため除外）──
     { sheetName: '1-6', cell: 'O108', code: '退職の届出先', kind: 'TEXT', transform: asText },
+    // 就業規則の条番号（行111）。先頭フィールドだけ kintone 実コードが `_8_2__...`（連続アンダースコア）。
+    { sheetName: '1-6', cell: 'L111', code: '_8_2__就業規則1', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'O111', code: '_8_2_就業規則2', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'R111', code: '_8_2_就業規則3', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'U111', code: '_8_2_就業規則4', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'W111', code: '_8_2_就業規則5', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'Z111', code: '_8_2_就業規則6', kind: 'TEXT', transform: asText },
     // 相談窓口(相談_部署/担当者氏名/連絡先)・労働保険番号・雇用保険番号は、app55の
     // 事業所(OFID)/相談担当者ルックアップがapp36/マスタから自動供給する項目＝書込ロックのため
     // マッピングしない（Excelから転記しても無視される）。

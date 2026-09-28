@@ -26,7 +26,7 @@ FunBaseの提出Excel「申請書類作成フォーム」を kintone へ転記�
 - `types.ts` — `FieldMapping` / `DerivedFieldMapping` / `SubtableMapping`
 - `transforms.ts` — `asText/asNumber/asDate/checkboxOn/checkboxFromText/checkboxAlways/radioFromText/keepIfEquals/constantText/combineYmdDate`
 - `run-transcription.ts` — `runCaseTranscription`(紐付け解決→app34 update＋app55 fan-out→app296書戻し) / `maybeAutoTranscribeOnUpload`(アップロード時自動トリガー)
-- kintone認証(ローカル) = `~/workspace/funtoco/fun-hubspot-to-kintone/.env`（KINTONE_BASE_URL / KINTONE_USERNAME / KINTONE_PASSWORD、password認証）
+- kintoneフィールド確認は、利用可能なら kintone MCP の `kintone_get_form_fields` を優先する。ローカル認証ファイルの場所は固定とみなさず、現行環境を確認する。
 - 同梱スクリプトは `scripts/`（下記手順で使う。パスは冒頭のTODOを書き換える）
 
 ## マッピングを追加する手順
@@ -78,6 +78,17 @@ Excelの3セルを `combineYmdDate([年,月,日])` ＋ `derived` マッピング
 企業は 1-4 に**支払概算額（基本賃金＋諸手当）**を書く。スカラは先勝ちなので 1-4 が勝ち、
 基本賃金に概算額が入り、そこからCALCされる `_3_支払概算額`/`_5_支給概算額` まで連鎖して誤る。
 → 金額系は**意味が一致するシートだけ**を出所にする（基本賃金＝1-6別紙 F5/N5/W5 のみ）。
+
+### ④-5 就業規則条番号・健康診断頻度・固定ラベル ★2026-09-28
+- 「○詳細は，就業規則　第　条〜第　条…」の入力欄は、1-6 の行72/77/85/111で共通して
+  `L/O/R/U/W/Z`。条件付き書式の `containsBlanks` 対象から確認できる。労働時間・休日・休暇・退職の
+  4ブロックすべてを app55 の各条番号フィールドへ転記する。
+- 健康診断の「その後　ごとに実施」は結合セル `T116:X116` のアンカー `T116` から
+  `_9_2_3_その後の頻度` へ文字列で転記する。
+- 1-6別紙 `C26` の「水道光熱費」は入力値ではなく定型ラベル。`_4_f_控除額_備考` には入れず、
+  過去の誤値も再アップロードで消せるよう空文字を明示送信する。
+- `交代制の勤務時間等` は `buildRecord` だけでなく `buildApp55Record`（実アップロード共通payload）にも
+  サブテーブルが残ることを回帰テストする。
 
 ### ⑤ テスト用Excelは openpyxl 再保存禁止（画像消失・破損の元）
 openpyxlでテンプレを再保存すると**全シートの画像が消え**（1-6は10枚等）、結合の一括解除で見た目が崩れ、exceljsが`anchors`エラーで読めなくなる。
