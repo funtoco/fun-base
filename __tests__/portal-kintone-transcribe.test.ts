@@ -281,7 +281,7 @@ describe('APP34_MAPPING: 代表行が期待 payload になる', () => {
 
 // ── app55: 確定版マッピングの代表行 ────────────────────────────────────
 describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
-  it('賃金区分の自動判定・性別RADIO・(b)厚生年金一本化・DATE・固定備考・subtable', () => {
+  it('賃金区分の自動判定・性別RADIO・(b)厚生年金一本化・DATE・空欄備考・subtable', () => {
     const getCell = cellsReader({
       '居住費の詳細': { M3: 25000, H4: '借上物件', H5: '按分計算', H7: 3, J2: '有' },
       '1-4': {
@@ -320,8 +320,8 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     expect(record.居住費控除_有).toEqual({ value: '有' })
     // DATE
     expect(record.書類に反映する_作成日_署名日).toEqual({ value: '2026-07-29' })
-    // 固定備考
-    expect(record._4_f_控除額_備考).toEqual({ value: '水道光熱費' })
+    // (f)その他の備考は、固定ラベル「水道光熱費」を入れず空欄に戻す
+    expect(record._4_f_控除額_備考).toEqual({ value: '' })
     // 締切「毎月」は固定True
     expect(record._1賃金締切日_毎月).toEqual({ value: ['■'] })
     // 昇給有 ON
@@ -425,6 +425,67 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
   it('交代制の勤務時間等: 1行も記入が無ければ payload に含めない（既存行を消さない）', () => {
     const record = buildRecord(cellsReader({ '1-6': {} }), APP55_MAPPING)
     expect('交代制の勤務時間等' in record).toBe(false)
+  })
+
+  it('就業規則の条番号を労働時間・休日・休暇・退職の全欄へ転記する', () => {
+    const record = buildRecord(cellsReader({
+      '1-6': {
+        L72: 10, O72: 12, R72: 20, U72: 22, W72: 30, Z72: 32,
+        L77: 40, O77: 42, R77: 50, U77: 52, W77: 60, Z77: 62,
+        L85: 70, O85: 72, R85: 80, U85: 82, W85: 90, Z85: 92,
+        L111: 100, O111: 102, R111: 110, U111: 112, W111: 120, Z111: 122,
+      },
+    }), APP55_MAPPING)
+
+    expect(record).toMatchObject({
+      就業規則1_0: { value: '10' },
+      就業規則1_1: { value: '12' },
+      就業規則1_2: { value: '20' },
+      就業規則1_3: { value: '22' },
+      就業規則1_4: { value: '30' },
+      就業規則1_5: { value: '32' },
+      _5_2_1就業規則1: { value: '40' },
+      _5_2_2就業規則1: { value: '42' },
+      _5_2_1就業規則2: { value: '50' },
+      _5_2_2就業規則2: { value: '52' },
+      _5_2_1就業規則3: { value: '60' },
+      _5_2_2就業規則3: { value: '62' },
+      _6_4_就業規則1: { value: '70' },
+      _6_4_就業規則2: { value: '72' },
+      _6_4_就業規則3: { value: '80' },
+      _6_4_就業規則4: { value: '82' },
+      _6_4_就業規則5: { value: '90' },
+      _6_4_就業規則6: { value: '92' },
+      _8_2__就業規則1: { value: '100' },
+      _8_2_就業規則2: { value: '102' },
+      _8_2_就業規則3: { value: '110' },
+      _8_2_就業規則4: { value: '112' },
+      _8_2_就業規則5: { value: '120' },
+      _8_2_就業規則6: { value: '122' },
+    })
+  })
+
+  it('健康診断の「その後の頻度」を文字列として転記する', () => {
+    const record = buildRecord(cellsReader({ '1-6': { T116: 12 } }), APP55_MAPPING)
+    expect(record._9_2_3_その後の頻度).toEqual({ value: '12' })
+  })
+
+  it('アップロード用の共通payloadにも交代制の勤務時間等を残す', () => {
+    const record = buildApp55Record(cellsReader({
+      '1-6': { D54: 7, F54: 30, J54: 16, L54: 30, W54: 8, Z54: 0 },
+    }))
+    expect(record.交代制の勤務時間等).toEqual({
+      value: [{
+        value: {
+          始業時間_時: { value: 7 },
+          始業時間_分: { value: 30 },
+          終業時間_時: { value: 16 },
+          終業時間_分: { value: 30 },
+          _1日の所定労働時間_時間: { value: 8 },
+          _1日の所定労働時間_分: { value: 0 },
+        },
+      }],
+    })
   })
 })
 
