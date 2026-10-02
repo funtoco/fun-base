@@ -19,6 +19,18 @@ export function asText(value: unknown): string | null {
 }
 
 /**
+ * テンプレート上の未記入ラベルを、kintoneの既存誤値を消せる空文字へ変換する。
+ * 元セルが空（またはシート自体が無い）なら null のままにし、既存値を不用意に消さない。
+ */
+export function textOrEmptyForPlaceholders(placeholders: string[]): CellTransform {
+  return (value) => {
+    const text = asText(value)
+    if (text === null) return null
+    return placeholders.includes(text) ? '' : text
+  }
+}
+
+/**
  * 数値として取り込む。カンマ・空白・通貨記号（¥/￥/円）・単位（人）を除去して parse する。
  * 空文字や数値化できない値は null。
  */
