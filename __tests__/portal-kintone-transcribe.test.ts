@@ -11,6 +11,7 @@ import {
   constantText,
   keepIfEquals,
   radioFromText,
+  textOrEmptyForPlaceholders,
 } from '@/lib/portal/kintone-sync/transforms'
 import { buildRecord } from '@/lib/portal/kintone-sync/build-records'
 import { APP34_MAPPING } from '@/lib/portal/kintone-sync/mappings/app34'
@@ -62,6 +63,13 @@ describe('transforms: asNumber / asText / asDate', () => {
     expect(asText('1180001012345')).toBe('1180001012345')
     expect(asText('')).toBeNull()
     expect(asText(null)).toBeNull()
+  })
+
+  it('textOrEmptyForPlaceholders: 未記入ラベルだけ空文字にし、空欄は更新しない', () => {
+    const transform = textOrEmptyForPlaceholders(['記入'])
+    expect(transform('記入')).toBe('')
+    expect(transform('  ')).toBeNull()
+    expect(transform('按分計算')).toBe('按分計算')
   })
 
   it('asDate: Date→YYYY-MM-DD（UTC成分）、文字列も正規化、空は null', () => {
@@ -417,7 +425,7 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
       value: [
         { value: { 始業時間_時: { value: 5 }, 始業時間_分: { value: 0 }, 終業時間_時: { value: 14 }, 終業時間_分: { value: 0 }, _1日の所定労働時間_時間: { value: 7 }, _1日の所定労働時間_分: { value: 30 } } },
         { value: { 始業時間_時: { value: 9 }, 始業時間_分: { value: 0 }, 終業時間_時: { value: 18 }, 終業時間_分: { value: 0 }, _1日の所定労働時間_時間: { value: 7 }, _1日の所定労働時間_分: { value: 30 } } },
-        { value: { 始業時間_時: { value: 13 }, 始業時間_分: { value: 0 }, 終業時間_時: { value: 22 }, 終業時間_分: { value: 0 }, 交代制の勤務時間_適用日: { value: '4月〜9月' }, _1日の所定労働時間_時間: { value: 7 }, _1日の所定労働時間_分: { value: 30 } } },
+        { value: { 始業時間_時: { value: 13 }, 始業時間_分: { value: 0 }, 終業時間_時: { value: 22 }, 終業時間_分: { value: 0 }, 交代制の勤務時間_適用日: { value: '4月〜9月' }, 翻訳_交代制の勤務時間_適用日: { value: '4月〜9月' }, _1日の所定労働時間_時間: { value: 7 }, _1日の所定労働時間_分: { value: 30 } } },
       ],
     })
   })
@@ -486,6 +494,40 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
         },
       }],
     })
+  })
+
+  it('交代制の勤務時間等: 表示シートが空でもdekisugi用の元データを転記する', () => {
+    const record = buildApp55Record(cellsReader({
+      '1-6': {},
+      dekisugi用: {
+        ED3: '日勤', EE3: '07:30', EF3: '16:30', EM3: 8, EN3: 0,
+        EO3: '夜勤', EP3: '16:00', EQ3: '翌09:00', EX3: 15, EY3: 0,
+      },
+    }))
+
+    expect(record.交代制の勤務時間等).toEqual({
+      value: [
+        { value: {
+          始業時間_時: { value: 7 }, 始業時間_分: { value: 30 },
+          終業時間_時: { value: 16 }, 終業時間_分: { value: 30 },
+          _1日の所定労働時間_時間: { value: 8 }, _1日の所定労働時間_分: { value: 0 },
+          交代制の勤務時間_適用日: { value: '日勤' },
+          翻訳_交代制の勤務時間_適用日: { value: '日勤' },
+        } },
+        { value: {
+          始業時間_時: { value: 16 }, 始業時間_分: { value: 0 },
+          終業時間_時: { value: 9 }, 終業時間_分: { value: 0 },
+          _1日の所定労働時間_時間: { value: 15 }, _1日の所定労働時間_分: { value: 0 },
+          交代制の勤務時間_適用日: { value: '夜勤' },
+          翻訳_交代制の勤務時間_適用日: { value: '夜勤' },
+        } },
+      ],
+    })
+  })
+
+  it('居住費の説明: テンプレートの未記入ラベル「記入」は空欄として送る', () => {
+    const record = buildApp55Record(cellsReader({ '居住費の詳細': { H5: '記入' } }))
+    expect(record.居住費控除_4).toEqual({ value: '' })
   })
 })
 

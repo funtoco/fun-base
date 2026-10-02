@@ -10,6 +10,7 @@ import {
   constantText,
   keepIfEquals,
   radioFromText,
+  textOrEmptyForPlaceholders,
 } from '../transforms'
 import type { AppMapping } from '../types'
 
@@ -55,7 +56,8 @@ export const APP55_MAPPING: AppMapping = {
     // ── 居住費の詳細 ─────────────────────────────────────────
     { sheetName: '居住費の詳細', cell: 'M3', code: '_4_e_控除額', kind: 'NUMBER', transform: asNumber },
     { sheetName: '居住費の詳細', cell: 'H4', code: '提供する宿泊施設の具体的な内容', kind: 'CHECK_BOX', transform: checkboxFromText(宿泊施設_CHECK) },
-    { sheetName: '居住費の詳細', cell: 'H5', code: '居住費控除_4', kind: 'TEXT', transform: asText },
+    // H5 の初期値「記入」は入力値ではない。未入力時は過去の誤転記も消せるよう空文字を送る。
+    { sheetName: '居住費の詳細', cell: 'H5', code: '居住費控除_4', kind: 'TEXT', transform: textOrEmptyForPlaceholders(['記入']) },
     { sheetName: '居住費の詳細', cell: 'H7', code: '同居人の人数', kind: 'NUMBER', transform: asNumber },
     // J2=IF(M3=0,"無","有")。「有」のときだけマーカー文字を入れる（居住費控除_無 は存在しない）。
     { sheetName: '居住費の詳細', cell: 'J2', code: '居住費控除_有', kind: 'TEXT', transform: keepIfEquals('有') },
@@ -353,6 +355,7 @@ export const APP55_MAPPING: AppMapping = {
         { subCode: '終業時間_時', col: 'J', kind: 'NUMBER', transform: asNumber },
         { subCode: '終業時間_分', col: 'L', kind: 'NUMBER', transform: asNumber },
         { subCode: '交代制の勤務時間_適用日', col: 'P', kind: 'TEXT', transform: asText },
+        { subCode: '翻訳_交代制の勤務時間_適用日', col: 'P', kind: 'TEXT', transform: asText },
         { subCode: '_1日の所定労働時間_時間', col: 'W', kind: 'NUMBER', transform: asNumber },
         { subCode: '_1日の所定労働時間_分', col: 'Z', kind: 'NUMBER', transform: asNumber },
       ],

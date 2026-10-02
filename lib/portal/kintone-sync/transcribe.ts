@@ -3,8 +3,9 @@ import { openWorkbook, workbookCellReader } from './excel-reader'
 import { APP34_MAPPING } from './mappings/app34'
 import { APP36_MAPPING } from './mappings/app36'
 import { APP55_MAPPING } from './mappings/app55'
+import { asNumber, asText } from './transforms'
 import type { KintoneWriteClient } from './kintone-write-client'
-import type { AppMapping, CellReader, KintoneRecordPayload } from './types'
+import type { AppMapping, CellReader, KintoneRecordPayload, KintoneSubtableRow } from './types'
 
 export type TranscribeAction = 'create' | 'update' | 'dry-run' | 'error'
 
@@ -75,6 +76,72 @@ export interface TranscribeTargets {
  * 転記からは除外する（複数人へ同一Excelを適用しても氏名/性別が上書きされない）。
  */
 export const APP55_PERSON_SPECIFIC_CODES = ['申請人氏名', '性別', '申請人_経験年数']
+
+const DEKISUGI_SHIFT_CELLS = [
+  ['ED3', 'EE3', 'EF3', 'EM3', 'EN3'],
+  ['EO3', 'EP3', 'EQ3', 'EX3', 'EY3'],
+  ['EZ3', 'FA3', 'FB3', 'FI3', 'FJ3'],
+  ['FK3', 'FL3', 'FM3', 'FT3', 'FU3'],
+  ['FV3', 'FW3', 'FX3', 'GE3', 'GF3'],
+  ['GG3', 'GH3', 'GI3', 'GP3', 'GQ3'],
+  ['GR3', 'GS3', 'GT3', 'HA3', 'HB3'],
+  ['HC3', 'HD3', 'HE3', 'HL3', 'HM3'],
+] as const
+
+/** Excel時刻（Date / シリアル値 / `翌09:00` 等）を時・分へ分解する。 */
+function splitTime(value: unknown): [number | null, number | null] {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return [value.getUTCHours(), value.getUTCMinutes()]
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value >= 0 && value < 1) {
+      const minutes = Math.round(value * 24 * 60) % (24 * 60)
+      return [Math.floor(minutes / 60), minutes % 60]
+    }
+    if (Number.isInteger(value) && value >= 0 && value <= 23) {
+      return [value, 0]
+    }
+  }
+  const text = asText(value)?.normalize('NFKC')
+  const matched = text?.match(/(\d{1,2})\s*[:時]\s*(\d{1,2})?/)
+  if (!matched) return [null, null]
+  const hour = Number(matched[1])
+  const minute = Number(matched[2] ?? 0)
+  return hour <= 23 && minute <= 59 ? [hour, minute] : [null, null]
+}
+
+/** 表示用1-6が空のファイル向けに、元データシート `dekisugi用` から交代制8行を復元する。 */
+function buildDekisugiShiftRows(getCell: CellReader): KintoneSubtableRow[] {
+  const rows: KintoneSubtableRow[] = []
+  for (const [dateCell, startCell, endCell, hoursCell, minutesCell] of DEKISUGI_SHIFT_CELLS) {
+    const applicableDate = asText(getCell('dekisugi用', dateCell))
+    const [startHour, startMinute] = splitTime(getCell('dekisugi用', startCell))
+    const [endHour, endMinute] = splitTime(getCell('dekisugi用', endCell))
+    const workHours = asNumber(getCell('dekisugi用', hoursCell))
+    const workMinutes = asNumber(getCell('dekisugi用', minutesCell))
+    const hasMeaningfulValue =
+      applicableDate !== null ||
+      startHour !== null ||
+      endHour !== null ||
+      (workHours !== null && workHours !== 0) ||
+      (workMinutes !== null && workMinutes !== 0)
+    if (!hasMeaningfulValue) continue
+
+    const value: KintoneSubtableRow['value'] = {}
+    if (startHour !== null) value.始業時間_時 = { value: startHour }
+    if (startMinute !== null) value.始業時間_分 = { value: startMinute }
+    if (endHour !== null) value.終業時間_時 = { value: endHour }
+    if (endMinute !== null) value.終業時間_分 = { value: endMinute }
+    if (workHours !== null) value._1日の所定労働時間_時間 = { value: workHours }
+    if (workMinutes !== null) value._1日の所定労働時間_分 = { value: workMinutes }
+    if (applicableDate !== null) {
+      value.交代制の勤務時間_適用日 = { value: applicableDate }
+      value.翻訳_交代制の勤務時間_適用日 = { value: applicableDate }
+    }
+    if (Object.keys(value).length > 0) rows.push({ value })
+  }
+  return rows
+}
 
 export interface TranscribeOptions {
   buffer: ArrayBuffer | Buffer | Uint8Array
@@ -216,6 +283,12 @@ async function transcribeApp34(
  */
 export function buildApp55Record(getCell: CellReader): KintoneRecordPayload {
   const record = buildRecord(getCell, APP55_MAPPING)
+  if (!record.交代制の勤務時間等) {
+    const fallbackRows = buildDekisugiShiftRows(getCell)
+    if (fallbackRows.length > 0) {
+      record.交代制の勤務時間等 = { value: fallbackRows }
+    }
+  }
   for (const code of APP55_PERSON_SPECIFIC_CODES) {
     delete record[code]
   }
