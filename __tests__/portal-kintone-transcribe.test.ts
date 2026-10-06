@@ -4,8 +4,11 @@ import {
   asDate,
   asNumber,
   asText,
+  asTextOrEmpty,
   checkboxAlways,
+  checkboxExplicit,
   checkboxFromText,
+  checkboxFromTextExplicit,
   checkboxOn,
   combineYmdDate,
   constantText,
@@ -13,6 +16,7 @@ import {
   radioFromText,
 } from '@/lib/portal/kintone-sync/transforms'
 import { buildRecord } from '@/lib/portal/kintone-sync/build-records'
+import { workbookCellReader } from '@/lib/portal/kintone-sync/excel-reader'
 import { APP34_MAPPING } from '@/lib/portal/kintone-sync/mappings/app34'
 import { APP36_MAPPING } from '@/lib/portal/kintone-sync/mappings/app36'
 import { APP55_MAPPING } from '@/lib/portal/kintone-sync/mappings/app55'
@@ -42,6 +46,15 @@ function cellsReader(cells: Record<string, Record<string, unknown>>): CellReader
   return (sheet, addr) => cells[sheet]?.[addr]
 }
 
+it('workbookCellReader: 欠落シートはundefined、存在する空セルはnullで区別する', () => {
+  const workbook = new ExcelJS.Workbook()
+  workbook.addWorksheet('存在するシート')
+  const getCell = workbookCellReader(workbook)
+
+  expect(getCell('存在しないシート', 'A1')).toBeUndefined()
+  expect(getCell('存在するシート', 'A1')).toBeNull()
+})
+
 // ── transforms（スカラ）────────────────────────────────────────────────
 describe('transforms: asNumber / asText / asDate', () => {
   it('asNumber: カンマ・通貨記号・単位を除去して数値化', () => {
@@ -62,6 +75,13 @@ describe('transforms: asNumber / asText / asDate', () => {
     expect(asText('1180001012345')).toBe('1180001012345')
     expect(asText('')).toBeNull()
     expect(asText(null)).toBeNull()
+  })
+
+  it('asTextOrEmpty: 入力値はtrimし、空欄は既存値を消し、シート欠落は更新しない', () => {
+    expect(asTextOrEmpty(' 実費 ')).toBe('実費')
+    expect(asTextOrEmpty('')).toBe('')
+    expect(asTextOrEmpty(null)).toBe('')
+    expect(asTextOrEmpty(undefined)).toBeNull()
   })
 
   it('asDate: Date→YYYY-MM-DD（UTC成分）、文字列も正規化、空は null', () => {
@@ -87,6 +107,15 @@ describe('transforms: checkbox / radio / 有無 / 固定', () => {
     expect(t(null)).toBeNull()
   })
 
+  it('checkboxExplicit: 未選択・空欄は解除し、シート欠落だけ更新しない', () => {
+    const t = checkboxExplicit(['■'])
+    expect(t(true)).toEqual(['■'])
+    expect(t(false)).toEqual([])
+    expect(t('')).toEqual([])
+    expect(t(null)).toEqual([])
+    expect(t(undefined)).toBeNull()
+  })
+
   it('checkboxAlways: 入力に関係なく常に ON（毎月チェック等の固定True）', () => {
     const t = checkboxAlways(['■'])
     expect(t(null)).toEqual(['■'])
@@ -109,6 +138,15 @@ describe('transforms: checkbox / radio / 有無 / 固定', () => {
     expect(umu('？')).toBeNull()
     const sex = checkboxFromText(['女', '男'])
     expect(sex('男')).toEqual(['男'])
+  })
+
+  it('checkboxFromTextExplicit: 空欄・不一致は解除し、シート欠落は更新しない', () => {
+    const t = checkboxFromTextExplicit(['無', '有'])
+    expect(t('無')).toEqual(['無'])
+    expect(t('')).toEqual([])
+    expect(t(null)).toEqual([])
+    expect(t('選択')).toEqual([])
+    expect(t(undefined)).toBeNull()
   })
 
   it('keepIfEquals: 一致時のみ出力、それ以外 null', () => {
@@ -281,7 +319,7 @@ describe('APP34_MAPPING: 代表行が期待 payload になる', () => {
 
 // ── app55: 確定版マッピングの代表行 ────────────────────────────────────
 describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
-  it('賃金区分の自動判定・性別RADIO・(b)厚生年金一本化・DATE・空欄備考・subtable', () => {
+  it('賃金区分・性別RADIO・(b)厚生年金一本化・DATE・控除備考・subtable', () => {
     const getCell = cellsReader({
       '居住費の詳細': { M3: 25000, H4: '借上物件', H5: '按分計算', H7: 3, J2: '有' },
       '1-4': {
@@ -291,21 +329,21 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
         E75: '株式会社Funtoco', E77: '代表取締役', I77: '山田太郎',
       },
       '1-6別紙': {
-        F5: 200000, // １．基本賃金（月給）あり → 月給 CHECK_BOX 自動ON
+        C5: true, F5: 200000, // 月給を明示選択
         S22: 30000, // (b)社会保険料 → 厚生年金保険料へ
-        C26: '(f) その他 （水道光熱費）',
+        C26: '(f) その他 （水道光熱費）', J26: '実費',
         D9: '通勤手当', K9: 10000, S9: '実費',
-        D27: '(g)組合費', S27: 1000,
+        D27: '(g)組合費', J27: '実費', S27: 1000,
       },
       '1-6': {
-        H99: false, // 締切「毎月」は固定Trueなのでセルに関係なくON
+        H99: true, // 締切「毎月」を明示選択
         E103: true, // 昇給有
       },
       '【介護分野】事業所概要1': { A19: '特記事項テスト' },
     })
     const record = buildRecord(getCell, APP55_MAPPING)
 
-    // 賃金区分: 1-6別紙「１．基本賃金」の金額の有無で 月給 CHECK_BOX を自動ON。
+    // 賃金区分: 1-6別紙「１．基本賃金」の明示チェックだけを反映。
     // 1-4:E13（④報酬＝支払概算額）は 月給金額 に混入させない。
     expect(record.月給金額).toEqual({ value: 200000 })
     expect(record.月給).toEqual({ value: ['■'] })
@@ -320,9 +358,9 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     expect(record.居住費控除_有).toEqual({ value: '有' })
     // DATE
     expect(record.書類に反映する_作成日_署名日).toEqual({ value: '2026-07-29' })
-    // (f)その他の備考は、固定ラベル「水道光熱費」を入れず空欄に戻す
-    expect(record._4_f_控除額_備考).toEqual({ value: '' })
-    // 締切「毎月」は固定True
+    // (f)その他の備考は、固定ラベルではなく入力欄の「実費」を転記する
+    expect(record._4_f_控除額_備考).toEqual({ value: '実費' })
+    // 締切「毎月」の明示チェックを反映
     expect(record._1賃金締切日_毎月).toEqual({ value: ['■'] })
     // 昇給有 ON
     expect(record._7_8_1_昇給有).toEqual({ value: ['■'] })
@@ -336,7 +374,7 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
       ],
     })
     expect(record.その他の控除の明細).toEqual({
-      value: [{ value: { その他控除項目: { value: '(g)組合費' }, その他の控除額: { value: 1000 } } }],
+      value: [{ value: { その他控除項目: { value: '(g)組合費' }, その他控除_備考: { value: '実費' }, その他の控除額: { value: 1000 } } }],
     })
 
     // CALC はマッピングに無いので出ない
@@ -354,11 +392,87 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     expect(record.月給金額).toEqual({ value: 180000 })
   })
 
+  it('時間給だけを選択した場合、金額が3区分すべてにあっても月給・日給を明示的に解除する', () => {
+    const record = buildApp55Record(cellsReader({
+      '1-6別紙': {
+        C5: false, F5: 180000,
+        K5: false, N5: 9000,
+        T5: true, W5: 1200,
+      },
+    }))
+
+    expect(record.月給).toEqual({ value: [] })
+    expect(record.日給).toEqual({ value: [] })
+    expect(record.時間給).toEqual({ value: ['■'] })
+  })
+
+  it('(f)その他の備考が空欄なら、kintoneの既存値を消す空文字を送る', () => {
+    const record = buildApp55Record(cellsReader({
+      '1-6別紙': { J26: '' },
+    }))
+
+    expect(record._4_f_控除額_備考).toEqual({ value: '' })
+  })
+
+  it('更新判断基準が未選択なら、6項目すべてを明示的に解除する', () => {
+    const record = buildApp55Record(cellsReader({
+      '1-6': {
+        B22: false, K22: false, T22: false,
+        B23: false, K23: false, T23: false,
+      },
+    }))
+
+    expect(record._1_2_2_1_契約期間満了時の業務量).toEqual({ value: [] })
+    expect(record._1_2_2_2_労働者の勤務成績態度).toEqual({ value: [] })
+    expect(record._1_2_2_3_労働者の業務遂行能力).toEqual({ value: [] })
+    expect(record._1_2_2_4_会社の経営状況).toEqual({ value: [] })
+    expect(record._1_2_2_5_従事業務の進捗状況).toEqual({ value: [] })
+    expect(record._1_2_2_6_その他).toEqual({ value: [] })
+  })
+
+  it('チェック可能な項目が未選択なら、既定値や以前の値を残さず明示的に解除する', () => {
+    const record = buildApp55Record(cellsReader({
+      '居住費の詳細': { H4: '選択' },
+      '1-4': { H26: '', D30: '', H51: '', D55: '' },
+      '1-6': {
+        M25: '□', K25: '□', B32: false,
+        B48: false, B53: false,
+        I70: false, L70: false,
+        E76: false, H76: false,
+        H99: false, O99: false, H100: false, O100: false,
+        H101: false, O101: false, O102: false, Q102: false,
+        K113: false, O113: false, S113: false, V113: false,
+        K114: false, O114: false, S114: false,
+        O80: false, Q80: false,
+      },
+    }))
+
+    const clearedCodes = [
+      '提供する宿泊施設の具体的な内容',
+      '比較日本人_性別', '比較日本人_規定の有無',
+      '近い日本人_性別', '近い日本人_規定の有無',
+      '更新上限_有', '更新上限_無', '_2_1_1_直接雇用',
+      '_4_1_2_1_変形労働時間制', '_4_1_2_2_交代制',
+      '_4_5_1_所定時間外労働有', '_4_5_2_所定時間外労働無',
+      '_5_2_1_1_週あたり', '_5_2_1_2_月あたり',
+      '_1賃金締切日_毎月', '_7_4_2_1_毎月',
+      '_1賃金支払_毎月', '_2_毎月_賃金支払日',
+      '_7_6_1_口座振替', '_7_6_2_通貨払',
+      '_7_7_1_控除無', '_7_7_2_控除有',
+      '_9_1_1_厚生年金', '_9_1_2_健康保険', '_9_1_3_雇用保険', '_9_1_4_労災保険',
+      '_9_1_5_国民年金', '_9_1_6_国民健康保険', '_9_1_7_その他',
+      '_6_1_2_1_有給休暇有', '_6_1_2_2_有給休暇無',
+    ]
+    for (const code of clearedCodes) {
+      expect(record[code], code).toEqual({ value: [] })
+    }
+  })
+
   it('月給金額/時間給金額は 1-6別紙(基本賃金)のみを出所にし、1-4の④報酬は混入しない', () => {
     const getCell = cellsReader({
       // 企業は 1-4:E13 に「支払概算額（基本賃金＋諸手当）」を書くことが多い。
       '1-4': { E13: 250000, K13: 1500 },
-      '1-6別紙': { F5: 180000 },
+      '1-6別紙': { C5: true, F5: 180000 },
     })
     const record = buildRecord(getCell, APP55_MAPPING)
     expect(record.月給金額).toEqual({ value: 180000 })
@@ -380,9 +494,9 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     expect(record._7_8_1_昇給有).toEqual({ value: ['■'] })
     expect(record._7_9_1_賞与有).toEqual({ value: ['■'] })
     expect(record._7_10_1_退職金有).toEqual({ value: ['■'] })
-    expect('_7_8_2_昇給無' in record).toBe(false)
-    expect('_7_9_2_賞与無' in record).toBe(false)
-    expect('_7_10_2_退職金無' in record).toBe(false)
+    expect(record._7_8_2_昇給無).toEqual({ value: [] })
+    expect(record._7_9_2_賞与無).toEqual({ value: [] })
+    expect(record._7_10_2_退職金無).toEqual({ value: [] })
   })
 
   it('昇給/賞与/退職金: 無チェックのみ（時期金額等が空）なら 無 ON・有 OFF', () => {
@@ -393,7 +507,9 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     expect(record._7_8_2_昇給無).toEqual({ value: ['■'] })
     expect(record._7_9_2_賞与無).toEqual({ value: ['■'] })
     expect(record._7_10_2_退職金無).toEqual({ value: ['■'] })
-    expect('_7_8_1_昇給有' in record).toBe(false)
+    expect(record._7_8_1_昇給有).toEqual({ value: [] })
+    expect(record._7_9_1_賞与有).toEqual({ value: [] })
+    expect(record._7_10_1_退職金有).toEqual({ value: [] })
   })
 
   it('昇給/賞与/退職金: 何も書かれていなければ 有・無 とも出さない（Y103のラベル誤読の回帰）', () => {
@@ -696,7 +812,7 @@ describe('buildApp55Record（複数人・共通payload）', () => {
   it('人固有項目（氏名/性別/経験年数）は除外し、共通項目は残す', () => {
     const getCell = cellsReader({
       '1-4': { D10: 'グエン', H12: '男', K12: 2 },
-      '1-6別紙': { F5: 200000 },
+      '1-6別紙': { C5: true, F5: 200000 },
     })
     const record = buildApp55Record(getCell)
     // 人固有（HRIDルックアップが人材マスタから補完する項目）は payload に出さない。
@@ -706,7 +822,7 @@ describe('buildApp55Record（複数人・共通payload）', () => {
     expect('申請人氏名' in record).toBe(false)
     expect('性別' in record).toBe(false)
     expect('申請人_経験年数' in record).toBe(false)
-    // 共通項目（全員一緒）は残る。月給金額あり → 月給 CHECK_BOX 自動ON。
+    // 共通項目（全員一緒）は残る。月給の明示チェックを反映する。
     expect(record.月給金額).toEqual({ value: 200000 })
     expect(record.月給).toEqual({ value: ['■'] })
   })

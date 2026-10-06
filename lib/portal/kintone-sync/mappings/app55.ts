@@ -2,12 +2,12 @@ import {
   asDate,
   asNumber,
   asText,
-  checkboxAlways,
-  checkboxFromText,
+  asTextOrEmpty,
+  checkboxExplicit,
+  checkboxFromTextExplicit,
   checkboxOffWhenNoted,
   checkboxOn,
   combineYmdDate,
-  constantText,
   keepIfEquals,
   radioFromText,
 } from '../transforms'
@@ -27,11 +27,11 @@ import type { AppMapping } from '../types'
  * - 規定の有無[CHECK_BOX]: ['無','有'] / 提供する宿泊施設[CHECK_BOX]: ['自己所有物件','借上物件']
  *
  * 値仕様（v4決定・厳守）:
- * - 賃金区分: 出所は 1-6別紙「１．基本賃金」のみ。F5/N5/W5 に金額があれば `月給`/`日給`/`時間給` を自動 ON し、
- *   1-6別紙 C5/K5/T5 の明示チェックとも OR 合成する。1-4:E13/K13（④報酬＝支払概算額）は転記しない。
+ * - 賃金区分: 1-6別紙 C5/K5/T5 の明示チェックだけを反映する。未選択は空配列で既存値も解除する。
+ *   F5/N5/W5 の金額有無から区分を推測しない。1-4:E13/K13（④報酬＝支払概算額）は転記しない。
  * - (b)社会保険料（1-6別紙:S22）→ `厚生年金保険料` に合計を格納（`健康保険料` は設定しない）。
- * - 締切日/支払日の「毎月」CHECK_BOX（毎月4種）は常に ON（固定）。
- * - _4_f_控除額_備考 は空文字を送り、過去の固定文字『水道光熱費』を残さない。
+ * - CHECK_BOX はExcelの選択状態を正とし、未選択は空配列で既存値・既定値を解除する。
+ * - _4_f_控除額_備考 は固定ラベル C26 ではなく入力欄 J26 を転記する。
  *
  * 実装しない行（v4で「転記不要」/対象外）:
  * - CALC: 申請人_年齢, _3_支払概算額(1-6別紙:S18), _4_控除額合計(U30), 日本人等合計 等
@@ -54,7 +54,7 @@ export const APP55_MAPPING: AppMapping = {
   fields: [
     // ── 居住費の詳細 ─────────────────────────────────────────
     { sheetName: '居住費の詳細', cell: 'M3', code: '_4_e_控除額', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '居住費の詳細', cell: 'H4', code: '提供する宿泊施設の具体的な内容', kind: 'CHECK_BOX', transform: checkboxFromText(宿泊施設_CHECK) },
+    { sheetName: '居住費の詳細', cell: 'H4', code: '提供する宿泊施設の具体的な内容', kind: 'CHECK_BOX', transform: checkboxFromTextExplicit(宿泊施設_CHECK) },
     { sheetName: '居住費の詳細', cell: 'H5', code: '居住費控除_4', kind: 'TEXT', transform: asText },
     { sheetName: '居住費の詳細', cell: 'H7', code: '同居人の人数', kind: 'NUMBER', transform: asNumber },
     // J2=IF(M3=0,"無","有")。「有」のときだけマーカー文字を入れる（居住費控除_無 は存在しない）。
@@ -77,11 +77,11 @@ export const APP55_MAPPING: AppMapping = {
     // 比較対象日本人
     { sheetName: '1-4', cell: 'D24', code: '比較日本人_の役職_職務内容_責任の程度', kind: 'TEXT', transform: asText },
     { sheetName: '1-4', cell: 'E26', code: '比較日本人_年齢', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-4', cell: 'H26', code: '比較日本人_性別', kind: 'CHECK_BOX', transform: checkboxFromText(性別_CHECK) },
+    { sheetName: '1-4', cell: 'H26', code: '比較日本人_性別', kind: 'CHECK_BOX', transform: checkboxFromTextExplicit(性別_CHECK) },
     { sheetName: '1-4', cell: 'K26', code: '比較日本人_経験年数', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-4', cell: 'E28', code: '比較日本人_月給', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-4', cell: 'K28', code: '比較日本人_時間給', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-4', cell: 'D30', code: '比較日本人_規定の有無', kind: 'CHECK_BOX', transform: checkboxFromText(規定有無_CHECK) },
+    { sheetName: '1-4', cell: 'D30', code: '比較日本人_規定の有無', kind: 'CHECK_BOX', transform: checkboxFromTextExplicit(規定有無_CHECK) },
     { sheetName: '1-4', cell: 'E32', code: '比較日本人_規定月給', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-4', cell: 'K32', code: '比較日本人_規定時間給', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-4', cell: 'D33', code: '比較日本人_報酬額と同等以上であると考える理由', kind: 'TEXT', transform: asText },
@@ -90,11 +90,11 @@ export const APP55_MAPPING: AppMapping = {
     // 最も近い職務の日本人
     { sheetName: '1-4', cell: 'D49', code: '近い日本人の役職_職務内容_責任の程度', kind: 'TEXT', transform: asText },
     { sheetName: '1-4', cell: 'E51', code: '近い日本人_年齢', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-4', cell: 'H51', code: '近い日本人_性別', kind: 'CHECK_BOX', transform: checkboxFromText(性別_CHECK) },
+    { sheetName: '1-4', cell: 'H51', code: '近い日本人_性別', kind: 'CHECK_BOX', transform: checkboxFromTextExplicit(性別_CHECK) },
     { sheetName: '1-4', cell: 'K51', code: '近い日本人_経験年数', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-4', cell: 'E53', code: '近い日本人_月給', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-4', cell: 'K53', code: '近い日本人_時間給', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-4', cell: 'D55', code: '近い日本人_規定の有無', kind: 'CHECK_BOX', transform: checkboxFromText(規定有無_CHECK) },
+    { sheetName: '1-4', cell: 'D55', code: '近い日本人_規定の有無', kind: 'CHECK_BOX', transform: checkboxFromTextExplicit(規定有無_CHECK) },
     { sheetName: '1-4', cell: 'E57', code: '近い日本人_規定月給', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-4', cell: 'K57', code: '近い日本人_規定時間給', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-4', cell: 'D58', code: '近い日本人_報酬額と同等以上であると考える理由', kind: 'TEXT', transform: asText },
@@ -106,16 +106,13 @@ export const APP55_MAPPING: AppMapping = {
 
     // ── 1-6別紙（賃金区分・時給換算・控除）───────────────────
     // 「１．基本賃金」＝ kintone の 月給金額/日給金額/時間給金額 の唯一の出所。
-    // 賃金区分の CHECK_BOX は「明示チェック(C5/K5/T5)」と「金額の有無(F5/N5/W5)」の OR 合成。
-    { sheetName: '1-6別紙', cell: 'C5', code: '月給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    // 賃金区分は明示チェックだけを反映する。OFF は [] を送り、既存値・既定値を解除する。
+    { sheetName: '1-6別紙', cell: 'C5', code: '月給', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6別紙', cell: 'F5', code: '月給金額', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6別紙', cell: 'F5', code: '月給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6別紙', cell: 'K5', code: '日給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6別紙', cell: 'K5', code: '日給', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6別紙', cell: 'N5', code: '日給金額', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6別紙', cell: 'N5', code: '日給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6別紙', cell: 'T5', code: '時間給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6別紙', cell: 'T5', code: '時間給', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6別紙', cell: 'W5', code: '時間給金額', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6別紙', cell: 'W5', code: '時間給', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6別紙', cell: 'R6', code: '_1_4_1_1時間あたりの金額', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6別紙', cell: 'R7', code: '_1_4_2_１ヶ月あたりの金額', kind: 'NUMBER', transform: asNumber },
 
@@ -126,8 +123,8 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6別紙', cell: 'S24', code: '_4_d_控除額', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6別紙', cell: 'S25', code: '_4_e_控除額', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6別紙', cell: 'S26', code: '_4_f_控除額', kind: 'NUMBER', transform: asNumber },
-    // 費目名の定型ラベル C26 は転記しない。過去の誤転記を再アップロードで消せるよう空文字を明示送信する。
-    { sheetName: '1-6別紙', cell: 'C26', code: '_4_f_控除額_備考', kind: 'TEXT', transform: constantText('') },
+    // 費目名の定型ラベル C26 ではなく、備考入力欄 J26（例: 実費）を転記する。
+    { sheetName: '1-6別紙', cell: 'J26', code: '_4_f_控除額_備考', kind: 'TEXT', transform: asTextOrEmpty },
     // S18(_3_支払概算額) / U30(_4_控除額合計) は CALC → 転記しない。
 
     // ── 1-6（割増率・締切/支払日・各種チェック・保険）──────────
@@ -143,40 +140,39 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'J100', code: '_1_賃金支払日', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'Q100', code: '_2_賃金支払日', kind: 'TEXT', transform: asText },
 
-    // 締切/支払の「毎月」は常に ON（固定）。
-    { sheetName: '1-6', cell: 'H99', code: '_1賃金締切日_毎月', kind: 'CHECK_BOX', transform: checkboxAlways(CHECK_ON) },
-    { sheetName: '1-6', cell: 'O99', code: '_7_4_2_1_毎月', kind: 'CHECK_BOX', transform: checkboxAlways(CHECK_ON) },
-    { sheetName: '1-6', cell: 'H100', code: '_1賃金支払_毎月', kind: 'CHECK_BOX', transform: checkboxAlways(CHECK_ON) },
-    { sheetName: '1-6', cell: 'O100', code: '_2_毎月_賃金支払日', kind: 'CHECK_BOX', transform: checkboxAlways(CHECK_ON) },
+    { sheetName: '1-6', cell: 'H99', code: '_1賃金締切日_毎月', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'O99', code: '_7_4_2_1_毎月', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'H100', code: '_1賃金支払_毎月', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'O100', code: '_2_毎月_賃金支払日', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
 
-    { sheetName: '1-6', cell: 'H101', code: '_7_6_1_口座振替', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'O101', code: '_7_6_2_通貨払', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'O102', code: '_7_7_1_控除無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'Q102', code: '_7_7_2_控除有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'H101', code: '_7_6_1_口座振替', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'O101', code: '_7_6_2_通貨払', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'O102', code: '_7_7_1_控除無', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'Q102', code: '_7_7_2_控除有', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
 
     // 8.昇給 / 9.賞与 / 10.退職金（行103〜105）【2026-08-13 修正】
     // 「有」チェック=E列、「無」チェック=X列、「時期，金額等」=J列（J103:V105 の結合枠）。
     // ①『無』は Y103（"無" というラベル文字が入った定型セル）を読んでいたため常に ON になっていた
     //   → X103 に修正。②企業は有無のチェックを付けず「時期，金額等」だけ書くことが多いので、
     //   記載があれば『有』を ON にする（E列チェックと OR 合成）。『無』は下の derived で抑止する。
-    { sheetName: '1-6', cell: 'E103', code: '_7_8_1_昇給有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'E103', code: '_7_8_1_昇給有', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'J103', code: '_7_8_1_昇給有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'J103', code: '_7_8_3_昇給有の時期金額等', kind: 'TEXT', transform: asText },
-    { sheetName: '1-6', cell: 'E104', code: '_7_9_1_賞与有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'E104', code: '_7_9_1_賞与有', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'J104', code: '_7_9_1_賞与有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'J104', code: '_7_9_1_賞与有の時期金額等', kind: 'TEXT', transform: asText },
-    { sheetName: '1-6', cell: 'E105', code: '_7_10_1_退職金有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'E105', code: '_7_10_1_退職金有', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'J105', code: '_7_10_1_退職金有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'J105', code: '_7_10_3_退職金有の時期金額等', kind: 'TEXT', transform: asText },
     // 11. 休業手当・健康診断日（行106/115/116）は企業入力対象外。
 
-    { sheetName: '1-6', cell: 'K113', code: '_9_1_1_厚生年金', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'O113', code: '_9_1_2_健康保険', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'S113', code: '_9_1_3_雇用保険', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'V113', code: '_9_1_4_労災保険', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'K114', code: '_9_1_5_国民年金', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'O114', code: '_9_1_6_国民健康保険', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'S114', code: '_9_1_7_その他', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'K113', code: '_9_1_1_厚生年金', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'O113', code: '_9_1_2_健康保険', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'S113', code: '_9_1_3_雇用保険', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'V113', code: '_9_1_4_労災保険', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'K114', code: '_9_1_5_国民年金', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'O114', code: '_9_1_6_国民健康保険', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'S114', code: '_9_1_7_その他', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'U114', code: '_9_1_8_その他の内容', kind: 'TEXT', transform: asText },
     // 健康診断「その後 ○○ ごとに実施」。結合セル T116:X116 のアンカーを文字列で転記する。
     { sheetName: '1-6', cell: 'T116', code: '_9_2_3_その後の頻度', kind: 'TEXT', transform: asText },
@@ -184,7 +180,7 @@ export const APP55_MAPPING: AppMapping = {
     // ══════════════════════════════════════════════════════════════════════
     // 雇用条件書「1-6」本体 v5追加（2026-08-04）: 契約更新／労働時間／休日／休暇。
     // 出典=v1下書き(docs/specs/...mapping-draft.md)のフィールドコード＋値変換 × 表示シート1-6の入力セル。
-    // チェックは各項目が独立の True/False セル（checkboxOn）。⚠️=非結合セル or 割当が要確認。
+    // チェックは各項目が独立の True/False セル（checkboxExplicit）。⚠️=非結合セル or 割当が要確認。
     // 契約期間開始/終了日は「年/月/日」の3セル分割 → derived で1つの日付に合成（後述の derived[]）。
     // 更新上限の有無/最多更新回数/通算年数(契約_年)は ■/□マーカー方式で実装済（下記Ⅰ更新上限）。
     // 未実装（要判断・別途）: 契約締結日・無期転換(無期条件変更_有/無)・
@@ -194,25 +190,26 @@ export const APP55_MAPPING: AppMapping = {
 
     // 契約の更新の有無(自動更新/更新あり得る/更新しない)は事業所(OFID)ルックアップの自動供給＝書込ロックのため除外。
     // 更新の判断基準（「更新する場合があり得る」時の基準6項目＋その他内容）は書込可なので転記する。
-    { sheetName: '1-6', cell: 'B22', code: '_1_2_2_1_契約期間満了時の業務量', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'K22', code: '_1_2_2_2_労働者の勤務成績態度', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'T22', code: '_1_2_2_3_労働者の業務遂行能力', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'B23', code: '_1_2_2_4_会社の経営状況', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'K23', code: '_1_2_2_5_従事業務の進捗状況', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'T23', code: '_1_2_2_6_その他', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    // 未選択は [] を送り、以前の転記値を残さない。
+    { sheetName: '1-6', cell: 'B22', code: '_1_2_2_1_契約期間満了時の業務量', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'K22', code: '_1_2_2_2_労働者の勤務成績態度', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'T22', code: '_1_2_2_3_労働者の業務遂行能力', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'B23', code: '_1_2_2_4_会社の経営状況', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'K23', code: '_1_2_2_5_従事業務の進捗状況', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'T23', code: '_1_2_2_6_その他', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'V23', code: '_1_2_2_6_1_その他の場合その内容', kind: 'TEXT', transform: asText },
 
-    // ── Ⅰ 更新上限の有無（■/□マーカー。セルが「■」のときON＝checkboxFromText(['■'])。□や空はOFF）──
+    // ── Ⅰ 更新上限の有無（■/□マーカー。□や空は既存値を明示的に解除）──
     // 特定技能は通常「有・通算5年」。有無は独立マーカー（K25=無マーカー / M25=有マーカー）。
-    { sheetName: '1-6', cell: 'M25', code: '更新上限_有', kind: 'CHECK_BOX', transform: checkboxFromText(CHECK_ON) },
-    { sheetName: '1-6', cell: 'K25', code: '更新上限_無', kind: 'CHECK_BOX', transform: checkboxFromText(CHECK_ON) },
+    { sheetName: '1-6', cell: 'M25', code: '更新上限_有', kind: 'CHECK_BOX', transform: checkboxFromTextExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'K25', code: '更新上限_無', kind: 'CHECK_BOX', transform: checkboxFromTextExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'R25', code: '最多更新回数', kind: 'NUMBER', transform: asNumber }, // 「回まで」ラベルの左セル＝入力（単位ラベル左の規則）
     { sheetName: '1-6', cell: 'X25', code: '契約_年', kind: 'NUMBER', transform: asNumber }, // 通算契約期間の年数（既定5）
 
     // ── Ⅱ 就業の場所（直接雇用チェックのみ）──
     // 事業所名/郵便番号/住所/連絡先は app55の事業所(OFID)ルックアップが app36 から自動供給する
     // 書込ロック項目のため転記しない。派遣雇用(P32)は受け皿フィールド無し。
-    { sheetName: '1-6', cell: 'B32', code: '_2_1_1_直接雇用', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'B32', code: '_2_1_1_直接雇用', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
 
     // ── Ⅳ 労働時間 1.始業・終業（始業 F45時/H45分＝実フォームで確認済。終業 M45時/O45分も同パターン）──
     { sheetName: '1-6', cell: 'F45', code: '_4_1_1_1_時', kind: 'NUMBER', transform: asNumber },
@@ -223,9 +220,9 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'W45', code: '_4_1_3_1_時間', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6', cell: 'Z45', code: '_4_1_3_2_分', kind: 'NUMBER', transform: asNumber },
     // 2.制度（変形労働時間制フラグ＋単位／交代制フラグ。交代制の勤務時間サブテーブルは未実装）
-    { sheetName: '1-6', cell: 'B48', code: '_4_1_2_1_変形労働時間制', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'B48', code: '_4_1_2_1_変形労働時間制', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'J48', code: '_4_1_2_1_1_変形労働性の時間', kind: 'TEXT', transform: asText },
-    { sheetName: '1-6', cell: 'B53', code: '_4_1_2_2_交代制', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'B53', code: '_4_1_2_2_交代制', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     // 3.休憩時間（日勤/夜勤の分数）
     { sheetName: '1-6', cell: 'G66', code: '日勤_休憩時間', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6', cell: 'O66', code: '夜勤_休憩時間', kind: 'NUMBER', transform: asNumber },
@@ -236,8 +233,8 @@ export const APP55_MAPPING: AppMapping = {
     // → コピー元である app36 側に転記する（mappings/app36.ts）。app36 更新後に app55 を OFID 付きで
     //   更新するとルックアップが再実行され、ここのコピー先も最新化される（run-transcription.ts）。
     // 6.所定時間外労働の有無
-    { sheetName: '1-6', cell: 'I70', code: '_4_5_1_所定時間外労働有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'L70', code: '_4_5_2_所定時間外労働無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'I70', code: '_4_5_1_所定時間外労働有', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'L70', code: '_4_5_2_所定時間外労働無', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     // 就業規則の条番号（行72）。入力セルは条件付き書式の対象 L/O/R/U/W/Z。
     { sheetName: '1-6', cell: 'L72', code: '就業規則1_0', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'O72', code: '就業規則1_1', kind: 'TEXT', transform: asText },
@@ -253,8 +250,8 @@ export const APP55_MAPPING: AppMapping = {
     // _5_3_年間合計休日日数 は事業所(OFID)ルックアップの自動供給＝書込ロックのため、
     // app36「事業所マスタ」の `年間合計休日日数` に転記する（mappings/app36.ts）。
     // 非定例日: 週/月チェック＋日数＋その他（⚠️その他の定例/非定例割当は要確認）
-    { sheetName: '1-6', cell: 'E76', code: '_5_2_1_1_週あたり', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'H76', code: '_5_2_1_2_月あたり', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'E76', code: '_5_2_1_1_週あたり', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'H76', code: '_5_2_1_2_月あたり', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'L76', code: '_5_2_1_3_非定例日', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'S76', code: '_5_2_2_その他休日', kind: 'TEXT', transform: asText },
     // 就業規則の条番号（行77）。各範囲の開始・終了を同じ連番の 1/2 フィールドへ入れる。
@@ -268,8 +265,8 @@ export const APP55_MAPPING: AppMapping = {
     // ── Ⅵ 休暇 ──
     // 1.年次有給休暇: 6か月継続の付与日数＋6か月未満の有無/経過月数/付与日数
     { sheetName: '1-6', cell: 'N79', code: '_6_1_1_６ヶ月継続勤務した場合', kind: 'NUMBER', transform: asNumber },
-    { sheetName: '1-6', cell: 'O80', code: '_6_1_2_1_有給休暇有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'Q80', code: '_6_1_2_2_有給休暇無', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
+    { sheetName: '1-6', cell: 'O80', code: '_6_1_2_1_有給休暇有', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+    { sheetName: '1-6', cell: 'Q80', code: '_6_1_2_2_有給休暇無', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'T80', code: '_6_1_2_3_1_経過月数', kind: 'NUMBER', transform: asNumber },
     { sheetName: '1-6', cell: 'X80', code: '_6_1_2_3_2_付与日数', kind: 'NUMBER', transform: asNumber },
     // 2.その他の休暇（有給/無給）
@@ -333,6 +330,7 @@ export const APP55_MAPPING: AppMapping = {
       keyCol: 'D',
       columns: [
         { subCode: 'その他控除項目', col: 'D', kind: 'TEXT', transform: asText },
+        { subCode: 'その他控除_備考', col: 'J', kind: 'TEXT', transform: asText },
         { subCode: 'その他の控除額', col: 'S', kind: 'NUMBER', transform: asNumber },
       ],
     },
