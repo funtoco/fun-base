@@ -66,6 +66,9 @@ on:
       visa_case_record_json:
         description: 'app296の1レコードJSON（kintone API/MCP形式）'
         required: false
+      sync_connector_id:
+        description: 'Optional connector UUID for targeted people/visas sync'
+        required: false
       people_cleanup_apply:
         description: 'Apply people cleanup deletes. Leave false for dry-run.'
         required: false
@@ -109,7 +112,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           echo "🕐 Starting people sync at $(date)"
-          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type people
+          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type people${{ github.event.inputs.sync_connector_id && format(' --connector-id {0}', github.event.inputs.sync_connector_id) || '' }}
 
   sync-visas:
     if: github.event_name == 'schedule' && github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch' && (github.event.inputs.sync_type == 'visas' || github.event.inputs.sync_type == 'both')
@@ -137,7 +140,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           echo "🕐 Starting visas sync at $(date)"
-          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type visas
+          pnpm dlx tsx@4.20.3 scripts/sync-by-type.ts --type visas${{ github.event.inputs.sync_connector_id && format(' --connector-id {0}', github.event.inputs.sync_connector_id) || '' }}
 
   sync-interview-records:
     if: github.event_name == 'schedule' && github.event.schedule == '0 0 * * *' || github.event_name == 'workflow_dispatch' && github.event.inputs.sync_type == 'interview_records'
