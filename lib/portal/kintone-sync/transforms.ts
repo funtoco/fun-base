@@ -19,6 +19,24 @@ export function asText(value: unknown): string | null {
 }
 
 /**
+ * 文字列として取り込むが、ハイフンだけの値は「記載なし」と扱う。
+ * 退職金の時期・金額等欄で、Excel がプレースホルダーとして '-' を出すケースに限定して使う。
+ */
+export function asTextExceptDash(value: unknown): string | null {
+  const text = asText(value)
+  return text === '-' ? null : text
+}
+
+/**
+ * 文字列として取り込むが、ハイフンだけなら既存値を消すため空文字を返す。
+ * 「-」が未記載を表すことが確認できた項目だけで使う。
+ */
+export function asTextClearingDash(value: unknown): string | null {
+  const text = asText(value)
+  return text === '-' ? '' : text
+}
+
+/**
  * 数値として取り込む。カンマ・空白・通貨記号（¥/￥/円）・単位（人）を除去して parse する。
  * 空文字や数値化できない値は null。
  */
@@ -38,6 +56,21 @@ export function asNumber(value: unknown): number | null {
   }
   const num = Number(cleaned)
   return Number.isFinite(num) ? num : null
+}
+
+/**
+ * 3桁区切りのドットを整数の桁区切りとして扱う。
+ * 例: '138.019.426' -> 138019426。一般的な小数 '0.2' は asNumber と同じく 0.2。
+ */
+export function asNumberWithDotThousands(value: unknown): number | null {
+  if (typeof value !== 'string') {
+    return asNumber(value)
+  }
+  const text = value.trim()
+  if (/^[+-]?\d{1,3}(?:\.\d{3})+$/.test(text)) {
+    return asNumber(text.replace(/\./g, ''))
+  }
+  return asNumber(value)
 }
 
 function pad2(n: number): string {
@@ -82,7 +115,7 @@ export function asDate(value: unknown): string | null {
 /**
  * 「チェックされている／値が存在する」とみなせるか。
  * - boolean はそのまま。number は 0 以外を true。
- * - 文字は空/『false/0/no/off/×/✕/✗/なし』を false、それ以外を true。
+ * - 文字は空/『□/false/0/no/off/×/✕/✗/なし』を false、それ以外を true。
  * 賃金区分の CHECK_BOX を金額セルの有無から自動判定する用途にも使う（例: 月給金額あり→月給ON）。
  */
 export function isCheckedPresence(value: unknown): boolean {
@@ -99,7 +132,7 @@ export function isCheckedPresence(value: unknown): boolean {
   if (text === '') {
     return false
   }
-  return !/^(false|0|no|off|×|✕|✗|なし)$/i.test(text)
+  return !/^(□|false|0|no|off|×|✕|✗|なし)$/i.test(text)
 }
 
 /**
@@ -130,6 +163,23 @@ export function checkboxFromText(options: string[]): CellTransform {
     }
     const matched = options.find((option) => option === text)
     return matched ? [matched] : null
+  }
+}
+
+/**
+ * Excel のチェックマーカーを kintone の CHECK_BOX 値へ変換する。
+ * `■` は ON、`□` は既存値を確実に消す空配列、空セルは未指定として null。
+ */
+export function checkboxFromMarker(onValues: string[]): CellTransform {
+  return (value) => {
+    const text = asText(value)
+    if (text === '■') {
+      return [...onValues]
+    }
+    if (text === '□') {
+      return []
+    }
+    return null
   }
 }
 
@@ -165,12 +215,17 @@ export function keepIfEquals(expected: string, out: string = expected): CellTran
  * ここで『無』が同時に ON になるのを防ぐ。
  */
 export function checkboxOffWhenNoted(
-  onValues: string[]
+  onValues: string[],
+  textTransform: (value: unknown) => string | null = asText
 ): (values: unknown[]) => string[] | null {
   return (values) => {
-    // 「時期・金額等」に記載があれば『無』は立てない。
-    if (asText(values[1]) !== null) {
-      return null
+    // 「時期・金額等」に記載があれば『無』を明示的に OFF にする。
+    if (textTransform(values[1]) !== null) {
+      return []
+    }
+    // 明示的な未チェックは、再取込時に既存値を消せるよう空配列を返す。
+    if (asText(values[0]) === '□') {
+      return []
     }
     return isCheckedPresence(values[0]) ? [...onValues] : null
   }

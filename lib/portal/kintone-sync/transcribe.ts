@@ -3,6 +3,7 @@ import { openWorkbook, workbookCellReader } from './excel-reader'
 import { APP34_MAPPING } from './mappings/app34'
 import { APP36_MAPPING } from './mappings/app36'
 import { APP55_MAPPING } from './mappings/app55'
+import { asText } from './transforms'
 import type { KintoneWriteClient } from './kintone-write-client'
 import type { AppMapping, CellReader, KintoneRecordPayload } from './types'
 
@@ -53,11 +54,13 @@ export interface TranscribeWorkbookResult {
   /** app55 の主ソースシート。 */
   app55Sheet: string
   /**
-   * 事業所(app36)の payload（所定労働時間数・所定労働日数・年間合計休日日数のみ）。
-   * app55 側はこれらが OFID ルックアップのコピー先＝書込ロックのため、コピー元の app36 に書く。
+   * 事業所(app36)の payload（事業所概要・保険番号・契約更新・相談窓口・確認場所・労働時間系）。
+   * app55 側の書込ロック項目を含むため、コピー元の app36 に書く。
    * Excel に記入が無ければ空オブジェクト（＝書込不要）。
    */
   app36Record: KintoneRecordPayload
+  /** `【介護分野】事業所概要1:B8` の事業所名。複数事業所時の安全な反映先照合に使う。 */
+  app36OfficeName: string | null
 }
 
 /**
@@ -222,10 +225,7 @@ export function buildApp55Record(getCell: CellReader): KintoneRecordPayload {
   return record
 }
 
-/**
- * app36（マスタ_事業所）の payload を生成する（労働時間系のみ）。
- * 実際の書込は案件に紐づく事業所（複数可）へ run-transcription が fan-out する。
- */
+/** app36（マスタ_事業所）の payload を生成する。実際の書込は run-transcription が fan-out する。 */
 export function buildApp36Record(getCell: CellReader): KintoneRecordPayload {
   return buildRecord(getCell, APP36_MAPPING)
 }
@@ -255,6 +255,10 @@ export async function transcribeWorkbook(
   const app34 = await transcribeApp34(getCell, dryRun, client, targets.app34RecordId ?? null)
   const app55Record = buildApp55Record(getCell)
   const app36Record = buildApp36Record(getCell)
+  // B8 は C29 の数式参照でキャッシュ値が無い場合があるため、直接入力元を優先する。
+  const app36OfficeName =
+    asText(getCell('はじめに', 'C29')) ??
+    asText(getCell('【介護分野】事業所概要1', 'B8'))
 
-  return { app34, app55Record, app55Sheet: '1-4', app36Record }
+  return { app34, app55Record, app55Sheet: '1-4', app36Record, app36OfficeName }
 }
