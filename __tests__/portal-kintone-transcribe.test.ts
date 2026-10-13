@@ -29,7 +29,9 @@ import {
 } from '@/lib/portal/kintone-sync/case-hub'
 import {
   buildKoyouRowStatuses,
+  isApp36TargetAmbiguous,
   loadApp55Ofids,
+  selectApp36TargetRecordIds,
 } from '@/lib/portal/kintone-sync/run-transcription'
 import type {
   KintoneReadRecord,
@@ -76,12 +78,14 @@ describe('transforms: asNumber / asText / asDate', () => {
 
 // ── transforms（CHECK_BOX / RADIO / 有無 / 固定）────────────────────────
 describe('transforms: checkbox / radio / 有無 / 固定', () => {
-  it('checkboxOn: 真偽true・値ありで onValues、false/空/0で null', () => {
+  it('checkboxOn: 真偽true・■・値ありで onValues、false/□/空/0で null', () => {
     const t = checkboxOn(['■'])
     expect(t(true)).toEqual(['■'])
+    expect(t('■')).toEqual(['■'])
     expect(t(200000)).toEqual(['■']) // 金額ありで自動ON
     expect(t('あり')).toEqual(['■'])
     expect(t(false)).toBeNull()
+    expect(t('□')).toBeNull()
     expect(t(0)).toBeNull()
     expect(t('')).toBeNull()
     expect(t(null)).toBeNull()
@@ -277,6 +281,22 @@ describe('APP34_MAPPING: 代表行が期待 payload になる', () => {
     const record = buildRecord(getCell, APP34_MAPPING)
     expect(record.年間売上金額_直近年度_).toEqual({ value: 77777 })
   })
+
+  it('年間売上はドット3桁区切りを整数として payload にする', () => {
+    const fromIntro = buildRecord(
+      cellsReader({ 'はじめに': { E18: '138.019.426' } }),
+      APP34_MAPPING
+    )
+    expect(fromIntro.年間売上金額_直近年度_).toEqual({ value: 138019426 })
+
+    const fallback = buildRecord(
+      cellsReader({ 'はじめに': { E18: '' }, '1-11-1': { F20: '138.019.426' } }),
+      APP34_MAPPING
+    )
+    expect(fallback.年間売上金額_直近年度_).toEqual({ value: 138019426 })
+
+    expect(asNumber('0.2')).toBe(0.2)
+  })
 })
 
 // ── app55: 確定版マッピングの代表行 ────────────────────────────────────
@@ -298,7 +318,7 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
         D27: '(g)組合費', S27: 1000,
       },
       '1-6': {
-        H99: false, // 締切「毎月」は固定Trueなのでセルに関係なくON
+        H99: '■',
         E103: true, // 昇給有
       },
       '【介護分野】事業所概要1': { A19: '特記事項テスト' },
@@ -322,7 +342,7 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     expect(record.書類に反映する_作成日_署名日).toEqual({ value: '2026-07-29' })
     // (f)その他の備考は、固定ラベル「水道光熱費」を入れず空欄に戻す
     expect(record._4_f_控除額_備考).toEqual({ value: '' })
-    // 締切「毎月」は固定True
+    // 締切「毎月」はセル記号に従う
     expect(record._1賃金締切日_毎月).toEqual({ value: ['■'] })
     // 昇給有 ON
     expect(record._7_8_1_昇給有).toEqual({ value: ['■'] })
@@ -368,6 +388,17 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     expect('時間給' in record).toBe(false)
   })
 
+  it('締切日と支払日の毎月4項目はセル記号に従い□をOFFにする', () => {
+    const record = buildRecord(
+      cellsReader({ '1-6': { H99: '■', H100: '■', O99: '□', O100: '□' } }),
+      APP55_MAPPING
+    )
+    expect(record._1賃金締切日_毎月).toEqual({ value: ['■'] })
+    expect(record._1賃金支払_毎月).toEqual({ value: ['■'] })
+    expect(record._7_4_2_1_毎月).toEqual({ value: [] })
+    expect(record._2_毎月_賃金支払日).toEqual({ value: [] })
+  })
+
   it('昇給/賞与/退職金: 有無が未チェックでも「時期，金額等」に記載があれば 有 ON・無 OFF', () => {
     const getCell = cellsReader({
       '1-6': {
@@ -380,9 +411,9 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     expect(record._7_8_1_昇給有).toEqual({ value: ['■'] })
     expect(record._7_9_1_賞与有).toEqual({ value: ['■'] })
     expect(record._7_10_1_退職金有).toEqual({ value: ['■'] })
-    expect('_7_8_2_昇給無' in record).toBe(false)
-    expect('_7_9_2_賞与無' in record).toBe(false)
-    expect('_7_10_2_退職金無' in record).toBe(false)
+    expect(record._7_8_2_昇給無).toEqual({ value: [] })
+    expect(record._7_9_2_賞与無).toEqual({ value: [] })
+    expect(record._7_10_2_退職金無).toEqual({ value: [] })
   })
 
   it('昇給/賞与/退職金: 無チェックのみ（時期金額等が空）なら 無 ON・有 OFF', () => {
@@ -394,6 +425,41 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
     expect(record._7_9_2_賞与無).toEqual({ value: ['■'] })
     expect(record._7_10_2_退職金無).toEqual({ value: ['■'] })
     expect('_7_8_1_昇給有' in record).toBe(false)
+  })
+
+  it('退職金は有□・無■・詳細ハイフンなら有OFF、無ON、詳細欄なしにする', () => {
+    const record = buildRecord(
+      cellsReader({ '1-6': { E105: '□', X105: '■', J105: '-' } }),
+      APP55_MAPPING
+    )
+    expect(record._7_10_2_退職金無).toEqual({ value: ['■'] })
+    expect(record._7_10_1_退職金有).toEqual({ value: [] })
+    expect(record._7_10_3_退職金有の時期金額等).toEqual({ value: '' })
+  })
+
+  it('未チェック記号は休日・有給・保険の既存チェックを消す値にする', () => {
+    const record = buildRecord(
+      cellsReader({
+        '1-6': {
+          E76: '■', H76: '□',
+          O80: '□', Q80: '■',
+          K113: '■', O113: '■', S113: '■', V113: '■',
+          K114: '□', O114: '□', S114: '□',
+        },
+      }),
+      APP55_MAPPING
+    )
+    expect(record._5_2_1_1_週あたり).toEqual({ value: ['■'] })
+    expect(record._5_2_1_2_月あたり).toEqual({ value: [] })
+    expect(record._6_1_2_1_有給休暇有).toEqual({ value: [] })
+    expect(record._6_1_2_2_有給休暇無).toEqual({ value: ['■'] })
+    expect(record._9_1_1_厚生年金).toEqual({ value: ['■'] })
+    expect(record._9_1_2_健康保険).toEqual({ value: ['■'] })
+    expect(record._9_1_3_雇用保険).toEqual({ value: ['■'] })
+    expect(record._9_1_4_労災保険).toEqual({ value: ['■'] })
+    expect(record._9_1_5_国民年金).toEqual({ value: [] })
+    expect(record._9_1_6_国民健康保険).toEqual({ value: [] })
+    expect(record._9_1_7_その他).toEqual({ value: [] })
   })
 
   it('昇給/賞与/退職金: 何も書かれていなければ 有・無 とも出さない（Y103のラベル誤読の回帰）', () => {
@@ -489,8 +555,8 @@ describe('APP55_MAPPING: 代表行が期待 payload になる', () => {
   })
 })
 
-// ── app36: 所定労働時間数など（app55では書込ロックのためマスタ側に書く）────────
-describe('APP36_MAPPING: 労働時間系を事業所マスタへ転記する', () => {
+// ── app36: 事業所マスタへ転記する項目（app55では書込ロックの項目を含む）────────
+describe('APP36_MAPPING: 事業所マスタへ転記する', () => {
   it('3.所定労働時間数 / 4.所定労働日数 / 年間合計休日日数 を payload にする', () => {
     const getCell = cellsReader({
       '1-6': {
@@ -526,6 +592,46 @@ describe('APP36_MAPPING: 労働時間系を事業所マスタへ転記する', (
       所定労働時間_週_時間: { value: 40 },
       所定労働時間_週_分: { value: 0 },
     })
+  })
+
+  it('事業所概要・保険番号・契約更新・相談窓口・確認場所を payload にする', () => {
+    const record = buildRecord(
+      cellsReader({
+        '【介護分野】事業所概要1': {
+          B7: 'フントコカイゴ',
+          B10: 12,
+          B14: 1,
+          E14: 2,
+          G14: 3,
+          I14: 4,
+        },
+        'はじめに': {
+          E29: '01234567890123',
+          G29: '98765432109',
+        },
+        '1-6': {
+          B20: '■',
+          K20: '□',
+          T20: '■',
+          W118: '03-1234-5678',
+          P123: '事業所会議室',
+        },
+      }),
+      APP36_MAPPING
+    )
+    expect(record.officeNameFurigana).toEqual({ value: 'フントコカイゴ' })
+    expect(record._1号特定技能外国人の人数).toEqual({ value: 12 })
+    expect(record.数値_4).toEqual({ value: 1 })
+    expect(record.数値_5).toEqual({ value: 2 })
+    expect(record.数値_7).toEqual({ value: 3 })
+    expect(record.数値_8).toEqual({ value: 4 })
+    expect(record.laborInsuranceNumber).toEqual({ value: '01234567890123' })
+    expect(record.EmploymentInsuranceApplicableOfficeNumber).toEqual({ value: '98765432109' })
+    expect(record.自動的に更新).toEqual({ value: ['■'] })
+    expect(record.更新する場合があり得る).toEqual({ value: [] })
+    expect(record.契約更新しない).toEqual({ value: ['■'] })
+    expect(record.相談窓口連絡先_電話番号).toEqual({ value: '03-1234-5678' })
+    expect(record.確認場所_方法).toEqual({ value: '事業所会議室' })
   })
 
   it('app55 側には所定労働時間数系を出さない（書込ロックのため）', () => {
@@ -722,6 +828,32 @@ describe('syncStatusLabelForAction', () => {
 })
 
 // ── case-hub: app296 のリンク解決・ステータス書き戻し ──────────────────
+describe('app36の反映先事業所選択', () => {
+  const offices = [
+    { rowId: '1', app36RecordId: '101', officeName: 'サニープレイス京都八幡' },
+    { rowId: '2', app36RecordId: '102', officeName: '別の事業所' },
+  ]
+
+  it('紐付けが1件ならその事業所だけを選ぶ', () => {
+    expect([...selectApp36TargetRecordIds([offices[0]], null)]).toEqual(['101'])
+  })
+
+  it('複数紐付けではExcelの事業所名と一致する1件だけを選ぶ', () => {
+    expect([...selectApp36TargetRecordIds(offices, ' サニープレイス京都八幡 ')]).toEqual(['101'])
+  })
+
+  it('複数紐付けで名前が一致しなければ誤更新を避け、エラー対象と判断する', () => {
+    const selected = selectApp36TargetRecordIds(offices, '不明な事業所')
+    expect([...selected]).toEqual([])
+    expect(isApp36TargetAmbiguous(true, offices, selected)).toBe(true)
+
+    const noNameSelected = selectApp36TargetRecordIds(offices, null)
+    expect([...noNameSelected]).toEqual([])
+    expect(isApp36TargetAmbiguous(true, offices, noNameSelected)).toBe(true)
+    expect(isApp36TargetAmbiguous(false, offices, noNameSelected)).toBe(false)
+  })
+})
+
 describe('case-hub: loadCaseHubLinks / writeBackSyncStatus', () => {
   function hubRecord(): KintoneReadRecord {
     return {

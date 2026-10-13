@@ -9,6 +9,7 @@ import {
   type CaseHubLinks,
   type KoyouRowStatus,
   type KoyouTarget,
+  type OfficeTarget,
   type SyncStatus,
 } from './case-hub'
 import { loadApplicationWorkbook, APPLICATION_WORKBOOK_CODE } from './source'
@@ -48,6 +49,49 @@ export interface App36WriteResult {
   officeName: string | null
   /** action='error' 時のメッセージ。 */
   error?: string
+}
+
+function normalizeOfficeName(value: string | null): string | null {
+  if (!value) {
+    return null
+  }
+  const normalized = value.normalize('NFKC').replace(/\s+/g, '')
+  return normalized === '' ? null : normalized
+}
+
+/**
+ * Excel は「直近で就業予定の事業所」1件分なので、app36 の反映先も1件に絞る。
+ * 単一紐付けはその1件、複数紐付けは Excel の事業所名と一意に一致した1件だけを返す。
+ */
+export function selectApp36TargetRecordIds(
+  officeTargets: OfficeTarget[],
+  workbookOfficeName: string | null
+): Set<string> {
+  if (officeTargets.length === 1) {
+    const expected = normalizeOfficeName(workbookOfficeName)
+    const linked = normalizeOfficeName(officeTargets[0].officeName)
+    return expected && linked && expected !== linked
+      ? new Set()
+      : new Set([officeTargets[0].app36RecordId])
+  }
+  const expected = normalizeOfficeName(workbookOfficeName)
+  if (!expected) {
+    return new Set()
+  }
+  const matches = new Set(
+    officeTargets
+      .filter((target) => normalizeOfficeName(target.officeName) === expected)
+      .map((target) => target.app36RecordId)
+  )
+  return matches.size === 1 ? matches : new Set()
+}
+
+export function isApp36TargetAmbiguous(
+  hasApp36Values: boolean,
+  officeTargets: OfficeTarget[],
+  selectedRecordIds: Set<string>
+): boolean {
+  return hasApp36Values && officeTargets.length > 0 && selectedRecordIds.size === 0
 }
 
 /**
@@ -121,7 +165,7 @@ export interface RunCaseTranscriptionResult {
   app55Record: KintoneRecordPayload
   /** 雇用条件書(app55)を各人へ fan-out した結果（0件=紐付け無し）。 */
   app55Writes: App55WriteResult[]
-  /** app36 に送った payload（労働時間系のみ）。空なら Excel に記入が無い。 */
+  /** app36 に送った payload。空なら Excel に転記対象の記入が無い。 */
   app36Record: KintoneRecordPayload
   /** 事業所マスタ(app36)を各事業所へ fan-out した結果（0件=紐付け無し）。 */
   app36Writes: App36WriteResult[]
@@ -181,10 +225,28 @@ export async function runCaseTranscription(params: {
     // 所定労働時間数などは app55 では OFID ルックアップのコピー先＝書込ロックなので、
     // コピー元の app36 を先に最新化してから app55 を OFID 付きで更新し、コピーを再実行させる。
     const hasApp36Values = Object.keys(result.app36Record).length > 0
+    const app36TargetRecordIds = selectApp36TargetRecordIds(
+      officeTargets,
+      result.app36OfficeName
+    )
+    const app36TargetAmbiguous = isApp36TargetAmbiguous(
+      hasApp36Values,
+      officeTargets,
+      app36TargetRecordIds
+    )
     const app36Writes: App36WriteResult[] = []
     for (const target of officeTargets) {
-      if (!hasApp36Values) {
-        // Excel に労働時間の記入が無い＝マスタを触らない（既存値を消さない）。
+      if (app36TargetAmbiguous) {
+        app36Writes.push({
+          app36RecordId: target.app36RecordId,
+          action: 'error',
+          officeName: target.officeName,
+          error: `Excelの事業所名「${result.app36OfficeName ?? ''}」から反映先を一意に特定できません`,
+        })
+        continue
+      }
+      if (!hasApp36Values || !app36TargetRecordIds.has(target.app36RecordId)) {
+        // 転記値が無い、または複数事業所のうち Excel 対象外の事業所は触らない。
         app36Writes.push({
           app36RecordId: target.app36RecordId,
           action: 'skipped',
@@ -272,9 +334,13 @@ export async function runCaseTranscription(params: {
       // 事業所マスタは app296 に専用のステータス欄が無いため、ログ文字列で可視化する。
       const officeOk = app36Writes.filter((w) => w.action === 'update').length
       const officeErr = app36Writes.filter((w) => w.action === 'error').length
+      const officeErrors = app36Writes
+        .filter((w) => w.action === 'error' && w.error)
+        .map((w) => w.error as string)
+      const officeErrorDetail = [...new Set(officeErrors)].join(' / ')
       const officeLog = hasApp36Values
-        ? `事業所(app36)=${officeOk}件反映済・${officeErr}件エラー（計${app36Writes.length}事業所）`
-        : '事業所(app36)=対象なし（Excelに所定労働時間数等の記入なし）'
+        ? `事業所(app36)=${officeOk}件反映済・${officeErr}件エラー（計${app36Writes.length}事業所）${officeErrorDetail ? `: ${officeErrorDetail}` : ''}`
+        : '事業所(app36)=対象なし（Excelに事業所マスタ転記対象の記入なし）'
       try {
         await writeBackSyncStatus(client, params.kintoneCaseId, {
           companyStatus: syncStatusLabelForAction(result.app34.plan.action),
@@ -340,6 +406,8 @@ export interface AutoTranscribeSummary {
   app36Error: number
   /** 事業所マスタ(app36)の対象事業所数。 */
   app36Total: number
+  /** 事業所マスタ(app36)のエラー理由（重複除去済み）。 */
+  app36Errors: string[]
 }
 
 export interface MaybeAutoTranscribeResult {
@@ -399,6 +467,13 @@ export async function maybeAutoTranscribeOnUpload(params: {
       app36Ok: result.app36Writes.filter((w) => w.action === 'update').length,
       app36Error: result.app36Writes.filter((w) => w.action === 'error').length,
       app36Total: result.app36Writes.length,
+      app36Errors: [
+        ...new Set(
+          result.app36Writes
+            .filter((w) => w.action === 'error' && w.error)
+            .map((w) => w.error as string)
+        ),
+      ],
     },
   }
 }
