@@ -1,4 +1,4 @@
-import { asNumber, asText, checkboxOn } from '../transforms'
+import { asNumber, asNumberWithDotThousands, asText, checkboxOn } from '../transforms'
 import type { AppMapping } from '../types'
 
 /**
@@ -28,7 +28,7 @@ export const APP34_MAPPING: AppMapping = {
     { sheetName: 'はじめに', cell: 'E14', code: '法人番号_13桁_', kind: 'TEXT', transform: asText },
     { sheetName: 'はじめに', cell: 'E15', code: '数値_1', kind: 'NUMBER', transform: asNumber },
     // 年間売上: はじめに:E18 優先（先に列挙）→ 空なら 1-11-1:F20（後述）
-    { sheetName: 'はじめに', cell: 'E18', code: '年間売上金額_直近年度_', kind: 'NUMBER', transform: asNumber },
+    { sheetName: 'はじめに', cell: 'E18', code: '年間売上金額_直近年度_', kind: 'NUMBER', transform: asNumberWithDotThousands },
     { sheetName: 'はじめに', cell: 'E19', code: '数値_0', kind: 'NUMBER', transform: asNumber },
 
     // ── 1-11-1（3(1)離職状況：人数を文字列で格納）───────────
@@ -38,7 +38,7 @@ export const APP34_MAPPING: AppMapping = {
     { sheetName: '1-11-1', cell: 'P33', code: '外国人_非自発的離職者', kind: 'TEXT', transform: asText },
 
     // 決算状況/売上高（前年度）= 直近年度。はじめに:E18 が空のときのフォールバック。
-    { sheetName: '1-11-1', cell: 'F20', code: '年間売上金額_直近年度_', kind: 'NUMBER', transform: asNumber },
+    { sheetName: '1-11-1', cell: 'F20', code: '年間売上金額_直近年度_', kind: 'NUMBER', transform: asNumberWithDotThousands },
 
     // ── 1-11-1（責めに帰すべき事由による行方不明・該当/非該当）──
     { sheetName: '1-11-1', cell: 'Q34', code: '技能_該当あり', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },

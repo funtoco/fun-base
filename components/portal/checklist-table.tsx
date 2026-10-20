@@ -133,16 +133,29 @@ function RequirementRow({
         result as {
           autoTranscribe?: {
             triggered?: boolean
-            summary?: { dryRun: boolean; app55Ok: number; app55Error: number; app55Total: number }
+            summary?: {
+              dryRun: boolean
+              app55Ok: number
+              app55Error: number
+              app55Total: number
+              app36Ok: number
+              app36Error: number
+              app36Total: number
+              app36Errors: string[]
+            }
           }
         }
       ).autoTranscribe
       const s = auto?.summary
-      if (s && !s.dryRun && s.app55Error > 0) {
+      if (s && !s.dryRun && (s.app55Error > 0 || s.app36Error > 0)) {
+        const officeReason = s.app36Errors[0]
         toast({
           variant: 'destructive',
           title: '提出しました（一部の登録・連携に失敗）',
-          description: `内容を登録・連携しました（成功 ${s.app55Ok}件・エラー ${s.app55Error}件／計 ${s.app55Total}件）。`,
+          description:
+            `雇用条件書：成功 ${s.app55Ok}件・エラー ${s.app55Error}件、` +
+            `事業所：成功 ${s.app36Ok}件・エラー ${s.app36Error}件。` +
+            (officeReason ? ` ${officeReason}` : ''),
         })
       } else if (s && !s.dryRun) {
         toast({

@@ -2,6 +2,8 @@ import {
   asDate,
   asNumber,
   asText,
+  asTextClearingDash,
+  asTextExceptDash,
   asTextOrEmpty,
   checkboxExplicit,
   checkboxFromTextExplicit,
@@ -145,6 +147,7 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'H100', code: '_1賃金支払_毎月', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'O100', code: '_2_毎月_賃金支払日', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
 
+
     { sheetName: '1-6', cell: 'H101', code: '_7_6_1_口座振替', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'O101', code: '_7_6_2_通貨払', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'O102', code: '_7_7_1_控除無', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
@@ -162,8 +165,8 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'J104', code: '_7_9_1_賞与有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
     { sheetName: '1-6', cell: 'J104', code: '_7_9_1_賞与有の時期金額等', kind: 'TEXT', transform: asText },
     { sheetName: '1-6', cell: 'E105', code: '_7_10_1_退職金有', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
-    { sheetName: '1-6', cell: 'J105', code: '_7_10_1_退職金有', kind: 'CHECK_BOX', transform: checkboxOn(CHECK_ON) },
-    { sheetName: '1-6', cell: 'J105', code: '_7_10_3_退職金有の時期金額等', kind: 'TEXT', transform: asText },
+    { sheetName: '1-6', cell: 'J105', code: '_7_10_1_退職金有', kind: 'CHECK_BOX', transform: (value) => (asTextExceptDash(value) === null ? null : [...CHECK_ON]) },
+    { sheetName: '1-6', cell: 'J105', code: '_7_10_3_退職金有の時期金額等', kind: 'TEXT', transform: asTextClearingDash },
     // 11. 休業手当・健康診断日（行106/115/116）は企業入力対象外。
 
     { sheetName: '1-6', cell: 'K113', code: '_9_1_1_厚生年金', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
@@ -173,6 +176,7 @@ export const APP55_MAPPING: AppMapping = {
     { sheetName: '1-6', cell: 'K114', code: '_9_1_5_国民年金', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'O114', code: '_9_1_6_国民健康保険', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
     { sheetName: '1-6', cell: 'S114', code: '_9_1_7_その他', kind: 'CHECK_BOX', transform: checkboxExplicit(CHECK_ON) },
+
     { sheetName: '1-6', cell: 'U114', code: '_9_1_8_その他の内容', kind: 'TEXT', transform: asText },
     // 健康診断「その後 ○○ ごとに実施」。結合セル T116:X116 のアンカーを文字列で転記する。
     { sheetName: '1-6', cell: 'T116', code: '_9_2_3_その後の頻度', kind: 'TEXT', transform: asText },
@@ -305,7 +309,7 @@ export const APP55_MAPPING: AppMapping = {
     // 時期・金額等に記載があれば『有』側を ON にするので、『無』は立てない（両方 ON の書類を作らない）。
     { sheetName: '1-6', cells: ['X103', 'J103'], code: '_7_8_2_昇給無', kind: 'CHECK_BOX', combine: checkboxOffWhenNoted(CHECK_ON) },
     { sheetName: '1-6', cells: ['X104', 'J104'], code: '_7_9_2_賞与無', kind: 'CHECK_BOX', combine: checkboxOffWhenNoted(CHECK_ON) },
-    { sheetName: '1-6', cells: ['X105', 'J105'], code: '_7_10_2_退職金無', kind: 'CHECK_BOX', combine: checkboxOffWhenNoted(CHECK_ON) },
+    { sheetName: '1-6', cells: ['X105', 'J105'], code: '_7_10_2_退職金無', kind: 'CHECK_BOX', combine: checkboxOffWhenNoted(CHECK_ON, asTextExceptDash) },
   ],
   subtables: [
     // 諸手当(a)〜(h): 1-6別紙 行9〜16。手当名(D列)が空の行はスキップ。
