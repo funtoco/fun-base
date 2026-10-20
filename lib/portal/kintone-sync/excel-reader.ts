@@ -66,8 +66,9 @@ export function sheetCellReader(ws: ExcelJS.Worksheet): SheetCellReader {
 
 /**
  * ワークブック全体に対して `(sheetName, address) => value` を返す。
- * app55 は複数シートを跨ぐため、シート名で解決する。存在しないシートは null を返す
- * （欠落シートのフィールドは buildRecord 側でスキップされる）。シート単位でリーダをキャッシュする。
+ * app55 は複数シートを跨ぐため、シート名で解決する。存在しないシートは undefined を返し、
+ * 存在するシートの空セル（null）と区別する。これにより、欠落シートは更新をスキップしつつ、
+ * 明示的な空欄は転記先の既存値を解除できる。シート単位でリーダをキャッシュする。
  */
 export function workbookCellReader(workbook: ExcelJS.Workbook): CellReader {
   const cache = new Map<string, SheetCellReader | null>()
@@ -78,6 +79,6 @@ export function workbookCellReader(workbook: ExcelJS.Workbook): CellReader {
       reader = ws ? sheetCellReader(ws) : null
       cache.set(sheetName, reader)
     }
-    return reader ? reader(address) : null
+    return reader ? reader(address) : undefined
   }
 }

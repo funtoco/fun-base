@@ -19,6 +19,18 @@ export function asText(value: unknown): string | null {
 }
 
 /**
+ * 文字列として取り込み、空欄は空文字にする。
+ * 再アップロード時に転記先の既存テキストを明示的に消す項目だけで使う。
+ * シート欠落を表す undefined は更新しない。
+ */
+export function asTextOrEmpty(value: unknown): string | null {
+  if (value === undefined) {
+    return null
+  }
+  return asText(value) ?? ''
+}
+
+/**
  * 文字列として取り込むが、ハイフンだけの値は「記載なし」と扱う。
  * 退職金の時期・金額等欄で、Excel がプレースホルダーとして '-' を出すケースに限定して使う。
  */
@@ -144,6 +156,20 @@ export function checkboxOn(onValues: string[]): CellTransform {
 }
 
 /**
+ * CHECK_BOX 用: Excel に明示された ON/OFF を kintone へそのまま反映する。
+ * ON は onValues、OFF・空欄は空配列を返して既存値や kintone の既定値を解除する。
+ * シート自体を読めない undefined だけは更新対象外として null を返す。
+ */
+export function checkboxExplicit(onValues: string[]): CellTransform {
+  return (value) => {
+    if (value === undefined) {
+      return null
+    }
+    return isCheckedPresence(value) ? [...onValues] : []
+  }
+}
+
+/**
  * CHECK_BOX 用: 入力に関係なく常に ON（毎月チェック等の固定 True）。
  * onValues はそのフィールドの実選択肢文字列（例: ['■']）。
  */
@@ -163,6 +189,20 @@ export function checkboxFromText(options: string[]): CellTransform {
     }
     const matched = options.find((option) => option === text)
     return matched ? [matched] : null
+  }
+}
+
+/**
+ * 文字列が選択肢に一致すればその値を送り、不一致・空欄なら明示的に解除する。
+ * Excelを正として、Kintoneの既定値や以前の転記値を残したくない項目向け。
+ */
+export function checkboxFromTextExplicit(options: string[]): CellTransform {
+  return (value) => {
+    if (value === undefined) {
+      return null
+    }
+    const text = asText(value)
+    return text !== null && options.includes(text) ? [text] : []
   }
 }
 
@@ -223,11 +263,11 @@ export function checkboxOffWhenNoted(
     if (textTransform(values[1]) !== null) {
       return []
     }
-    // 明示的な未チェックは、再取込時に既存値を消せるよう空配列を返す。
-    if (asText(values[0]) === '□') {
-      return []
+    // シート自体を読めない場合だけは既存値を維持する。存在する空セルは明示OFF。
+    if (values[0] === undefined) {
+      return null
     }
-    return isCheckedPresence(values[0]) ? [...onValues] : null
+    return isCheckedPresence(values[0]) ? [...onValues] : []
   }
 }
 
