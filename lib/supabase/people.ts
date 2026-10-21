@@ -63,6 +63,7 @@ function mapPersonRow(person: any, tenantName?: string): Person {
     insuranceNumber: person.insurance_number,
     insuranceAcquiredDate: person.insurance_acquired_date,
     insuranceEnrollmentStatus: person.insurance_enrollment_status,
+    workHistory: person.work_history,
     createdAt: person.created_at,
     updatedAt: person.updated_at
   }
@@ -236,6 +237,7 @@ export async function createPerson(person: Omit<Person, 'createdAt' | 'updatedAt
     insuranceNumber: data.insurance_number,
     insuranceAcquiredDate: data.insurance_acquired_date,
     insuranceEnrollmentStatus: data.insurance_enrollment_status,
+    workHistory: data.work_history,
     createdAt: data.created_at,
     updatedAt: data.updated_at
   }
@@ -324,6 +326,7 @@ export async function updatePerson(id: string, updates: Partial<Omit<Person, 'id
     insuranceNumber: data.insurance_number,
     insuranceAcquiredDate: data.insurance_acquired_date,
     insuranceEnrollmentStatus: data.insurance_enrollment_status,
+    workHistory: data.work_history,
     createdAt: data.created_at,
     updatedAt: data.updated_at
   }

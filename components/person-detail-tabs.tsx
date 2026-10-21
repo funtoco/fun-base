@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button"
 import { Timeline } from "@/components/ui/timeline"
 import { getInterviewRecordDetailPath } from "@/lib/interview-record-links"
 import { getCategoryColor } from "@/lib/interview-records"
+import { formatWorkHistoryDuration, formatWorkHistoryPeriod } from "@/lib/people/work-history"
 import { formatDate } from "@/lib/utils"
-import type { Visa, PersonDocument, RegularInterview, DailySupportRecord } from "@/lib/models"
+import type { Visa, PersonDocument, RegularInterview, DailySupportRecord, WorkHistoryEntry } from "@/lib/models"
 import { PersonDocumentsTab } from "@/components/person-documents-tab"
 import { ArrowUpRight, Calendar, Clock, MapPin, User, FileText, ChevronDown, ChevronUp } from "lucide-react"
 
@@ -20,7 +21,9 @@ interface PersonDetailTabsProps {
   personDocuments: PersonDocument[]
   regularInterviews?: RegularInterview[]
   dailySupportRecords?: DailySupportRecord[]
+  workHistory?: WorkHistoryEntry[]
 }
+
 
 function getDailySupportTimelineTitle(record: DailySupportRecord): string {
   const categories = record.dailyEntries
@@ -190,6 +193,7 @@ export function PersonDetailTabs({
   personDocuments,
   regularInterviews = [],
   dailySupportRecords = [],
+  workHistory = [],
 }: PersonDetailTabsProps) {
   const [activeTab, setActiveTab] = useState("timeline")
 
@@ -303,12 +307,15 @@ export function PersonDetailTabs({
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-4">
-        <TabsTrigger value="timeline">タイムライン</TabsTrigger>
-        <TabsTrigger value="meetings">面談記録</TabsTrigger>
-        <TabsTrigger value="support">サポート記録</TabsTrigger>
-        <TabsTrigger value="documents">書類</TabsTrigger>
-      </TabsList>
+      <div className="overflow-x-auto">
+        <TabsList className="grid w-full min-w-[480px] grid-cols-5">
+          <TabsTrigger value="timeline">タイムライン</TabsTrigger>
+          <TabsTrigger value="meetings">面談記録</TabsTrigger>
+          <TabsTrigger value="support">サポート記録</TabsTrigger>
+          <TabsTrigger value="documents">書類</TabsTrigger>
+          <TabsTrigger value="work-history">職歴</TabsTrigger>
+        </TabsList>
+      </div>
 
       <TabsContent value="timeline" className="mt-6">
         <Card>
@@ -397,6 +404,34 @@ export function PersonDetailTabs({
 
       <TabsContent value="documents" className="mt-6">
         <PersonDocumentsTab personId={personId} personDocuments={personDocuments} />
+      </TabsContent>
+
+      <TabsContent value="work-history" className="mt-6">
+        {workHistory.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">職歴の記録がありません</CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {workHistory.map((entry) => (
+              <Card key={entry.id}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base break-words">{entry.employer || "勤務先未登録"}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                    <div><dt className="text-muted-foreground">勤務先</dt><dd className="break-words">{entry.employer || "—"}</dd></div>
+                    <div><dt className="text-muted-foreground">在留資格</dt><dd className="break-words">{entry.residenceStatus || "—"}</dd></div>
+                    <div><dt className="text-muted-foreground">入社年月〜退社年月</dt><dd>{formatWorkHistoryPeriod(entry.startYear, entry.startMonth, entry.endYear, entry.endMonth)}</dd></div>
+                    <div><dt className="text-muted-foreground">許可年月日</dt><dd>{entry.permitDate || "—"}</dd></div>
+                    <div><dt className="text-muted-foreground">勤務期間</dt><dd>{formatWorkHistoryDuration(entry.duration)}</dd></div>
+                    <div className="sm:col-span-2"><dt className="text-muted-foreground">メモ</dt><dd className="whitespace-pre-wrap break-words">{entry.memo || "—"}</dd></div>
+                  </dl>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </TabsContent>
     </Tabs>
   )

@@ -46,8 +46,22 @@ export type Person = {
   insuranceNumber?: string
   insuranceAcquiredDate?: string
   insuranceEnrollmentStatus?: Record<string, boolean>
+  workHistory?: unknown
   createdAt: string
   updatedAt: string
+}
+
+export type WorkHistoryEntry = {
+  id: string
+  employer?: string
+  residenceStatus?: string
+  startYear?: string
+  startMonth?: string
+  endYear?: string
+  endMonth?: string
+  permitDate?: string
+  duration?: string
+  memo?: string
 }
 
 export type VisaStatus =

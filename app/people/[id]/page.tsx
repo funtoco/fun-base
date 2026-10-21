@@ -16,6 +16,7 @@ import { hasRetirementNoticeKintoneRecord } from "@/lib/reports/retirement-notic
 import { canCreateRetirementNotice } from "@/lib/reports/retirement-notice-reports"
 import { formatDate, formatDateTime } from "@/lib/utils"
 import { formatSpecifiedSkilledWorkerRemainingTerm } from "@/lib/specified-skilled-worker-term"
+import { parseWorkHistory } from "@/lib/people/work-history"
 import { Mail, Phone, MapPin, Building2, Calendar, User, IdCard, User2, Edit, FileText, Plane, Shield, Briefcase, Printer } from "lucide-react"
 
 interface PersonDetailPageProps {
@@ -137,6 +138,7 @@ export default async function PersonDetailPage({ params }: PersonDetailPageProps
             personDocuments={personDocuments}
             regularInterviews={personRegularInterviews}
             dailySupportRecords={personDailySupportRecords}
+            workHistory={parseWorkHistory(person.workHistory)}
           />
         </div>
 
