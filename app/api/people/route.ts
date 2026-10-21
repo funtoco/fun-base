@@ -100,6 +100,7 @@ function mapPerson(data: any): Person {
     insuranceNumber: data.insurance_number,
     insuranceAcquiredDate: data.insurance_acquired_date,
     insuranceEnrollmentStatus: data.insurance_enrollment_status,
+    workHistory: data.work_history,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   }
