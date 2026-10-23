@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Upload, Trash2, RefreshCw, Loader2, Pencil, Save } from "lucide-react"
+import { Upload, Trash2, RefreshCw, Loader2, Pencil, Save, Download, ExternalLink } from "lucide-react"
 import { getDocumentSignedUrl, uploadDocumentDirect } from "@/lib/supabase/person-documents"
 import { cn } from "@/lib/utils"
 
@@ -57,6 +57,7 @@ export function DocumentUploadCard({
   const [savedNotes, setSavedNotes] = useState<Record<string, string>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [noteMessageId, setNoteMessageId] = useState<string | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const replaceDocumentIdRef = useRef<string | null>(null)
   const uploadTitleRef = useRef<string | null>(null)
@@ -219,6 +220,82 @@ export function DocumentUploadCard({
     setErrorMessage(null)
   }
 
+  const getDownloadFileName = (document: ExistingDocument, title: string) => {
+    const fallbackExtension = document.contentType === 'application/pdf' ? '.pdf' : ''
+    const rawName = document.fileName || `${title}${fallbackExtension}`
+    return rawName.replace(/[\\/:*?"<>|]/g, '_')
+  }
+
+  const handleDownloadDocument = async (document: ExistingDocument, signedUrl: string, title: string) => {
+    setDownloadingId(document.id)
+    setErrorMessage(null)
+    try {
+      const response = await fetch(signedUrl)
+      if (!response.ok) throw new Error(`Download failed: ${response.status}`)
+
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = window.document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = getDownloadFileName(document, title)
+      window.document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+    } catch (error) {
+      console.error('Download error:', error)
+      setErrorMessage('ファイル保存に失敗しました。別タブで開いて保存してください')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
+  const renderPreviewDialogContent = (document: ExistingDocument, signedUrl: string, title: string, isPdf: boolean) => (
+    <DialogContent className="max-w-3xl">
+      <div className="flex flex-wrap items-center justify-between gap-2 pr-8">
+        <p className="min-w-0 flex-1 truncate text-sm font-medium">{title}</p>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild type="button" variant="outline" size="sm">
+            <a href={signedUrl} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="h-3 w-3" />
+              別タブで開く
+            </a>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => handleDownloadDocument(document, signedUrl, title)}
+            disabled={downloadingId === document.id}
+          >
+            {downloadingId === document.id ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Download className="h-3 w-3" />
+            )}
+            ファイル保存
+          </Button>
+        </div>
+      </div>
+      {isPdf ? (
+        <object
+          data={signedUrl}
+          type="application/pdf"
+          className="h-[75vh] w-full rounded-md"
+          aria-label={title}
+        >
+          <p>PDFを表示できません。上の「別タブで開く」または「ファイル保存」を押してください。</p>
+        </object>
+      ) : (
+        <img
+          src={signedUrl}
+          alt={title}
+          className="max-h-[75vh] w-full rounded-md object-contain"
+        />
+      )}
+    </DialogContent>
+  )
+
   const triggerFileInput = (replaceDocumentId?: string, title?: string | null, note?: string | null) => {
     replaceDocumentIdRef.current = replaceDocumentId ?? null
     uploadTitleRef.current = title?.trim() || null
@@ -356,24 +433,7 @@ export function DocumentUploadCard({
                           )}
                         </button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-3xl">
-                        {isPdf ? (
-                          <object
-                            data={signedUrl}
-                            type="application/pdf"
-                            className="h-[80vh] w-full rounded-md"
-                            aria-label={title}
-                          >
-                            <p>PDFを表示できません。<a href={signedUrl} target="_blank" rel="noopener noreferrer">ダウンロード</a></p>
-                          </object>
-                        ) : (
-                          <img
-                            src={signedUrl}
-                            alt={title}
-                            className="w-full rounded-md object-contain"
-                          />
-                        )}
-                      </DialogContent>
+                      {renderPreviewDialogContent(document, signedUrl, title, isPdf)}
                     </Dialog>
                   ) : (
                     <div className="flex h-32 w-full items-center justify-center rounded-md bg-muted">
@@ -556,24 +616,7 @@ export function DocumentUploadCard({
                           )}
                         </button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-3xl">
-                        {isPdf ? (
-                          <object
-                            data={signedUrl}
-                            type="application/pdf"
-                            className="h-[80vh] w-full rounded-md"
-                            aria-label={title}
-                          >
-                            <p>PDFを表示できません。<a href={signedUrl} target="_blank" rel="noopener noreferrer">ダウンロード</a></p>
-                          </object>
-                        ) : (
-                          <img
-                            src={signedUrl}
-                            alt={title}
-                            className="w-full rounded-md object-contain"
-                          />
-                        )}
-                      </DialogContent>
+                      {renderPreviewDialogContent(document, signedUrl, title, isPdf)}
                     </Dialog>
                   ) : (
                     <div className="flex h-32 w-full items-center justify-center rounded-md bg-muted">
