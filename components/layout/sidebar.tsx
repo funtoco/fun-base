@@ -6,6 +6,7 @@ import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   Calendar,
+  Building2,
   CheckSquare,
   CircleHelp,
   ClipboardList,
@@ -42,6 +43,12 @@ const navigation: NavigationItem[] = [
     name: "人材一覧",
     href: "/people",
     icon: Users,
+    feature: "people",
+  },
+  {
+    name: "住まい",
+    href: "/housing",
+    icon: Building2,
     feature: "people",
   },
   {
