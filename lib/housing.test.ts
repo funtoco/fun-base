@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { normalize, parseAddress } from "./address"
-import { groupHousing, selectHousingPeople } from "./housing"
+import { filterHousingPeople, getHousingCompanies, getHousingTenants, groupHousing, selectHousingPeople } from "./housing"
 
 const address = (street: string) => parseAddress({ pref: "大阪府", city: "豊中市", town: "豊南町西", street })
 const person = (id: string, full: string, workingStatus = "在籍中") => ({ id, name: `人材${id}`, address: full, workingStatus, company: "坂本病院" })
@@ -101,5 +101,38 @@ describe("住まいのグルーピング", () => {
 
   test("対象者がいないとき空の概要を返す", () => {
     expect(groupHousing([])).toEqual({ buildings: [], noAddress: [], residentCount: 0 })
+  })
+})
+
+describe("住まいの会社・所属先フィルター", () => {
+  const people = [
+    { ...person("1", "大阪府豊中市豊南町西4-6-3"), tenantName: "A社", company: "共通事業所" },
+    { ...person("2", ""), tenantName: "A社", company: "" },
+    { ...person("3", "大阪府豊中市豊南町西4-13-22"), tenantName: "B社", company: "共通事業所", workingStatus: "入社待ち" },
+    { ...person("4", ""), tenantName: "B社", company: "B事業所" },
+    { ...person("5", ""), tenantName: "", company: "" },
+    { ...person("6", ""), tenantName: "A社", company: "退職先", workingStatus: "退職" },
+  ]
+  const targets = selectHousingPeople(people)
+
+  test("対象者だけから空欄を含む会社候補を作る", () => {
+    expect(getHousingTenants(targets)).toEqual(["", "A社", "B社"])
+  })
+
+  test("会社に応じた所属先候補を重複なく作り、空欄と同名所属先を扱う", () => {
+    expect(getHousingCompanies(targets, null)).toEqual(["", "B事業所", "共通事業所"])
+    expect(getHousingCompanies(targets, "A社")).toEqual(["", "共通事業所"])
+    expect(getHousingCompanies(targets, "B社")).toEqual(["B事業所", "共通事業所"])
+    expect(getHousingCompanies(targets, "")).toEqual([""])
+  })
+
+  test("会社と所属先の選択後に建物・人数・住所なしが連動する", () => {
+    const selected = filterHousingPeople(targets, "A社", "共通事業所")
+    expect(selected.map((p) => p.id)).toEqual(["1"])
+    expect(groupHousing(selected)).toMatchObject({ residentCount: 1, noAddress: [] })
+    expect(groupHousing(selected).buildings).toHaveLength(1)
+    expect(groupHousing(filterHousingPeople(targets, "A社", "")).noAddress.map((p) => p.id)).toEqual(["2"])
+    expect(filterHousingPeople(targets, null, null)).toHaveLength(5)
+    expect(filterHousingPeople(targets, "存在しない会社", null)).toEqual([])
   })
 })

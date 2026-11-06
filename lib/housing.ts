@@ -18,6 +18,24 @@ export function selectHousingPeople<P extends { workingStatus?: string }>(people
   return people.filter((person) => person.workingStatus === "在籍中" || person.workingStatus === "入社待ち")
 }
 
+type HousingFilterPerson = { tenantName?: string; company?: string }
+
+/** null は「すべて」、空文字は未入力の候補を表す。 */
+export function filterHousingPeople<P extends HousingFilterPerson>(people: P[], tenantName: string | null, company: string | null): P[] {
+  return people.filter((person) =>
+    (tenantName === null || (person.tenantName ?? "") === tenantName) &&
+    (company === null || (person.company ?? "") === company)
+  )
+}
+
+export function getHousingTenants(people: HousingFilterPerson[]): string[] {
+  return [...new Set(people.map((person) => person.tenantName ?? ""))].sort(collator.compare)
+}
+
+export function getHousingCompanies(people: HousingFilterPerson[], tenantName: string | null): string[] {
+  return [...new Set(filterHousingPeople(people, tenantName, null).map((person) => person.company ?? ""))].sort(collator.compare)
+}
+
 function mostCommon(values: string[]): string {
   const count = new Map<string, number>()
   for (const value of values) if (value) count.set(value, (count.get(value) ?? 0) + 1)

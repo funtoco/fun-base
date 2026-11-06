@@ -33,7 +33,7 @@ type NavigationItem = {
   feature?: TenantFeaturePermission
 }
 
-const navigation: NavigationItem[] = [
+export const navigation: NavigationItem[] = [
   {
     name: "ホーム",
     href: "/dashboard",
@@ -43,12 +43,6 @@ const navigation: NavigationItem[] = [
     name: "人材一覧",
     href: "/people",
     icon: Users,
-    feature: "people",
-  },
-  {
-    name: "住まい",
-    href: "/housing",
-    icon: Building2,
     feature: "people",
   },
   {
@@ -82,6 +76,12 @@ const navigation: NavigationItem[] = [
     href: "/timeline",
     icon: Clock,
     feature: "support_actions",
+  },
+  {
+    name: "住まい",
+    href: "/housing",
+    icon: Building2,
+    feature: "people",
   },
   {
     name: "書類管理",
