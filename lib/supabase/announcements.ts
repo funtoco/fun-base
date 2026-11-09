@@ -186,12 +186,6 @@ export async function deleteAnnouncement(id: string): Promise<void> {
   }
 }
 
-/*
- * 既読管理系の関数（getReadAnnouncementIds, markAnnouncementAsRead, markAllAnnouncementsAsRead）は
- * 非クリティカルな機能のため、エラー時はログ出力のみでthrowしない。
- * 失敗しても既読状態が一時的に不整合になるだけでUXへの影響は軽微。
- */
-
 /** ユーザーの既読お知らせIDリストを取得 */
 export async function getReadAnnouncementIds(): Promise<string[]> {
   const supabase = createClient()
@@ -212,8 +206,9 @@ export async function getReadAnnouncementIds(): Promise<string[]> {
 export async function markAnnouncementAsRead(announcementId: string): Promise<void> {
   const supabase = createClient()
 
-  const { data: userData } = await supabase.auth.getUser()
-  if (!userData.user) return
+  const { data: userData, error: authError } = await supabase.auth.getUser()
+  if (authError) throw authError
+  if (!userData.user) throw new Error('お知らせを既読にするにはログインが必要です')
 
   const { error } = await supabase
     .from('announcement_reads')
@@ -227,15 +222,18 @@ export async function markAnnouncementAsRead(announcementId: string): Promise<vo
 
   if (error) {
     console.error('Error marking announcement as read:', error)
+    throw error
   }
 }
 
 /** 全お知らせを既読にする */
 export async function markAllAnnouncementsAsRead(announcementIds: string[]): Promise<void> {
+  if (announcementIds.length === 0) return
   const supabase = createClient()
 
-  const { data: userData } = await supabase.auth.getUser()
-  if (!userData.user || announcementIds.length === 0) return
+  const { data: userData, error: authError } = await supabase.auth.getUser()
+  if (authError) throw authError
+  if (!userData.user) throw new Error('お知らせを既読にするにはログインが必要です')
 
   const records = announcementIds.map(id => ({
     announcement_id: id,
@@ -248,6 +246,7 @@ export async function markAllAnnouncementsAsRead(announcementIds: string[]): Pro
 
   if (error) {
     console.error('Error marking all announcements as read:', error)
+    throw error
   }
 }
 

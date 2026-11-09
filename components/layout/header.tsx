@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { Search, Bell, Settings, LogOut, RefreshCw, Cable, Users, ShieldCheck, Megaphone, Building2, ArrowRight, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +25,7 @@ import {
   markAnnouncementAsRead,
   markAllAnnouncementsAsRead,
 } from "@/lib/supabase/announcements"
+import { announceAnnouncementsRead, listenForAnnouncementsRead } from "@/lib/announcements-read-event"
 import { getPeople } from "@/lib/supabase/people"
 import { getCurrentUserTenants } from "@/lib/supabase/tenants"
 import { hasAnyTenantFeatureAccess } from "@/lib/tenant-access"
@@ -55,6 +56,8 @@ const ANNOUNCEMENT_PREVIEW_LIMIT = 5
 
 export function Header() {
   const { user, role, signOut, refreshUser } = useAuth()
+  const currentUserId = useRef(user?.id)
+  currentUserId.current = user?.id
   const router = useRouter()
   const { startNavigation } = useNavigationProgress()
   const [searchQuery, setSearchQuery] = useState("")
@@ -65,34 +68,44 @@ export function Header() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [readIds, setReadIds] = useState<string[]>([])
   const [announcementsOpen, setAnnouncementsOpen] = useState(false)
+  const [announcementUserId, setAnnouncementUserId] = useState<string | null>(null)
+  const [savingAllAnnouncements, setSavingAllAnnouncements] = useState(false)
 
-  const unreadCount = announcements.filter(a => !readIds.includes(a.id)).length
-  const previewAnnouncements = announcements.slice(0, ANNOUNCEMENT_PREVIEW_LIMIT)
-  const hiddenAnnouncementCount = Math.max(announcements.length - previewAnnouncements.length, 0)
+  const visibleAnnouncements = announcementUserId === user?.id ? announcements : []
+  const visibleReadIds = announcementUserId === user?.id ? readIds : []
+  const unreadCount = visibleAnnouncements.filter(a => !visibleReadIds.includes(a.id)).length
+  const previewAnnouncements = visibleAnnouncements.slice(0, ANNOUNCEMENT_PREVIEW_LIMIT)
+  const hiddenAnnouncementCount = Math.max(visibleAnnouncements.length - previewAnnouncements.length, 0)
 
   const navigate = useCallback((href: string) => {
     startNavigation()
     router.push(href)
   }, [router, startNavigation])
 
-  const loadAnnouncements = useCallback(async () => {
-    try {
-      const [items, reads] = await Promise.all([
-        getPublishedAnnouncements(),
-        getReadAnnouncementIds(),
-      ])
-      setAnnouncements(items)
-      setReadIds(reads)
-    } catch (err) {
-      console.debug('Failed to load announcements:', err)
+  useEffect(() => {
+    let cancelled = false
+    setAnnouncementUserId(null)
+    setAnnouncements([])
+    setReadIds([])
+    if (user) {
+      Promise.all([getPublishedAnnouncements(), getReadAnnouncementIds()])
+        .then(([items, reads]) => {
+          if (cancelled) return
+          setAnnouncements(items)
+          setReadIds(prev => [...new Set([...prev, ...reads])])
+          setAnnouncementUserId(user.id)
+        })
+        .catch(err => console.debug('Failed to load announcements:', err))
     }
-  }, [])
+    return () => { cancelled = true }
+  }, [user?.id])
 
   useEffect(() => {
-    if (user) {
-      loadAnnouncements()
-    }
-  }, [user, loadAnnouncements])
+    if (!user) return
+    return listenForAnnouncementsRead(window, user.id, ids => {
+      setReadIds(prev => [...new Set([...prev, ...ids])])
+    })
+  }, [user?.id])
 
   useEffect(() => {
     try {
@@ -315,22 +328,31 @@ export function Header() {
     companySuggestions.length > 0
 
   const handleMarkAsRead = async (id: string) => {
+    if (!user) return
     try {
       await markAnnouncementAsRead(id)
-      setReadIds(prev => [...prev, id])
+      if (currentUserId.current !== user.id) return
+      setReadIds(prev => [...new Set([...prev, id])])
+      announceAnnouncementsRead(window, user.id, [id])
     } catch (err) {
       console.error('Failed to mark announcement as read:', err)
     }
   }
 
   const handleMarkAllAsRead = async () => {
-    const unreadIds = announcements.filter(a => !readIds.includes(a.id)).map(a => a.id)
+    if (!user || savingAllAnnouncements) return
+    const unreadIds = visibleAnnouncements.filter(a => !visibleReadIds.includes(a.id)).map(a => a.id)
     if (unreadIds.length === 0) return
+    setSavingAllAnnouncements(true)
     try {
       await markAllAnnouncementsAsRead(unreadIds)
-      setReadIds(prev => [...prev, ...unreadIds])
+      if (currentUserId.current !== user.id) return
+      setReadIds(prev => [...new Set([...prev, ...unreadIds])])
+      announceAnnouncementsRead(window, user.id, unreadIds)
     } catch (err) {
       console.error('Failed to mark all announcements as read:', err)
+    } finally {
+      setSavingAllAnnouncements(false)
     }
   }
 
@@ -516,13 +538,14 @@ export function Header() {
                   size="sm"
                   className="text-xs text-muted-foreground h-auto py-1"
                   onClick={handleMarkAllAsRead}
+                  disabled={savingAllAnnouncements}
                 >
-                  すべて既読にする
+                  {savingAllAnnouncements ? '既読にしています...' : 'すべて既読にする'}
                 </Button>
               )}
             </div>
             <div className="max-h-[28rem] overflow-y-auto bg-popover">
-              {announcements.length === 0 ? (
+              {visibleAnnouncements.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                   <Megaphone className="h-8 w-8 mb-2 opacity-50" />
                   <p className="text-sm">お知らせはありません</p>
@@ -530,7 +553,7 @@ export function Header() {
               ) : (
                 <div className="divide-y">
                   {previewAnnouncements.map(a => {
-                    const isRead = readIds.includes(a.id)
+                    const isRead = visibleReadIds.includes(a.id)
                     return (
                       <button
                         key={a.id}
@@ -565,7 +588,7 @@ export function Header() {
                 </div>
               )}
             </div>
-            {announcements.length > 0 && (
+            {visibleAnnouncements.length > 0 && (
               <div className="border-t bg-popover px-4 py-2">
                 {hiddenAnnouncementCount > 0 && (
                   <p className="mb-1 text-center text-xs text-muted-foreground">
