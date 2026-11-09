@@ -18,13 +18,30 @@ export function selectHousingPeople<P extends { workingStatus?: string }>(people
   return people.filter((person) => person.workingStatus === "在籍中" || person.workingStatus === "入社待ち")
 }
 
-type HousingFilterPerson = { tenantName?: string; company?: string }
+type HousingFilterPerson = { name?: string; address?: HousingPerson["address"]; tenantName?: string; company?: string }
+
+function normalizeSearchText(value: string): string {
+  return value.normalize("NFKC").toLowerCase().replace(/\s+/g, "")
+}
+
+function searchableAddresses(address: HousingPerson["address"]): string[] {
+  if (!address) return []
+  const source = typeof address === "string" ? { full: address } : address
+  const raw = typeof address === "string"
+    ? address
+    : [address.pref, address.city, address.town, address.street, address.full].filter(Boolean).join(" ")
+  const parsed = parseAddress(source)
+  return [raw, parsed.address, parsed.name, parsed.room]
+}
 
 /** null は「すべて」、空文字は未入力の候補を表す。 */
-export function filterHousingPeople<P extends HousingFilterPerson>(people: P[], tenantName: string | null, company: string | null): P[] {
+export function filterHousingPeople<P extends HousingFilterPerson>(people: P[], tenantName: string | null, company: string | null, query = ""): P[] {
+  const normalizedQuery = normalizeSearchText(query)
   return people.filter((person) =>
     (tenantName === null || (person.tenantName ?? "") === tenantName) &&
-    (company === null || (person.company ?? "") === company)
+    (company === null || (person.company ?? "") === company) &&
+    (!normalizedQuery || [person.name, person.tenantName, person.company, ...searchableAddresses(person.address)]
+      .some((value) => normalizeSearchText(value ?? "").includes(normalizedQuery)))
   )
 }
 

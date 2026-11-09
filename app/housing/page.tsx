@@ -5,6 +5,8 @@ import Link from "next/link"
 import { Building2, MapPin } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { filterHousingPeople, getHousingCompanies, getHousingTenants, groupHousing, selectHousingPeople } from "@/lib/housing"
 import type { Person } from "@/lib/models"
 import { getPeople } from "@/lib/supabase/people"
@@ -27,6 +29,7 @@ export default function HousingPage() {
   const [error, setError] = useState(false)
   const [tenantName, setTenantName] = useState<string | null>(null)
   const [company, setCompany] = useState<string | null>(null)
+  const [query, setQuery] = useState("")
 
   useEffect(() => {
     let cancelled = false
@@ -46,7 +49,7 @@ export default function HousingPage() {
   const targetPeople = useMemo(() => selectHousingPeople(people), [people])
   const tenants = useMemo(() => getHousingTenants(targetPeople), [targetPeople])
   const companies = useMemo(() => getHousingCompanies(targetPeople, tenantName), [targetPeople, tenantName])
-  const selectedPeople = useMemo(() => filterHousingPeople(targetPeople, tenantName, company), [targetPeople, tenantName, company])
+  const selectedPeople = useMemo(() => filterHousingPeople(targetPeople, tenantName, company, query), [targetPeople, tenantName, company, query])
   const housing = useMemo(() => groupHousing(selectedPeople), [selectedPeople])
 
   const onTenantChange = (value: string) => {
@@ -77,6 +80,13 @@ export default function HousingPage() {
               <option value="all">すべて</option>
               {companies.map((item) => <option key={item} value={JSON.stringify(item)}>{item || "未入力"}</option>)}
             </select>
+          </div>
+          <div className="flex w-full min-w-0 flex-col gap-1 sm:w-auto sm:flex-1">
+            <label htmlFor="housing-search" className="text-sm font-medium">フリーテキスト検索</label>
+            <div className="flex min-w-0 gap-2">
+              <Input id="housing-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="人材名・会社名・所属先・住所で検索" className="min-w-0 flex-1" />
+              {query && <Button type="button" variant="outline" onClick={() => setQuery("")}>消去</Button>}
+            </div>
           </div>
         </div>
       )}

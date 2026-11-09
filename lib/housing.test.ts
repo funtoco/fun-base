@@ -136,3 +136,55 @@ describe("住まいの会社・所属先フィルター", () => {
     expect(filterHousingPeople(targets, "存在しない会社", null)).toEqual([])
   })
 })
+
+describe("住まいのフリーテキスト検索", () => {
+  const people = selectHousingPeople([
+    { id: "1", name: "山田 太郎", tenantName: "ＡＢＣ会社", company: "東京 事業所", address: "東京都港区芝1-2-3 サンハイツ ３０１号室", workingStatus: "在籍中" },
+    { id: "2", name: "佐藤 花子", tenantName: "ＡＢＣ会社", company: "大阪事業所", address: { pref: "大阪府", city: "大阪市", town: "北区", street: "梅田1-2-3 梅田ビル ２０２号室" }, workingStatus: "入社待ち" },
+    { id: "3", name: "田中 一郎", tenantName: "別会社", company: "東京事業所", address: "", workingStatus: "在籍中" },
+    { id: "4", name: "鈴木 次郎", tenantName: "別会社", company: "大阪事業所", address: null, workingStatus: "退職済み" },
+  ])
+
+  test("空文字・空白だけなら従来どおり全件を返す", () => {
+    expect(filterHousingPeople(people, null, null, "").map((p) => p.id)).toEqual(["1", "2", "3"])
+    expect(filterHousingPeople(people, null, null, "　 ").map((p) => p.id)).toEqual(["1", "2", "3"])
+  })
+
+  test("人材名・会社名・所属先を部分一致で検索し、NFKC・大小文字・空白ゆれを吸収する", () => {
+    expect(filterHousingPeople(people, null, null, "山田太郎").map((p) => p.id)).toEqual(["1"])
+    expect(filterHousingPeople(people, null, null, "abc 会 社").map((p) => p.id)).toEqual(["1", "2"])
+    expect(filterHousingPeople(people, null, null, "東京事業所").map((p) => p.id)).toEqual(["1", "3"])
+  })
+
+  test("会社・所属先の選択とANDで併用し、候補を検索で減らさない", () => {
+    expect(filterHousingPeople(people, "ＡＢＣ会社", "東京 事業所", "山田").map((p) => p.id)).toEqual(["1"])
+    expect(filterHousingPeople(people, "ＡＢＣ会社", "大阪事業所", "山田")).toEqual([])
+    expect(getHousingTenants(people)).toEqual(["ＡＢＣ会社", "別会社"])
+    expect(getHousingCompanies(people, "ＡＢＣ会社")).toEqual(["大阪事業所", "東京 事業所"])
+  })
+
+  test("住所のstringとAddressPartsで建物名・部屋まで検索できる", () => {
+    expect(filterHousingPeople(people, null, null, "サンハイツ301").map((p) => p.id)).toEqual(["1"])
+    expect(filterHousingPeople(people, null, null, "大阪市北区梅田").map((p) => p.id)).toEqual(["2"])
+    expect(filterHousingPeople(people, null, null, "梅田ビル202").map((p) => p.id)).toEqual(["2"])
+  })
+
+  test("カードに表示される番地表記で漢数字の保存住所を検索できる", () => {
+    const residents = [
+      person("1", "大阪府豊中市豊南町西四丁目1番17号 ル号期2階北側"),
+      person("2", "大阪府豊中市豊南町西四丁目1番18号"),
+    ]
+    const displayedAddress = groupHousing([residents[0]]).buildings[0].address
+    expect(displayedAddress).toBe("大阪府豊中市豊南町西4-1-17")
+    expect(filterHousingPeople(residents, null, null, displayedAddress).map((p) => p.id)).toEqual(["1"])
+    expect(filterHousingPeople(residents, null, null, "4-1-17").map((p) => p.id)).toEqual(["1"])
+  })
+
+  test("該当なしと住所なしの名前検索を扱い、概要人数が検索結果に連動する", () => {
+    expect(filterHousingPeople(people, null, null, "該当なし")).toEqual([])
+    const selected = filterHousingPeople(people, null, null, "田中")
+    expect(selected.map((p) => p.id)).toEqual(["3"])
+    expect(groupHousing(selected)).toMatchObject({ buildings: [], residentCount: 0, noAddress: [{ id: "3" }] })
+    expect(groupHousing(filterHousingPeople(people, null, null, "山田"))).toMatchObject({ residentCount: 1, noAddress: [] })
+  })
+})
